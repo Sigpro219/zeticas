@@ -182,31 +182,33 @@ const Chatbot = () => {
         <>
             {/* Botón flotante para abrir el chat */}
             {!isOpen && (
-                <button
-                    onClick={() => setIsOpen(true)}
-                    style={{
-                        position: 'fixed',
-                        bottom: '24px',
-                        right: '24px',
-                        background: 'var(--color-primary)',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '50%',
-                        width: '60px',
-                        height: '60px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        boxShadow: '0 8px 24px rgba(26,54,54,0.3)',
-                        zIndex: 9999,
-                        transition: 'transform 0.3s ease'
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
-                    onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                >
-                    <Bot size={30} />
-                </button>
+                <div style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+                    {/* Burbuja de saludo opcional */}
+                    <div style={{ background: '#fff', padding: '8px 16px', borderRadius: '18px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: '0.85rem', color: 'var(--color-primary)', fontWeight: '500', border: '1px solid #e2e8f0', marginBottom: '4px', animation: 'fadeInUp 0.5s ease' }}>
+                        ¡Hola! 👋 ¿En qué puedo ayudarte?
+                    </div>
+                    <button
+                        onClick={() => setIsOpen(true)}
+                        style={{
+                            background: 'linear-gradient(135deg, var(--color-primary) 0%, #2a5a5a 100%)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: '65px',
+                            height: '65px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            boxShadow: '0 10px 25px rgba(0,77,77,0.3)',
+                            transition: 'all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.1) rotate(5deg)'; e.currentTarget.style.boxShadow = '0 15px 30px rgba(0,77,77,0.4)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1) rotate(0deg)'; e.currentTarget.style.boxShadow = '0 10px 25px rgba(0,77,77,0.3)'; }}
+                    >
+                        <Bot size={35} strokeWidth={1.5} />
+                    </button>
+                </div>
             )}
 
             {/* Ventana del Chatbot */}
@@ -236,8 +238,8 @@ const Chatbot = () => {
                         alignItems: 'center'
                     }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <div style={{ background: '#fff', color: 'var(--color-primary)', borderRadius: '50%', padding: '6px' }}>
-                                <Bot size={20} />
+                            <div style={{ background: 'rgba(255,255,255,0.2)', color: '#fff', borderRadius: '12px', padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <Bot size={24} strokeWidth={1.5} />
                             </div>
                             <div>
                                 <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 'bold' }}>Zeticas CRM Bot</h4>
