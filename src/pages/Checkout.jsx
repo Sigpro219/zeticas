@@ -113,25 +113,25 @@ const Checkout = () => {
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                             <label style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#888' }}>Nombre</label>
-                                            <input type="text" required value={formData.nombre} onChange={e => setFormData({ ...formData, nombre: e.target.value })} style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px' }} />
+                                            <input type="text" required value={formData.nombre} onChange={e => setFormData({ ...formData, nombre: e.target.value })} placeholder="Ej: Maria Camila" style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px', color: '#666' }} />
                                         </div>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                             <label style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#888' }}>Apellido</label>
-                                            <input type="text" required value={formData.apellido} onChange={e => setFormData({ ...formData, apellido: e.target.value })} style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px' }} />
+                                            <input type="text" required value={formData.apellido} onChange={e => setFormData({ ...formData, apellido: e.target.value })} placeholder="Ej: Gomez" style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px', color: '#666' }} />
                                         </div>
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.5rem' }}>
                                         <label style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#888' }}>Dirección de Entrega</label>
-                                        <input type="text" required value={formData.direccion} onChange={e => setFormData({ ...formData, direccion: e.target.value })} placeholder="Calle, número, apto..." style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px' }} />
+                                        <input type="text" required value={formData.direccion} onChange={e => setFormData({ ...formData, direccion: e.target.value })} placeholder="Ej: Carrera 15 # 85-20, Bogotá" style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px', color: '#666' }} />
                                     </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2.5rem' }}>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                             <label style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#888' }}>Ciudad</label>
-                                            <input type="text" required value={formData.ciudad} onChange={e => setFormData({ ...formData, ciudad: e.target.value })} style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px' }} />
+                                            <input type="text" required value={formData.ciudad} onChange={e => setFormData({ ...formData, ciudad: e.target.value })} placeholder="Ej: Bogotá" style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px', color: '#666' }} />
                                         </div>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                             <label style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#888' }}>Teléfono</label>
-                                            <input type="tel" required value={formData.telefono} onChange={e => setFormData({ ...formData, telefono: e.target.value })} style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px' }} />
+                                            <input type="tel" required value={formData.telefono} onChange={e => setFormData({ ...formData, telefono: e.target.value })} placeholder="Ej: 3109876543" style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px', color: '#666' }} />
                                         </div>
                                     </div>
                                     <button
