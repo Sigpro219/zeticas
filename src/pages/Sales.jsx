@@ -178,7 +178,7 @@ const Orders = ({ orders, setOrders }) => {
                         safety: material.safety,
                         bomBreakdown: bomDetails[matId].join(' | '),
                         quantityToBuy: Math.ceil(neededToBuy),
-                        unitCost: material.avgCost || 0,
+                        unitCost: material.avgCost && material.avgCost > 0 ? material.avgCost : 1000, // Garantizar precio histórico o base
                         providerId: recommendedProvider ? recommendedProvider.id : ''
                     });
                 }
@@ -1176,6 +1176,7 @@ const Orders = ({ orders, setOrders }) => {
                                         <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
                                             <div style={{ fontSize: '0.7rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Proveedor</div>
                                             <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#1e293b' }}>{po.providerName}</div>
+                                            <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.3rem' }}>NIT: {providers.find(p => p.id === po.providerId)?.nit || '901.000.123-x'}</div>
                                             <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                                                 <Phone size={14} /> {po.providerPhone}
                                             </div>

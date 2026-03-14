@@ -20,7 +20,7 @@ import {
     X
 } from 'lucide-react';
 
-const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurchaseOrders }) => {
+const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurchaseOrders, recipes, providers }) => {
     // Local State for BOM Explosion & OC Generation
     const [selectedOrderId, setSelectedOrderId] = useState(null);
     const [supplierAssignments, setSupplierAssignments] = useState({}); // { mpId: supplierName }
@@ -55,7 +55,8 @@ const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurc
         doc.setTextColor(100, 116, 139);
         doc.text(`OC No: ${oc.id}`, 14, 30);
         doc.text(`Fecha: ${oc.date}`, 14, 35);
-        doc.text(`Ref. Pedido: ${oc.orderRef}`, 14, 40);
+        const refText = Array.isArray(oc.relatedOrders) ? oc.relatedOrders.join(', ') : (oc.orderRef || 'N/A');
+        doc.text(`Ref. Pedidos: ${refText}`, 14, 40);
 
         doc.setDrawColor(226, 232, 240);
         doc.line(14, 45, 196, 45);
@@ -72,13 +73,13 @@ const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurc
         doc.text('Bogotá, Colombia', 14, 70);
 
         // Supplier Data
-        const supplierInfo = suppliers.find(s => s.name === oc.supplier);
+        const supplierInfo = providers.find(s => s.name === oc.providerName || s.id === oc.providerId);
         doc.text('DATOS DEL PROVEEDOR', 105, 55);
         doc.setFont('helvetica', 'bold');
-        doc.text(oc.supplier, 105, 60);
+        doc.text(oc.providerName || 'Proveedor', 105, 60);
         doc.setFont('helvetica', 'normal');
-        doc.text(`NIT: ${supplierInfo?.nit || 'No Registrado'}`, 105, 65);
-        doc.text(`Tiempo de Entrega: ${supplierInfo?.lead_time || 'A convenir'}`, 105, 70);
+        doc.text(`NIT: ${supplierInfo?.nit || '901.000.123-x'}`, 105, 65);
+        doc.text(`Tiempo de Entrega: ${supplierInfo?.lead_time || '2-3 días'}`, 105, 70);
 
         // Products Table
         const tableColumn = ["ID / Ref", "Insumo", "Cant.", "Und", "V. Unitario", "IVA", "V. Total"];
@@ -142,39 +143,8 @@ const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurc
         doc.save(`${oc.id}.pdf`);
     };
 
-    // Mock Data for JIT Flow
-    const recipes = {
-        101: [ // Berenjena Toscana
-            { id: 'MP001', name: 'Berenjenas frescas', qtyPerUnit: 0.5, unit: 'kg' },
-            { id: 'MP002', name: 'Aceite de Oliva', qtyPerUnit: 0.1, unit: 'lt' },
-            { id: 'MP003', name: 'Frasco Vidrio', qtyPerUnit: 1, unit: 'und' }
-        ],
-        102: [ // Dulce Silvia
-            { id: 'MP004', name: 'Fruta base (Mora/Fresa)', qtyPerUnit: 0.4, unit: 'kg' },
-            { id: 'MP005', name: 'Azúcar orgánica', qtyPerUnit: 0.2, unit: 'kg' },
-            { id: 'MP003', name: 'Frasco Vidrio', qtyPerUnit: 1, unit: 'und' }
-        ],
-        103: [ // Ruibarbo & Fresa
-            { id: 'MP006', name: 'Ruibarbo', qtyPerUnit: 0.3, unit: 'kg' },
-            { id: 'MP004', name: 'Fruta base (Mora/Fresa)', qtyPerUnit: 0.3, unit: 'kg' },
-            { id: 'MP003', name: 'Frasco Vidrio', qtyPerUnit: 1, unit: 'und' }
-        ]
-    };
-
-    const mpInventory = {
-        'MP001': { stock: 12, unit: 'kg' },
-        'MP002': { stock: 5, unit: 'lt' },
-        'MP003': { stock: 15, unit: 'und' },
-        'MP004': { stock: 8, unit: 'kg' },
-        'MP005': { stock: 20, unit: 'kg' },
-        'MP006': { stock: 0, unit: 'kg' },
-    };
-
-    const suppliers = [
-        { id: 1, name: 'EcoAbastos SAS', mpHandled: ['MP001', 'MP004', 'MP006'] },
-        { id: 2, name: 'Suministros Vidrio S.A.', mpHandled: ['MP003'] },
-        { id: 3, name: 'Distribuidora Esencias', mpHandled: ['MP002', 'MP005'] }
-    ];
+    // Suppliers are passed as 'providers' prop
+    const suppliers = providers;
 
     // Filter orders that are in "En Compras"
     const ordersInPurchaseChannel = useMemo(() => orders.filter(o => o.status === 'En Compras'), [orders]);
@@ -187,23 +157,30 @@ const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurc
 
         const explosion = {};
         order.items.forEach(item => {
-            const recipe = recipes[item.id] || [];
+            const recipe = recipes[item.name] || recipes[item.id] || [];
             recipe.forEach(mp => {
-                const totalNeeded = mp.qtyPerUnit * item.quantity;
+                const totalNeeded = mp.qty * item.quantity;
                 if (!explosion[mp.id]) {
-                    explosion[mp.id] = { ...mp, totalNeeded: 0 };
+                    const materialInfo = items.find(i => i.id === mp.id);
+                    explosion[mp.id] = {
+                        id: mp.id,
+                        name: materialInfo?.name || 'Insumo',
+                        unit: materialInfo?.unit || 'und',
+                        totalNeeded: 0
+                    };
                 }
                 explosion[mp.id].totalNeeded += totalNeeded;
             });
         });
 
         return Object.values(explosion).map(mp => {
-            const available = mpInventory[mp.id]?.stock || 0;
-            const toBuy = Math.max(0, mp.totalNeeded - available);
+            const material = items.find(i => i.id === mp.id);
+            const available = (material?.initial || 0) + (material?.purchases || 0) - (material?.sales || 0);
+            const toBuy = Math.max(0, mp.totalNeeded - available + (material?.safety || 0));
             return {
                 ...mp,
                 available,
-                toBuy
+                toBuy: Number(toBuy.toFixed(2))
             };
         });
     }, [selectedOrderId, orders]);
@@ -233,14 +210,18 @@ const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurc
 
         const newOCs = Object.keys(itemsBySupplier).map(supplier => ({
             id: `OC-${Math.floor(1000 + Math.random() * 9000)}`,
-            supplier,
-            orderRef: selectedOrderId,
+            providerName: supplier,
+            relatedOrders: [selectedOrderId],
             date: new Date().toISOString().split('T')[0],
             status: 'Enviada',
-            items: itemsBySupplier[supplier].map(item => ({
-                ...item,
-                purchasePrice: (items.find(i => i.id === item.id || i.name === item.name)?.avgCost || 1000) * (1 + (Math.random() * 0.2 - 0.1)) // Mock fluctuation
-            }))
+            items: itemsBySupplier[supplier].map(item => {
+                const historicalMaterial = items.find(i => i.id === item.id);
+                const basePrice = historicalMaterial?.avgCost || 1000;
+                return {
+                    ...item,
+                    purchasePrice: basePrice // Use exact historical price
+                };
+            })
         }));
 
         setPurchaseOrders([...newOCs, ...purchaseOrders]);
@@ -289,14 +270,19 @@ const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurc
         setPurchaseOrders(updatedOCs);
 
         // 3. Flow Check: If all OCs for a reference are received, move to production
-        const refId = oc.orderRef;
-        const allForRef = updatedOCs.filter(o => o.orderRef === refId);
-        const allReceived = allForRef.every(o => o.status === 'Recibida');
+        const refs = Array.isArray(oc.relatedOrders) ? oc.relatedOrders : [oc.orderRef];
 
-        if (allReceived) {
-            setOrders(orders.map(o => o.id === refId ? { ...o, status: 'En Producción' } : o));
-            alert(`El pedido ${refId} ha recibido todos sus materiales y ha pasado a ESTADO: EN PRODUCCIÓN.`);
-        }
+        refs.forEach(refId => {
+            if (!refId) return;
+            const allForRef = updatedOCs.filter(o => (o.relatedOrders && o.relatedOrders.includes(refId)) || o.orderRef === refId);
+            const allReceived = allForRef.every(o => o.status === 'Recibida');
+
+            if (allReceived) {
+                setOrders(prevOrders => prevOrders.map(o => o.id === refId ? { ...o, status: 'En Producción' } : o));
+            }
+        });
+
+        alert(`Ingreso registrado. El inventario ha sido actualizado.`);
     };
 
     return (
@@ -428,7 +414,7 @@ const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurc
                                                 }}
                                             >
                                                 <option value="">Seleccionar Proveedor...</option>
-                                                {suppliers.filter(s => s.mpHandled.includes(mp.id)).map(s => (
+                                                {suppliers.map(s => (
                                                     <option key={s.id} value={s.name}>{s.name}</option>
                                                 ))}
                                             </select>
@@ -472,9 +458,13 @@ const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurc
                                     onClick={() => setViewingOC(oc)}
                                 >
                                     <td style={{ padding: '1.2rem', textAlign: 'center', fontWeight: '800', color: 'var(--color-primary)' }}>{oc.id}</td>
-                                    <td style={{ padding: '1.2rem', textAlign: 'center', fontWeight: '600' }}>{oc.supplier}</td>
+                                    <td style={{ padding: '1.2rem', textAlign: 'center', fontWeight: '600' }}>{oc.providerName || oc.supplier}</td>
                                     <td style={{ padding: '1.2rem', textAlign: 'center' }}>
-                                        <div style={{ fontSize: '0.8rem', background: '#f1f5f9', padding: '4px 8px', borderRadius: '4px', display: 'inline-block' }}>{oc.orderRef}</div>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', justifyContent: 'center' }}>
+                                            {(Array.isArray(oc.relatedOrders) ? oc.relatedOrders : [oc.orderRef || 'N/A']).map(ref => (
+                                                <div key={ref} style={{ fontSize: '0.75rem', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>{ref}</div>
+                                            ))}
+                                        </div>
                                     </td>
                                     <td style={{ padding: '1.2rem', textAlign: 'center', fontSize: '0.85rem' }}>{oc.date}</td>
                                     <td style={{ padding: '1.2rem', textAlign: 'center' }}>
@@ -603,15 +593,15 @@ const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurc
                                     <div style={{ color: '#64748b', fontSize: '0.9rem', lineHeight: '1.5' }}>
                                         NIT: 901.234.567-8<br />
                                         Bogotá, Colombia<br />
-                                        Ref. Pedido Interno: {viewingOC.orderRef}
+                                        Ref. Pedidos: {Array.isArray(viewingOC.relatedOrders) ? viewingOC.relatedOrders.join(', ') : (viewingOC.orderRef || 'N/A')}
                                     </div>
                                 </div>
                                 <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '1.5rem', borderRadius: '12px' }}>
                                     <h4 style={{ margin: '0 0 1rem', color: '#166534', fontSize: '0.85rem', textTransform: 'uppercase' }}>Datos del Proveedor:</h4>
-                                    <div style={{ fontWeight: '700', fontSize: '1.1rem', color: '#15803d', marginBottom: '0.2rem' }}>{viewingOC.supplier}</div>
+                                    <div style={{ fontWeight: '700', fontSize: '1.1rem', color: '#15803d', marginBottom: '0.2rem' }}>{viewingOC.providerName || viewingOC.supplier}</div>
                                     <div style={{ color: '#166534', fontSize: '0.9rem', lineHeight: '1.5' }}>
-                                        NIT: {suppliers.find(s => s.name === viewingOC.supplier)?.nit || 'No Registrado'}<br />
-                                        Tiempo de entrega: {suppliers.find(s => s.name === viewingOC.supplier)?.lead_time || 'A convenir'}<br />
+                                        NIT: {providers.find(s => s.name === (viewingOC.providerName || viewingOC.supplier))?.nit || '901.000.123-x'}<br />
+                                        Tiempo de entrega: {providers.find(s => s.name === (viewingOC.providerName || viewingOC.supplier))?.lead_time || '2-3 días'}<br />
                                         Fecha OC: {viewingOC.date}
                                     </div>
                                 </div>

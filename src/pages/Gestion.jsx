@@ -31,7 +31,8 @@ const Gestion = () => {
         expenses, setExpenses,
         purchaseOrders, setPurchaseOrders,
         banks, setBanks,
-        taxSettings, setTaxSettings
+        taxSettings, setTaxSettings,
+        recipes, providers
     } = useBusiness();
 
     const [activeTab, setActiveTab] = useState(() => {
@@ -237,7 +238,7 @@ const Gestion = () => {
                 {activeTab === 'recipes' && <Recipes />}
                 {activeTab === 'suppliers' && <Suppliers items={items} setItems={setItems} />}
                 {activeTab === 'clients' && <Clients />}
-                {activeTab === 'purchases' && <Purchases orders={orders} setOrders={setOrders} items={items} setItems={setItems} purchaseOrders={purchaseOrders} setPurchaseOrders={setPurchaseOrders} />}
+                {activeTab === 'purchases' && <Purchases orders={orders} setOrders={setOrders} items={items} setItems={setItems} purchaseOrders={purchaseOrders} setPurchaseOrders={setPurchaseOrders} recipes={recipes} providers={providers} />}
                 {activeTab === 'production' && <Production orders={orders} setOrders={setOrders} items={items} setItems={setItems} />}
                 {activeTab === 'inventory' && <Inventory items={items} setItems={setItems} />}
                 {activeTab === 'orders' && <Sales orders={orders} setOrders={setOrders} />}
