@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { UserPlus, Calendar, BarChart3, MessageSquare, Clock, Edit2, X, CheckSquare, ChevronDown, Check, Trash2 } from 'lucide-react';
+import { UserPlus, Calendar, BarChart3, MessageSquare, Clock, Edit2, X, CheckSquare, ChevronDown, Check, Trash2, Download } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const CRM = () => {
     const [leads, setLeads] = useState([]);
@@ -17,6 +19,21 @@ const CRM = () => {
     // Dropdown de Tareas pendientes
     const [showTasks, setShowTasks] = useState(false);
     const [taskFilterDate, setTaskFilterDate] = useState('');
+
+    // --- NUEVO: Cotizaciones ---
+    const [isQuotationModalOpen, setIsQuotationModalOpen] = useState(false);
+    const [quotationLead, setQuotationLead] = useState(null);
+    const [quotationItems, setQuotationItems] = useState([]);
+    const [availableProducts] = useState([
+        { id: 1, name: 'Hummus de Garbanzo', category: 'Sal', price: 21000 },
+        { id: 2, name: 'Antipasto tuna', category: 'Sal', price: 35000 },
+        { id: 4, name: 'Antipasto Veggie', category: 'Sal', price: 20000 },
+        { id: 13, name: 'Ponqué Navidad', category: 'Dulce', price: 22944 },
+        { id: 14, name: 'Nidos de nuez', category: 'Dulce', price: 2102 },
+        { id: 15, name: 'Florentinas', category: 'Dulce', price: 2366 },
+    ]);
+    const [quotationFilter, setQuotationFilter] = useState('Todos');
+    const [searchProduct, setSearchProduct] = useState('');
 
     const stages = [
         'Nuevo Lead',
@@ -203,6 +220,90 @@ const CRM = () => {
             window.dispatchEvent(new Event('local_clients_updated'));
             alert('¡Cliente creado exitosamente en el módulo de Clientes!');
             setSelectedLead(null);
+        }
+    };
+
+    // --- NUEVO: Funciones de Cotización ---
+    const openQuotationModal = (lead) => {
+        setQuotationLead(lead);
+        setQuotationItems([]);
+        setIsQuotationModalOpen(true);
+    };
+
+    const addProductToQuotation = (product) => {
+        const exists = quotationItems.find(i => i.id === product.id);
+        if (exists) {
+            setQuotationItems(quotationItems.map(i => i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i));
+        } else {
+            setQuotationItems([...quotationItems, { ...product, quantity: 1 }]);
+        }
+    };
+
+    const updateQuotationItem = (id, field, value) => {
+        setQuotationItems(quotationItems.map(i => i.id === id ? { ...i, [field]: value } : i));
+    };
+
+    const removeQuotationItem = (id) => {
+        if (window.confirm('¿Deseas eliminar este producto de la cotización?')) {
+            setQuotationItems(quotationItems.filter(i => i.id !== id));
+        }
+    };
+
+    const handleSendQuotation = async (method) => {
+        if (quotationItems.length === 0) {
+            alert('Añade al menos un producto para cotizar.');
+            return;
+        }
+
+        const total = quotationItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+        const text = `Hola ${quotationLead.name}, Zeticas te envía tu cotización.\nProductos:\n${quotationItems.map(i => `- ${i.name} x${i.quantity}: $${(i.price * i.quantity).toLocaleString()}`).join('\n')}\nTotal: $${total.toLocaleString()}`;
+
+        if (method === 'whatsapp') {
+            window.open(`https://wa.me/${quotationLead.phone.replace(/\D/g, '')}?text=${encodeURIComponent(text)}`, '_blank');
+        } else if (method === 'email') {
+            window.open(`mailto:${quotationLead.email}?subject=Cotización Zeticas&body=${encodeURIComponent(text)}`, '_blank');
+        } else if (method === 'pdf') {
+            const doc = new jsPDF();
+
+            // Header
+            doc.setFontSize(22);
+            doc.setTextColor(0, 77, 77); // Zeticas Primary
+            doc.text('COTIZACIÓN COMERCIAL', 14, 22);
+
+            doc.setFontSize(10);
+            doc.setTextColor(100, 116, 139);
+            doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 14, 30);
+            doc.text(`Cliente: ${quotationLead.name}`, 14, 35);
+            doc.text(`Email: ${quotationLead.email || 'N/A'}`, 14, 40);
+
+            // Table
+            const tableColumn = ["Producto", "Cantidad", "Precio Unit.", "Subtotal"];
+            const tableRows = quotationItems.map(item => [
+                item.name,
+                item.quantity.toString(),
+                `$${item.price.toLocaleString()}`,
+                `$${(item.price * item.quantity).toLocaleString()}`
+            ]);
+
+            autoTable(doc, {
+                startY: 50,
+                head: [tableColumn],
+                body: tableRows,
+                theme: 'grid',
+                headStyles: { fillColor: [0, 77, 77] }
+            });
+
+            const finalY = doc.lastAutoTable.finalY + 10;
+            doc.setFontSize(14);
+            doc.setFont('helvetica', 'bold');
+            doc.text(`TOTAL: $${total.toLocaleString()}`, 196, finalY, { align: 'right' });
+
+            doc.save(`Cotizacion_${quotationLead.name.replace(/\s+/g, '_')}.pdf`);
+        }
+
+        // Marcar como "Cotización Enviada" si está en "Nuevo Lead"
+        if (quotationLead.stage === 'Nuevo Lead') {
+            handleDrop({ preventDefault: () => { }, dataTransfer: { getData: () => quotationLead.id } }, 'Cotización Enviada');
         }
     };
 
@@ -429,17 +530,25 @@ const CRM = () => {
                                                     <div><strong>Volumen:</strong> {lead.estimated_volume || 0} unid/cajas</div>
                                                 </div>
 
-                                                <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }} onClick={e => e.stopPropagation()}>
-                                                    {lead.phone && (
-                                                        <a href={`https://wa.me/${lead.phone.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', background: '#25D366', color: '#fff', padding: '4px 8px', borderRadius: '4px', textDecoration: 'none', display: 'inline-block' }}>
-                                                            WhatsApp
-                                                        </a>
-                                                    )}
-                                                    {lead.email && (
-                                                        <a href={`mailto:${lead.email}`} style={{ fontSize: '0.75rem', background: '#3b82f6', color: '#fff', padding: '4px 8px', borderRadius: '4px', textDecoration: 'none', display: 'inline-block' }}>
-                                                            Email
-                                                        </a>
-                                                    )}
+                                                <div style={{ marginTop: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }} onClick={e => e.stopPropagation()}>
+                                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                        {lead.phone && (
+                                                            <a href={`https://wa.me/${lead.phone.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" style={{ flex: 1, textAlign: 'center', fontSize: '0.7rem', background: '#25D366', color: '#fff', padding: '6px 4px', borderRadius: '4px', textDecoration: 'none' }}>
+                                                                WhatsApp
+                                                            </a>
+                                                        )}
+                                                        {lead.email && (
+                                                            <a href={`mailto:${lead.email}`} style={{ flex: 1, textAlign: 'center', fontSize: '0.7rem', background: '#3b82f6', color: '#fff', padding: '6px 4px', borderRadius: '4px', textDecoration: 'none' }}>
+                                                                Email
+                                                            </a>
+                                                        )}
+                                                    </div>
+                                                    <button
+                                                        onClick={() => openQuotationModal(lead)}
+                                                        style={{ width: '100%', fontSize: '0.75rem', background: 'var(--color-secondary)', color: '#fff', padding: '8px', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                                                    >
+                                                        Crear Cotización
+                                                    </button>
                                                 </div>
                                             </div>
                                         )
@@ -484,6 +593,109 @@ const CRM = () => {
                         <button onClick={handleCreateClient} style={{ width: '100%', padding: '0.75rem', background: '#be185d', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 6px rgba(190, 24, 93, 0.2)' }}>
                             Ingresa como Cliente Nuevo
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Cotización */}
+            {isQuotationModalOpen && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                    <div style={{ background: '#fff', padding: '1.5rem', borderRadius: '12px', width: '800px', maxWidth: '95%', height: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>
+                            <h3 className="font-serif" style={{ fontSize: '1.5rem', margin: 0 }}>Crear Cotización - {quotationLead.name}</h3>
+                            <button onClick={() => setIsQuotationModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', padding: '8px', borderRadius: '50%', cursor: 'pointer' }}><X size={20} /></button>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '1.5rem', flex: 1, overflow: 'hidden' }}>
+                            {/* Selector de Productos */}
+                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem', borderRight: '1px solid #eee', paddingRight: '1.5rem' }}>
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <input
+                                        type="text"
+                                        placeholder="Buscar producto..."
+                                        value={searchProduct}
+                                        onChange={e => setSearchProduct(e.target.value)}
+                                        style={{ flex: 1, padding: '0.6rem', borderRadius: '6px', border: '1px solid #ddd' }}
+                                    />
+                                    <select
+                                        value={quotationFilter}
+                                        onChange={e => setQuotationFilter(e.target.value)}
+                                        style={{ padding: '0.6rem', borderRadius: '6px', border: '1px solid #ddd' }}
+                                    >
+                                        <option value="Todos">Todos</option>
+                                        <option value="Sal">Sal</option>
+                                        <option value="Dulce">Dulce</option>
+                                    </select>
+                                </div>
+                                <div style={{ flex: 1, overflowY: 'auto' }}>
+                                    {availableProducts
+                                        .filter(p => (quotationFilter === 'Todos' || p.category === quotationFilter) && p.name.toLowerCase().includes(searchProduct.toLowerCase()))
+                                        .map(p => (
+                                            <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.8rem', borderBottom: '1px solid #f8fafc', background: '#fff' }}>
+                                                <div>
+                                                    <div style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{p.name}</div>
+                                                    <div style={{ fontSize: '0.8rem', color: '#64748b' }}>${p.price.toLocaleString()}</div>
+                                                </div>
+                                                <button onClick={() => addProductToQuotation(p)} style={{ padding: '4px 12px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}>Añadir</button>
+                                            </div>
+                                        ))
+                                    }
+                                </div>
+                            </div>
+
+                            {/* Detalle de Cotización */}
+                            <div style={{ flex: 1.2, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                <h4 style={{ margin: 0, color: '#475569' }}>Productos Seleccionados</h4>
+                                <div style={{ flex: 1, overflowY: 'auto', background: '#f8fafc', borderRadius: '8px', padding: '0.5rem' }}>
+                                    {quotationItems.length === 0 ? (
+                                        <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>No hay productos añadidos aún.</div>
+                                    ) : (
+                                        quotationItems.map(item => (
+                                            <div key={item.id} style={{ background: '#fff', padding: '0.8rem', borderRadius: '6px', marginBottom: '0.5rem', border: '1px solid #e2e8f0' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+                                                    <span style={{ fontSize: '0.9rem' }}>{item.name}</span>
+                                                    <button onClick={() => removeQuotationItem(item.id)} style={{ color: '#ef4444', border: 'none', background: 'none', cursor: 'pointer' }}><Trash2 size={16} /></button>
+                                                </div>
+                                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                                    <div style={{ flex: 1 }}>
+                                                        <label style={{ fontSize: '0.7rem', color: '#64748b' }}>Cant:</label>
+                                                        <input type="number" value={item.quantity} onChange={e => updateQuotationItem(item.id, 'quantity', parseInt(e.target.value) || 0)} style={{ width: '100%', padding: '4px', fontSize: '0.85rem' }} />
+                                                    </div>
+                                                    <div style={{ flex: 2 }}>
+                                                        <label style={{ fontSize: '0.7rem', color: '#64748b' }}>Precio:</label>
+                                                        <input type="number" value={item.price} onChange={e => updateQuotationItem(item.id, 'price', parseInt(e.target.value) || 0)} style={{ width: '100%', padding: '4px', fontSize: '0.85rem' }} />
+                                                    </div>
+                                                    <div style={{ flex: 2, textAlign: 'right' }}>
+                                                        <label style={{ fontSize: '0.7rem', color: '#64748b' }}>Total:</label>
+                                                        <div style={{ fontWeight: 'bold' }}>${(item.price * item.quantity).toLocaleString()}</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                                <div style={{ borderTop: '2px solid #e2e8f0', paddingTop: '1rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--color-primary)', marginBottom: '1rem' }}>
+                                        <span>TOTAL:</span>
+                                        <span>${quotationItems.reduce((sum, i) => sum + (i.price * i.quantity), 0).toLocaleString()}</span>
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                                        <button onClick={() => handleSendQuotation('pdf')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '0.8rem', background: '#334155', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+                                            <Download size={18} /> Descargar PDF
+                                        </button>
+                                        <button onClick={() => handleSendQuotation('whatsapp')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '0.8rem', background: '#25D366', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+                                            WhatsApp
+                                        </button>
+                                        <button onClick={() => handleSendQuotation('email')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '0.8rem', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+                                            Enviar Email
+                                        </button>
+                                        <button onClick={() => { if (window.confirm('¿Deseas descartar esta cotización?')) setIsQuotationModalOpen(false) }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '0.8rem', background: '#fee2e2', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+                                            <Trash2 size={18} /> Eliminar
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
