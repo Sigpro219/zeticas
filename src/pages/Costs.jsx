@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useBusiness } from '../context/BusinessContext';
 import {
     DollarSign,
     TrendingUp,
@@ -10,10 +11,12 @@ import {
 import { supabase } from '../lib/supabase';
 
 const Costs = () => {
+    const { recalculatePTCosts } = useBusiness();
     const [rawMaterials, setRawMaterials] = useState([]);
     const [products, setProducts] = useState([]);
     const [recipesMap, setRecipesMap] = useState({});
     const [loading, setLoading] = useState(true);
+    const [isRecalculating, setIsRecalculating] = useState(false);
 
     const loadData = async () => {
         setLoading(true);
@@ -80,6 +83,32 @@ const Costs = () => {
                         ${totalInventoryValue.toLocaleString()}
                     </div>
                 </div>
+                <button
+                    onClick={async () => {
+                        setIsRecalculating(true);
+                        await recalculatePTCosts();
+                        await loadData();
+                        setIsRecalculating(false);
+                        alert("Costos de Productos Terminados recalculados exitosamente.");
+                    }}
+                    disabled={isRecalculating}
+                    style={{
+                        padding: '0.8rem 1.5rem',
+                        borderRadius: '12px',
+                        border: 'none',
+                        background: 'var(--color-primary)',
+                        color: '#fff',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.6rem',
+                        opacity: isRecalculating ? 0.7 : 1
+                    }}
+                >
+                    <Calculator size={18} />
+                    {isRecalculating ? 'Recalculando...' : 'Recalcular Todo (PT)'}
+                </button>
             </header>
 
             {loading ? (

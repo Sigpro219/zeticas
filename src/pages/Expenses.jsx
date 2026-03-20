@@ -58,25 +58,32 @@ const Expenses = () => {
             .filter(o => o.status === 'Pagado')
             .reduce((acc, o) => acc + (o.amount || 0), 0);
 
-        // 2. COSTOS
+        // 2. COSTOS (Accrual for PYG / Cash for Cash Flow)
         const filteredPOs = (purchaseOrders || []).filter(po => isWithinRange(po.date));
-        let costoMP = 0;
-        let costoInsumos = 0;
+        let costoMP_Pyg = 0;
+        let costoInsumos_Pyg = 0;
+        let costoMP_Cash = 0;
+        let costoInsumos_Cash = 0;
 
         filteredPOs.forEach(oc => {
+            const isPaid = oc.paymentStatus === 'Pagado';
             (oc.items || []).forEach(item => {
                 const itemTotal = (item.toBuy || 0) * (item.purchasePrice || 0);
                 if (item.type === 'MP') {
-                    costoMP += itemTotal;
+                    costoMP_Pyg += itemTotal;
+                    if (isPaid) costoMP_Cash += itemTotal;
                 } else if (item.type === 'INSUMO') {
-                    costoInsumos += itemTotal;
+                    costoInsumos_Pyg += itemTotal;
+                    if (isPaid) costoInsumos_Cash += itemTotal;
                 } else {
-                    costoMP += itemTotal;
+                    costoMP_Pyg += itemTotal;
+                    if (isPaid) costoMP_Cash += itemTotal;
                 }
             });
         });
 
-        const totalCostos = costoMP + costoInsumos;
+        const totalCostos_Pyg = costoMP_Pyg + costoInsumos_Pyg;
+        const totalCostos_Cash = costoMP_Cash + costoInsumos_Cash;
 
         // 3. GASTOS
         const filteredExpensesList = (expenses || [])
@@ -89,20 +96,20 @@ const Expenses = () => {
         const totalGastos = filteredExpensesList.reduce((acc, e) => acc + (e.amount || 0), 0);
 
         // 4. UTILIDADES
-        const utilidadPYG = totalPedidos - totalCostos - totalGastos;
-        const flujoCaja = totalCartera - totalCostos - totalGastos;
+        const utilidadPYG = totalPedidos - totalCostos_Pyg - totalGastos;
+        const flujoCaja = totalCartera - totalCostos_Cash - totalGastos;
 
         return {
             totalPedidos,
             totalCartera,
-            costoMP,
-            costoInsumos,
-            totalCostos,
+            costoMP: costoMP_Pyg,
+            costoInsumos: costoInsumos_Pyg,
+            totalCostos: totalCostos_Pyg,
             totalGastos,
             utilidadPYG,
             flujoCaja,
             margin: totalPedidos > 0 ? (utilidadPYG / totalPedidos * 100).toFixed(1) : 0,
-            filteredExpensesList // For use in the table
+            filteredExpensesList
         };
     }, [orders, purchaseOrders, expenses, filterType, customRange, banks]);
 
@@ -140,10 +147,10 @@ const Expenses = () => {
 
                 // 2. Adjust bank balances (Reverse old, apply new)
                 if (editingExpense.bankId) {
-                    await updateBankBalance(editingExpense.bankId, editingExpense.amount, 'income'); // reverse old expense
+                    await updateBankBalance(editingExpense.bankId, editingExpense.amount, 'income', `Reversión Gasto: ${editingExpense.description}`); // reverse old expense
                 }
                 if (formData.bankId) {
-                    await updateBankBalance(formData.bankId, amount, 'expense'); // apply new expense
+                    await updateBankBalance(formData.bankId, amount, 'expense', `Actualización Gasto: ${formData.description}`, editingExpense.id); // apply new expense
                 }
 
                 // 3. Update local state
@@ -186,7 +193,7 @@ const Expenses = () => {
 
                 // 2. Update bank balance
                 if (formData.bankId) {
-                    await updateBankBalance(formData.bankId, amount, 'expense');
+                    await updateBankBalance(formData.bankId, amount, 'expense', `Gasto: ${formData.description}`, newExp[0]?.id);
                 }
                 alert("Gasto registrado y saldo de banco actualizado.");
             }
@@ -234,12 +241,12 @@ const Expenses = () => {
 
                 // 2. Reverse bank balance impact
                 if (expense.bankId) {
-                    await updateBankBalance(expense.bankId, expense.amount, 'income'); // income reverses expense
+                    await updateBankBalance(expense.bankId, expense.amount, 'income', `Eliminación Gasto: ${expense.description}`); // income reverses expense
                 } else if (expense.bank) {
                     // Fallback if legacy structure uses bank name
                     const bank = banks.find(b => b.name === expense.bank);
                     if (bank) {
-                        await updateBankBalance(bank.id, expense.amount, 'income');
+                        await updateBankBalance(bank.id, expense.amount, 'income', `Eliminación Gasto (Legacy): ${expense.description}`);
                     }
                 }
 

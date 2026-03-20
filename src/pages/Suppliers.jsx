@@ -37,8 +37,8 @@ const Suppliers = () => {
         email: '',
         phone: '',
         address: '',
-        type: 'Jurídica',
-        location: 'Local',
+        city: '',
+        contact_person: '',
         category: 'Insumos'
     });
 
@@ -57,7 +57,8 @@ const Suppliers = () => {
             email: newSupplier.email,
             phone: newSupplier.phone,
             address: newSupplier.address,
-            type: newSupplier.type,
+            city: newSupplier.city,
+            contact_person: newSupplier.contact_person,
             category: newSupplier.category,
             status: 'ACTIVE'
         };
@@ -147,7 +148,7 @@ const Suppliers = () => {
                     <button
                         onClick={() => {
                             setEditingSupplier(null);
-                            setNewSupplier({ name: '', nit: '', email: '', phone: '', address: '', type: 'Jurídica', location: 'Local', category: 'Insumos' });
+                            setNewSupplier({ name: '', nit: '', email: '', phone: '', address: '', city: '', contact_person: '', category: 'Insumos' });
                             setIsModalOpen(true);
                         }}
                         style={{
@@ -180,31 +181,41 @@ const Suppliers = () => {
                         boxShadow: '0 4px 15px rgba(0,0,0,0.02)',
                         transition: 'all 0.3s ease'
                     }} className="supplier-card">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.2rem' }}>
-                            <div style={{
-                                background: s.type === 'Natural' ? '#fdf2f8' : '#f0f9ff',
-                                color: s.type === 'Natural' ? '#be185d' : '#0369a1',
-                                padding: '4px 12px',
-                                borderRadius: '20px',
-                                fontSize: '0.7rem',
-                                fontWeight: '800',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.3rem'
-                            }}>
-                                {s.type === 'Natural' ? <User size={12} /> : <Briefcase size={12} />}
-                                {s.type === 'Natural' ? 'B2C' : 'B2B'}
-                            </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem' }}>
+                            <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1a3636', margin: 0 }}>{s.name}</h3>
                         </div>
-
-                        <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#1e293b', marginBottom: '0.4rem' }}>{s.name}</h3>
-                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
-                            <span style={{ background: '#f8fafc', padding: '4px 10px', borderRadius: '8px', fontSize: '0.75rem', color: '#475569', border: '1px solid #e2e8f0' }}>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.2rem' }}>
+                            <span style={{ background: '#f0fdf4', padding: '4px 10px', borderRadius: '8px', fontSize: '0.7rem', color: '#166534', border: '1px solid #dcfce7', fontWeight: '600' }}>
                                 {s.group || 'General'}
                             </span>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.75rem', color: 'var(--color-primary)', fontWeight: 'bold' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.7rem', color: '#64748b', fontWeight: '500' }}>
                                 <Package size={12} /> {(s.associatedItems || []).length} Materias
                             </span>
+                        </div>
+
+                        <div style={{ display: 'grid', gap: '0.6rem', marginBottom: '1.5rem', fontSize: '0.85rem', color: '#475569' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                <Building2 size={14} style={{ color: '#94a3b8' }} />
+                                <span style={{ fontWeight: '600' }}>NIT:</span> {s.nit || 'N/A'}
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                <MapPin size={14} style={{ color: '#94a3b8' }} />
+                                <span>{s.address || 'Sin dirección'} {s.city ? `(${s.city})` : ''}</span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
+                                    <Phone size={14} style={{ color: '#94a3b8' }} />
+                                    <span>{s.phone || 'N/A'}</span>
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                <Mail size={14} style={{ color: '#94a3b8' }} />
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.email || 'N/A'}</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginTop: '0.2rem', padding: '0.5rem', background: '#f8fafc', borderRadius: '8px' }}>
+                                <User size={14} style={{ color: '#1a3636' }} />
+                                <span style={{ fontSize: '0.75rem' }}><b>Contacto:</b> {s.contact_person || 'No definido'}</span>
+                            </div>
                         </div>
 
                         <div style={{ display: 'flex', gap: '0.8rem' }}>
@@ -253,17 +264,46 @@ const Suppliers = () => {
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3000 }}>
                     <div style={{ background: '#fff', padding: '2rem', borderRadius: '24px', width: '90%', maxWidth: '500px' }}>
                         <h3>{editingSupplier ? 'Editar Proveedor' : 'Nuevo Proveedor'}</h3>
-                        <form onSubmit={handleSaveSupplier} style={{ display: 'grid', gap: '1rem', marginTop: '1.5rem' }}>
-                            <input placeholder="Nombre" required value={newSupplier.name} onChange={(e) => setNewSupplier({ ...newSupplier, name: e.target.value })} style={{ padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd' }} />
-                            <input placeholder="NIT" required value={newSupplier.nit} onChange={(e) => setNewSupplier({ ...newSupplier, nit: e.target.value })} style={{ padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd' }} />
-                            <select value={newSupplier.category} onChange={(e) => setNewSupplier({ ...newSupplier, category: e.target.value })} style={{ padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd' }}>
-                                <option value="Materias Primas">Materias Primas</option>
-                                <option value="Insumos">Insumos</option>
-                                <option value="Empaque">Empaque</option>
-                            </select>
-                            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                                <button type="button" onClick={() => setIsModalOpen(false)} style={{ flex: 1, padding: '0.8rem', borderRadius: '12px', border: 'none', background: '#f1f5f9' }}>Cancelar</button>
-                                <button type="submit" disabled={isSaving} style={{ flex: 1, padding: '0.8rem', borderRadius: '12px', border: 'none', background: '#1a3636', color: '#fff', fontWeight: 'bold' }}>
+                        <form onSubmit={handleSaveSupplier} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1.5rem' }}>
+                            <div style={{ gridColumn: 'span 2' }}>
+                                <label style={{ fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.4rem', display: 'block' }}>Nombre o Razón Social</label>
+                                <input placeholder="Nombre" required value={newSupplier.name} onChange={(e) => setNewSupplier({ ...newSupplier, name: e.target.value })} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', outline: 'none' }} />
+                            </div>
+                            <div>
+                                <label style={{ fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.4rem', display: 'block' }}>NIT / Identificación</label>
+                                <input placeholder="NIT" required value={newSupplier.nit} onChange={(e) => setNewSupplier({ ...newSupplier, nit: e.target.value })} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', outline: 'none' }} />
+                            </div>
+                            <div>
+                                <label style={{ fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.4rem', display: 'block' }}>Categoría</label>
+                                <select value={newSupplier.category} onChange={(e) => setNewSupplier({ ...newSupplier, category: e.target.value })} style={{ width: '100%', padding: '0.86rem', borderRadius: '12px', border: '1px solid #ddd', outline: 'none', background: '#fff' }}>
+                                    <option value="Materias Primas">Materias Primas</option>
+                                    <option value="Insumos">Insumos</option>
+                                    <option value="Empaque">Empaque</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style={{ fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.4rem', display: 'block' }}>Correo Electrónico</label>
+                                <input placeholder="Email" type="email" value={newSupplier.email} onChange={(e) => setNewSupplier({ ...newSupplier, email: e.target.value })} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', outline: 'none' }} />
+                            </div>
+                            <div>
+                                <label style={{ fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.4rem', display: 'block' }}>Teléfono</label>
+                                <input placeholder="Teléfono" value={newSupplier.phone} onChange={(e) => setNewSupplier({ ...newSupplier, phone: e.target.value })} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', outline: 'none' }} />
+                            </div>
+                            <div style={{ gridColumn: 'span 2' }}>
+                                <label style={{ fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.4rem', display: 'block' }}>Dirección</label>
+                                <input placeholder="Dirección" value={newSupplier.address} onChange={(e) => setNewSupplier({ ...newSupplier, address: e.target.value })} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', outline: 'none' }} />
+                            </div>
+                            <div>
+                                <label style={{ fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.4rem', display: 'block' }}>Ciudad</label>
+                                <input placeholder="Ciudad" value={newSupplier.city} onChange={(e) => setNewSupplier({ ...newSupplier, city: e.target.value })} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', outline: 'none' }} />
+                            </div>
+                            <div>
+                                <label style={{ fontSize: '0.8rem', fontWeight: '600', color: '#475569', marginBottom: '0.4rem', display: 'block' }}>Persona de Contacto</label>
+                                <input placeholder="Nombre de contacto" value={newSupplier.contact_person} onChange={(e) => setNewSupplier({ ...newSupplier, contact_person: e.target.value })} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', outline: 'none' }} />
+                            </div>
+                            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', gridColumn: 'span 2' }}>
+                                <button type="button" onClick={() => setIsModalOpen(false)} style={{ flex: 1, padding: '0.8rem', borderRadius: '12px', border: 'none', background: '#f1f5f9', cursor: 'pointer' }}>Cancelar</button>
+                                <button type="submit" disabled={isSaving} style={{ flex: 1, padding: '0.8rem', borderRadius: '12px', border: 'none', background: '#1a3636', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>
                                     {isSaving ? 'Guardando...' : 'Guardar'}
                                 </button>
                             </div>

@@ -28,7 +28,7 @@ import {
 import { useBusiness } from '../context/BusinessContext';
 
 const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurchaseOrders, recipes, providers }) => {
-    const { banks, setBanks, updateBankBalance } = useBusiness();
+    const { banks, setBanks, updateBankBalance, recalculatePTCosts } = useBusiness();
     // Local State for BOM Explosion & OC Generation
     const [selectedOrderId, setSelectedOrderId] = useState(null);
     const [supplierAssignments, setSupplierAssignments] = useState({}); // { mpId: supplierName }
@@ -245,7 +245,8 @@ const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurc
                         id: matId,
                         name: matName,
                         unit: materialInfo?.unit || 'und',
-                        totalNeeded: 0
+                        totalNeeded: 0,
+                        isMissing: !materialInfo
                     };
                 }
                 explosion[matId].totalNeeded += totalNeeded;
@@ -415,6 +416,8 @@ const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurc
                         await supabase.from('orders').update({ status: 'En Producción' }).eq('order_number', refId);
                     }
                 }
+                // Recalculate PT costs based on new MP costs
+                await recalculatePTCosts();
             } catch (err) {
                 console.error("Error persisting receipt:", err);
             }
@@ -459,7 +462,7 @@ const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurc
             if (poErr) throw poErr;
 
             // 2. Update Bank Balance (Expense) using centralized function
-            await updateBankBalance(paymentBankId, amount, 'expense');
+            await updateBankBalance(paymentBankId, amount, 'expense', `Pago OC ${oc.id} a ${oc.providerName}`, oc.id);
 
             // 3. Update Local State (only purchase orders, bank state is updated by updateBankBalance)
             setPurchaseOrders(prev => prev.map(o => o.id === oc.id ? { ...o, paymentStatus: 'Pagado', bankId: paymentBankId } : o));
@@ -731,8 +734,14 @@ const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurc
                             {requirementExplosion.map(mp => (
                                 <tr key={mp.id} style={{ borderBottom: '1px solid #f8fafc' }}>
                                     <td style={{ padding: '1.2rem 1rem' }}>
-                                        <div style={{ fontWeight: '700', color: '#334155' }}>{mp.name}</div>
-                                        <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>ID: {mp.id}</div>
+                                        <div style={{ fontWeight: '700', color: mp.isMissing ? '#e11d48' : '#334155' }}>{mp.name}</div>
+                                        {mp.isMissing ? (
+                                            <div style={{ fontSize: '0.65rem', color: '#e11d48', fontWeight: 'bold', background: '#fff1f2', padding: '2px 6px', borderRadius: '4px', border: '1px solid #fecaca', display: 'inline-block', marginTop: '4px' }}>
+                                                No existe en Módulo de Datos Maestros de Productos, Crealo primero
+                                            </div>
+                                        ) : (
+                                            <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>ID: {mp.id}</div>
+                                        )}
                                     </td>
                                     <td style={{ padding: '1.2rem 1rem', textAlign: 'right', fontWeight: '600' }}>{mp.totalNeeded} {mp.unit}</td>
                                     <td style={{ padding: '1.2rem 1rem', textAlign: 'right', color: '#64748b' }}>{mp.available} {mp.unit}</td>

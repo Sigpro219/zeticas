@@ -5,7 +5,7 @@ import {
     ShoppingBag, CreditCard, CheckCircle,
     ArrowRight, Activity, Calendar,
     MapPin, User, Mail, Smartphone,
-    ChevronRight, Info
+    ChevronRight, Info, Search
 } from 'lucide-react';
 import { products as customProducts } from '../data/products';
 
@@ -13,6 +13,7 @@ const RecurringCustomers = () => {
     const { items, addOrder } = useBusiness();
     const navigate = useNavigate();
     const [step, setStep] = useState(1); // 1: Info/Form, 2: Payment, 3: Success
+    const [productSearch, setProductSearch] = useState('');
 
     const [formData, setFormData] = useState({
         name: 'Juan Perez',
@@ -25,10 +26,18 @@ const RecurringCustomers = () => {
         products: []
     });
 
-    const categories = {
-        'SAL': customProducts.filter(i => i.categoria === 'Sal'),
-        'DULCE': customProducts.filter(i => i.categoria === 'Dulce')
-    };
+    const filteredCategories = React.useMemo(() => {
+        const query = productSearch.toLowerCase().trim();
+        const base = {
+            'SAL': customProducts.filter(i => i.categoria === 'Sal'),
+            'DULCE': customProducts.filter(i => i.categoria === 'Dulce')
+        };
+        if (!query) return base;
+        return {
+            'SAL': base.SAL.filter(p => p.nombre.toLowerCase().includes(query)),
+            'DULCE': base.DULCE.filter(p => p.nombre.toLowerCase().includes(query))
+        };
+    }, [productSearch]);
 
     const handleProductChange = (productId, quantity) => {
         setFormData(prev => {
@@ -166,30 +175,30 @@ const RecurringCustomers = () => {
                             <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '1.5rem' }}>
                                 <div>
                                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.5rem' }}>NOMBRE COMPLETO</label>
-                                    <input required type="text" placeholder="Ej: Juan Pérez" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none' }} />
+                                    <input required type="text" placeholder="Ej: Juan Pérez" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none', color: '#94a3b8' }} />
                                 </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                     <div>
                                         <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.5rem' }}>WHATSAPP</label>
-                                        <input required type="tel" placeholder="300 123 4567" value={formData.whatsapp} onChange={e => setFormData({ ...formData, whatsapp: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none' }} />
+                                        <input required type="tel" placeholder="300 123 4567" value={formData.whatsapp} onChange={e => setFormData({ ...formData, whatsapp: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none', color: '#94a3b8' }} />
                                     </div>
                                     <div>
                                         <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.5rem' }}>CÉDULA / NIT</label>
-                                        <input required type="text" placeholder="1.020.123.456" value={formData.idNumber} onChange={e => setFormData({ ...formData, idNumber: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none' }} />
+                                        <input required type="text" placeholder="1.020.123.456" value={formData.idNumber} onChange={e => setFormData({ ...formData, idNumber: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none', color: '#94a3b8' }} />
                                     </div>
                                 </div>
                                 <div>
                                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.5rem' }}>CORREO ELECTRÓNICO</label>
-                                    <input required type="email" placeholder="juan@ejemplo.com" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none' }} />
+                                    <input required type="email" placeholder="juan@ejemplo.com" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none', color: '#94a3b8' }} />
                                 </div>
                                 <div>
                                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.5rem' }}>DIRECCIÓN DE ENTREGA</label>
-                                    <input required type="text" placeholder="Calle 123 # 45-67 Bogotá" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none' }} />
+                                    <input required type="text" placeholder="Calle 123 # 45-67 Bogotá" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none', color: '#94a3b8' }} />
                                 </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                     <div>
                                         <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.5rem' }}>FRECUENCIA</label>
-                                        <select value={formData.frequency} onChange={e => setFormData({ ...formData, frequency: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none', background: '#fff' }}>
+                                        <select value={formData.frequency} onChange={e => setFormData({ ...formData, frequency: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none', background: '#fff', color: '#94a3b8' }}>
                                             <option>Mensual</option>
                                             <option>Quincenal</option>
                                             <option>Cada 2 Meses</option>
@@ -197,7 +206,7 @@ const RecurringCustomers = () => {
                                     </div>
                                     <div>
                                         <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.5rem' }}>DÍA PREFERIDO (MES)</label>
-                                        <select value={formData.dayOfMonth} onChange={e => setFormData({ ...formData, dayOfMonth: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none', background: '#fff' }}>
+                                        <select value={formData.dayOfMonth} onChange={e => setFormData({ ...formData, dayOfMonth: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none', background: '#fff', color: '#94a3b8' }}>
                                             {[...Array(28)].map((_, i) => <option key={i + 1}>{i + 1}</option>)}
                                         </select>
                                     </div>
@@ -211,32 +220,45 @@ const RecurringCustomers = () => {
                         {/* Product Selection Section */}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                             <div style={{ background: '#E9EFEC', padding: '2rem', borderRadius: '32px', border: '1px solid #C4DAD2' }}>
-                                <h3 style={{ fontSize: '1.25rem', color: '#1A3636', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                <h3 style={{ fontSize: '1.25rem', color: '#1A3636', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                                     <ShoppingBag size={20} color="#1A3636" /> Línea de Productos
                                 </h3>
 
-                                {Object.entries(categories).map(([cat, prods]) => (
-                                    <div key={cat} style={{ marginBottom: '1.5rem' }}>
-                                        <div style={{ fontSize: '0.7rem', fontWeight: '900', color: '#1A3636', marginBottom: '1rem', opacity: 0.6 }}>LÍNEA {cat}</div>
-                                        <div style={{ display: 'grid', gap: '0.75rem' }}>
-                                            {prods.map(p => {
-                                                const current = formData.products.find(fp => fp.id === p.id);
-                                                return (
-                                                    <div key={p.id} style={{ background: '#fff', padding: '1rem', borderRadius: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                        <div>
-                                                            <div style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{p.nombre}</div>
-                                                            <div style={{ fontSize: '0.8rem', color: '#64748b' }}>${p.precio.toLocaleString()} / und</div>
+                                <div style={{ position: 'relative', marginBottom: '1.5rem' }}>
+                                    <Search size={16} color="#64748b" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+                                    <input
+                                        type="text"
+                                        placeholder="Buscar producto..."
+                                        value={productSearch}
+                                        onChange={e => setProductSearch(e.target.value)}
+                                        style={{ width: '100%', padding: '0.75rem 1rem 0.75rem 2.5rem', borderRadius: '12px', border: '1px solid #C4DAD2', outline: 'none', fontSize: '0.9rem', background: '#fff' }}
+                                    />
+                                </div>
+
+                                {Object.entries(filteredCategories).map(([cat, prods]) => (
+                                    prods.length > 0 && (
+                                        <div key={cat} style={{ marginBottom: '1.5rem' }}>
+                                            <div style={{ fontSize: '0.7rem', fontWeight: '900', color: '#1A3636', marginBottom: '1rem', opacity: 0.6 }}>LÍNEA {cat}</div>
+                                            <div style={{ display: 'grid', gap: '0.75rem' }}>
+                                                {prods.map(p => {
+                                                    const current = formData.products.find(fp => fp.id === p.id);
+                                                    return (
+                                                        <div key={p.id} style={{ background: '#fff', padding: '1rem', borderRadius: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                            <div>
+                                                                <div style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{p.nombre}</div>
+                                                                <div style={{ fontSize: '0.8rem', color: '#64748b' }}>${p.precio.toLocaleString()} / und</div>
+                                                            </div>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                                                                <button onClick={() => handleProductChange(p.id, (current?.quantity || 0) - 1)} style={{ width: '28px', height: '28px', borderRadius: '50%', border: '1px solid #e2e8f0', background: '#f8fafc', cursor: 'pointer' }}>-</button>
+                                                                <span style={{ fontWeight: 'bold', minWidth: '20px', textAlign: 'center' }}>{current?.quantity || 0}</span>
+                                                                <button onClick={() => handleProductChange(p.id, (current?.quantity || 0) + 1)} style={{ width: '28px', height: '28px', borderRadius: '50%', border: 'none', background: '#1A3636', color: '#fff', cursor: 'pointer' }}>+</button>
+                                                            </div>
                                                         </div>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-                                                            <button onClick={() => handleProductChange(p.id, (current?.quantity || 0) - 1)} style={{ width: '28px', height: '28px', borderRadius: '50%', border: '1px solid #e2e8f0', background: '#f8fafc', cursor: 'pointer' }}>-</button>
-                                                            <span style={{ fontWeight: 'bold', minWidth: '20px', textAlign: 'center' }}>{current?.quantity || 0}</span>
-                                                            <button onClick={() => handleProductChange(p.id, (current?.quantity || 0) + 1)} style={{ width: '28px', height: '28px', borderRadius: '50%', border: 'none', background: '#1A3636', color: '#fff', cursor: 'pointer' }}>+</button>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
+                                                    );
+                                                })}
+                                            </div>
                                         </div>
-                                    </div>
+                                    )
                                 ))}
                             </div>
 

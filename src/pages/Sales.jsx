@@ -12,23 +12,14 @@ const Orders = ({ orders, setOrders }) => {
         recipes,
         providers,
         purchaseOrders,
-        setPurchaseOrders,
         addOrder,
         deleteOrders,
-        persistPriceSync,
-        refreshData
+        refreshData,
+        clients
     } = useBusiness();
 
     // Selection state
     const [selectedOrders, setSelectedOrders] = useState([]);
-    const [clients, setClients] = useState([]);
-
-    useEffect(() => {
-        const savedClients = localStorage.getItem('zeticas_clients_data');
-        if (savedClients) {
-            setClients(JSON.parse(savedClients).filter(c => c.status === 'Active'));
-        }
-    }, []);
 
     // Filters and UI State
     const [filterType, setFilterType] = useState('month');
@@ -151,13 +142,23 @@ const Orders = ({ orders, setOrders }) => {
 
         try {
             if (type === 'single' || type === 'bulk') {
-                const { success } = await deleteOrders(target);
-                successResult = success;
-                if (successResult && type === 'bulk') setSelectedOrders([]);
+                const idsToDelete = Array.isArray(target) ? target : [target];
+                const dbIds = orders
+                    .filter(o => idsToDelete.includes(o.id))
+                    .map(o => o.dbId)
+                    .filter(Boolean);
+
+                if (dbIds.length > 0) {
+                    const { success } = await deleteOrders(dbIds);
+                    successResult = success;
+                    if (successResult && type === 'bulk') setSelectedOrders([]);
+                }
             } else if (type === 'viewed') {
-                const { success } = await deleteOrders(viewingOrder.id);
-                successResult = success;
-                if (successResult) setViewingOrder(null);
+                if (viewingOrder.dbId) {
+                    const { success } = await deleteOrders(viewingOrder.dbId);
+                    successResult = success;
+                    if (successResult) setViewingOrder(null);
+                }
             } else if (type === 'item') {
                 const { index } = target;
                 setViewingOrder({
@@ -257,7 +258,8 @@ const Orders = ({ orders, setOrders }) => {
                     providerId: '',
                     providerName: '',
                     providerPhone: '',
-                    providerEmail: ''
+                    providerEmail: '',
+                    isMissing: !matInfo
                 };
             });
 
@@ -464,6 +466,7 @@ const Orders = ({ orders, setOrders }) => {
         const preparedOrder = {
             id: orderId,
             client: newOrder.client,
+            clientId: newOrder.clientId,
             amount: total,
             date: new Date().toISOString().split('T')[0],
             status: 'Pendiente',
@@ -1139,20 +1142,27 @@ const Orders = ({ orders, setOrders }) => {
                                     </div>
 
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', maxHeight: '400px', overflowY: 'auto', paddingRight: '0.5rem' }}>
-                                        {filteredCatalog.map(prod => (
-                                            <div key={prod.id} style={{ padding: '1rem', border: '1px solid #e2e8f0', borderRadius: '12px', background: '#fff' }}>
-                                                <div style={{ fontWeight: '600', fontSize: '0.9rem', marginBottom: '0.2rem' }}>{prod.name}</div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <span style={{ fontSize: '0.9rem', color: '#059669', fontWeight: '700' }}>${prod.price.toLocaleString()}</span>
-                                                    <button
-                                                        onClick={() => handleAddProductToOrder(prod.id)}
-                                                        style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: '8px', padding: '0.4rem 0.8rem', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
-                                                    >
-                                                        + Añadir
-                                                    </button>
+                                        {filteredCatalog.length > 0 ? (
+                                            filteredCatalog.map(prod => (
+                                                <div key={prod.id} style={{ padding: '1rem', border: '1px solid #e2e8f0', borderRadius: '12px', background: '#fff' }}>
+                                                    <div style={{ fontWeight: '600', fontSize: '0.9rem', marginBottom: '0.2rem' }}>{prod.name}</div>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                        <span style={{ fontSize: '0.9rem', color: '#059669', fontWeight: '700' }}>${prod.price.toLocaleString()}</span>
+                                                        <button
+                                                            onClick={() => handleAddProductToOrder(prod.id)}
+                                                            style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: '8px', padding: '0.4rem 0.8rem', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
+                                                        >
+                                                            + Añadir
+                                                        </button>
+                                                    </div>
                                                 </div>
+                                            ))
+                                        ) : (
+                                            <div style={{ padding: '2rem', textAlign: 'center', background: '#fff1f2', borderRadius: '12px', border: '1px solid #fecaca', color: '#e11d48' }}>
+                                                <AlertTriangle size={24} style={{ marginBottom: '0.5rem' }} />
+                                                <div style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>No existe en Módulo de Datos Maestros de Productos, Crealo primero</div>
                                             </div>
-                                        ))}
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -1226,8 +1236,14 @@ const Orders = ({ orders, setOrders }) => {
                                                     <Briefcase size={20} />
                                                 </div>
                                                 <div>
-                                                    <div style={{ fontWeight: '800', fontSize: '1.1rem', color: 'var(--color-primary)' }}>{item.name}</div>
-                                                    <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Requerido: <span style={{ fontWeight: 'bold' }}>{item.requiredQty} {item.unit}</span> | Stock: <span style={{ fontWeight: 'bold' }}>{item.currentInv} {item.unit}</span> | Safety: <span style={{ fontWeight: 'bold' }}>{item.safety} {item.unit}</span></div>
+                                                    <div style={{ fontWeight: '800', fontSize: '1.1rem', color: item.isMissing ? '#e11d48' : 'var(--color-primary)' }}>{item.name}</div>
+                                                    {item.isMissing ? (
+                                                        <div style={{ fontSize: '0.75rem', color: '#e11d48', fontWeight: 'bold', background: '#fff1f2', padding: '2px 8px', borderRadius: '4px', border: '1px solid #fecaca', display: 'inline-block', marginTop: '4px' }}>
+                                                            No existe en Módulo de Datos Maestros de Productos, Crealo primero
+                                                        </div>
+                                                    ) : (
+                                                        <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Requerido: <span style={{ fontWeight: 'bold' }}>{item.requiredQty} {item.unit}</span> | Stock: <span style={{ fontWeight: 'bold' }}>{item.currentInv} {item.unit}</span> | Safety: <span style={{ fontWeight: 'bold' }}>{item.safety} {item.unit}</span></div>
+                                                    )}
                                                 </div>
                                             </div>
                                             <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
