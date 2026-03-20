@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useBusiness } from '../context/BusinessContext';
-import { ArrowLeft, CreditCard, Wallet, ShieldCheck, CheckCircle } from 'lucide-react';
+import { ArrowLeft, CreditCard, Wallet, ShieldCheck, CheckCircle, Truck, MapPin, Settings2 } from 'lucide-react';
+
+
 
 const Checkout = () => {
     const { cart, cartTotal, clearCart } = useCart();
@@ -18,13 +20,25 @@ const Checkout = () => {
         telefono: '3109876543'
     });
 
+    // Parámetros de Envío
+    const [shipConfig, setShipConfig] = useState({
+        destino: 'Bogotá',
+        distance: 58,  // Distancia inicial
+        valorKg: 510,  // Valor por KG (usado como multiplicador por KM según el usuario)
+        weightPerSku: 0.35 // 350 grs
+    });
+
+    const totalWeight = cart.reduce((acc, item) => acc + (item.quantity * shipConfig.weightPerSku), 0);
+    const shippingCost = Math.round(shipConfig.distance * shipConfig.valorKg);
+    const finalTotal = cartTotal + shippingCost;
+
     const handlePayment = (e) => {
         e.preventDefault();
 
         const newOrder = {
             id: `WEB-${Math.floor(Math.random() * 10000)}`,
             client: `${formData.nombre} ${formData.apellido}`,
-            amount: cartTotal + 15000,
+            amount: finalTotal,
             date: new Date().toISOString().split('T')[0],
             status: 'Pendiente',
             source: 'Pagina WEB',
@@ -113,25 +127,74 @@ const Checkout = () => {
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                             <label style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#888' }}>Nombre</label>
-                                            <input type="text" required value={formData.nombre} onChange={e => setFormData({ ...formData, nombre: e.target.value })} style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px', color: '#666' }} />
+                                            <input type="text" required value={formData.nombre} onChange={e => setFormData({ ...formData, nombre: e.target.value })} style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px', color: '#94a3b8' }} />
                                         </div>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                             <label style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#888' }}>Apellido</label>
-                                            <input type="text" required value={formData.apellido} onChange={e => setFormData({ ...formData, apellido: e.target.value })} style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px', color: '#666' }} />
+                                            <input type="text" required value={formData.apellido} onChange={e => setFormData({ ...formData, apellido: e.target.value })} style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px', color: '#94a3b8' }} />
                                         </div>
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.5rem' }}>
                                         <label style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#888' }}>Dirección de Entrega</label>
-                                        <input type="text" required value={formData.direccion} onChange={e => setFormData({ ...formData, direccion: e.target.value })} placeholder="Calle, número, apto..." style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px', color: '#666' }} />
+                                        <input type="text" required value={formData.direccion} onChange={e => setFormData({ ...formData, direccion: e.target.value })} placeholder="Calle, número, apto..." style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px', color: '#94a3b8' }} />
                                     </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2.5rem' }}>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                             <label style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#888' }}>Ciudad</label>
-                                            <input type="text" required value={formData.ciudad} onChange={e => setFormData({ ...formData, ciudad: e.target.value })} style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px', color: '#666' }} />
+                                            <input
+                                                type="text"
+                                                required
+                                                value={formData.ciudad}
+                                                onChange={e => setFormData({ ...formData, ciudad: e.target.value })}
+                                                style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px', color: '#334155', outline: 'none' }}
+                                            />
                                         </div>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                             <label style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#888' }}>Teléfono</label>
-                                            <input type="tel" required value={formData.telefono} onChange={e => setFormData({ ...formData, telefono: e.target.value })} style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px', color: '#666' }} />
+                                            <input type="tel" required value={formData.telefono} onChange={e => setFormData({ ...formData, telefono: e.target.value })} style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px', color: '#94a3b8' }} />
+                                        </div>
+                                    </div>
+
+                                    {/* Módulo Interrapidisimo */}
+                                    <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '12px', marginBottom: '2.5rem', border: '1px solid #e2e8f0' }}>
+                                        <h4 style={{ margin: '0 0 1rem', fontSize: '1rem', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <Truck size={18} /> Calcula costo de envío (Interrapidisimo)
+                                        </h4>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                                            <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                                                <strong>PARTIDA:</strong> Interrapidisimo Guasca / Cundinamarca
+                                            </div>
+                                            <div style={{ fontSize: '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                <strong>DESTINO:</strong>
+                                                <input
+                                                    type="text"
+                                                    value={shipConfig.destino}
+                                                    onChange={e => setShipConfig({ ...shipConfig, destino: e.target.value })}
+                                                    style={{ border: 'none', background: 'transparent', borderBottom: '1px solid #cbd5e1', color: '#64748b', fontSize: '0.75rem', outline: 'none', padding: '0 2px', width: '100px' }}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1.5rem', background: '#fff', padding: '1.2rem', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                                                    <label style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#94a3b8' }}>DISTANCIA (KM)</label>
+                                                    <input type="number" value={shipConfig.distance} onChange={e => setShipConfig({ ...shipConfig, distance: Number(e.target.value) })} style={{ border: 'none', borderBottom: '2px solid #e2e8f0', width: '80px', fontWeight: 'bold', outline: 'none', fontSize: '1.1rem' }} />
+                                                </div>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                                                    <label style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#94a3b8' }}>VALOR KG</label>
+                                                    <input type="number" value={shipConfig.valorKg} onChange={e => setShipConfig({ ...shipConfig, valorKg: Number(e.target.value) })} style={{ border: 'none', borderBottom: '2px solid #e2e8f0', width: '80px', fontWeight: 'bold', outline: 'none', fontSize: '1.1rem' }} />
+                                                </div>
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                                                <div style={{ textAlign: 'right' }}>
+                                                    <div style={{ color: '#94a3b8', fontSize: '0.7rem' }}>PESO TOTAL</div>
+                                                    <div style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>{totalWeight.toFixed(2)} KG</div>
+                                                </div>
+                                                <div style={{ background: '#ecfdf5', color: '#10b981', padding: '0.8rem', borderRadius: '12px', textAlign: 'right' }}>
+                                                    <div style={{ fontSize: '0.65rem', fontWeight: 'bold', textTransform: 'uppercase' }}>COSTO ESTIMADO</div>
+                                                    <div style={{ fontWeight: 'bold', fontSize: '1.3rem' }}>${shippingCost.toLocaleString('es-CO')}</div>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                     <button
@@ -226,7 +289,7 @@ const Checkout = () => {
                                         className="btn btn-primary"
                                         style={{ width: '100%', padding: '1.2rem' }}
                                     >
-                                        PAGAR ${(cartTotal + 15000).toLocaleString('es-CO')}
+                                        PAGAR ${finalTotal.toLocaleString('es-CO')}
                                     </button>
                                 </div>
                             )}
@@ -250,12 +313,12 @@ const Checkout = () => {
                                     <span>${cartTotal.toLocaleString('es-CO')}</span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', color: '#666' }}>
-                                    <span>Envío</span>
-                                    <span>$15.000</span>
+                                    <span>Envío ({totalWeight.toFixed(1)}kg)</span>
+                                    <span>${shippingCost.toLocaleString('es-CO')}</span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--color-primary)', marginTop: '1rem' }}>
                                     <span>Total</span>
-                                    <span>${(cartTotal + 15000).toLocaleString('es-CO')}</span>
+                                    <span>${finalTotal.toLocaleString('es-CO')}</span>
                                 </div>
                             </div>
                         </div>

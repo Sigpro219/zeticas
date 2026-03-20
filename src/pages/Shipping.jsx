@@ -19,22 +19,14 @@ import {
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { supabase } from '../lib/supabase';
 
 const Shipping = () => {
-    const { orders, setOrders, items, setItems } = useBusiness();
+    const { orders, setOrders, items, setItems, refreshData } = useBusiness();
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState('month');
     const [customRange, setCustomRange] = useState({ from: '', to: '' });
 
-    // Persistence for invoices and dispatch status
-    const [shippingData, setShippingData] = useState(() => {
-        const saved = localStorage.getItem('zeticas_shipping_persistence');
-        return saved ? JSON.parse(saved) : {}; // { orderId: { invoiceNum, dispatched: true, invoiceDate: 'ISOString' } }
-    });
-
-    useEffect(() => {
-        localStorage.setItem('zeticas_shipping_persistence', JSON.stringify(shippingData));
-    }, [shippingData]);
 
     const zeticasInfo = {
         name: 'ZETICAs S.A.S.',
@@ -105,13 +97,14 @@ const Shipping = () => {
         doc.text(`Pedido Ref: ${order.id}`, 14, 72);
 
         // Table
+        // Table
         const tableColumn = ["Ref / SKU", "Descripción", "Cantidad", "Valor Unit.", "Total"];
-        const tableRows = order.items.map(item => [
-            item.id || 'N/A',
+        const tableRows = (order.items || []).map(item => [
+            item.sku || item.id || 'N/A',
             item.name,
             item.quantity,
-            `$${item.price.toLocaleString()}`,
-            `$${(item.price * item.quantity).toLocaleString()}`
+            `$${(item.price || 0).toLocaleString()}`,
+            `$${((item.price || 0) * (item.quantity || 0)).toLocaleString()}`
         ]);
 
         autoTable(doc, {
@@ -119,21 +112,31 @@ const Shipping = () => {
             head: [tableColumn],
             body: tableRows,
             theme: 'striped',
-            headStyles: { fillColor: [26, 54, 54] }
+            headStyles: { fillColor: [26, 54, 54] },
+            margin: { left: 14, right: 14 }
         });
 
-        const subtotal = order.amount;
+        const subtotal = order.amount || 0;
         const iva = subtotal * 0.19;
         const total = subtotal + iva;
 
-        const finalY = doc.lastAutoTable.finalY + 10;
-        doc.text(`Subtotal:`, 140, finalY);
-        doc.text(`$${subtotal.toLocaleString()}`, 170, finalY, { align: 'right' });
-        doc.text(`IVA (19%):`, 140, finalY + 7);
-        doc.text(`$${iva.toLocaleString()}`, 170, finalY + 7, { align: 'right' });
+        let finalY = (doc).lastAutoTable.finalY + 15;
+        const labelX = 140;
+        const valueX = 196;
+
+        doc.setFontSize(10);
+        doc.text(`Subtotal:`, labelX, finalY);
+        doc.text(`$${subtotal.toLocaleString()}`, valueX, finalY, { align: 'right' });
+
+        finalY += 8;
+        doc.text(`IVA (19%):`, labelX, finalY);
+        doc.text(`$${iva.toLocaleString()}`, valueX, finalY, { align: 'right' });
+
+        finalY += 10;
         doc.setFont('helvetica', 'bold');
-        doc.text(`TOTAL FACTURA:`, 140, finalY + 14);
-        doc.text(`$${total.toLocaleString()}`, 170, finalY + 14, { align: 'right' });
+        doc.setFontSize(12);
+        doc.text(`TOTAL FACTURA:`, labelX, finalY);
+        doc.text(`$${total.toLocaleString()}`, valueX, finalY, { align: 'right' });
 
         doc.setFontSize(8);
         doc.setFont('helvetica', 'italic');
@@ -141,20 +144,23 @@ const Shipping = () => {
 
         doc.save(`Factura_${invNum}_${order.client}.pdf`);
 
-        setShippingData(prev => ({
-            ...prev,
-            [order.id]: { ...prev[order.id], invoiceNum: invNum, invoiceDate: invDate }
-        }));
+        // Update in Supabase
+        await supabase.from('orders').update({
+            invoice_number: invNum,
+            status: 'Facturado'
+        }).eq('order_number', order.id);
+
+        await refreshData();
     };
 
-    const handleGenerateLabel = (order) => {
+    const handleGenerateLabel = async (order) => {
         const doc = new jsPDF({
             orientation: 'landscape',
             unit: 'mm',
             format: [100, 150]
         });
 
-        const data = shippingData[order.id] || {};
+        const invoiceNum = order.invoiceNum;
 
         doc.setLineWidth(1);
         doc.rect(5, 5, 140, 90);
@@ -188,19 +194,22 @@ const Shipping = () => {
         doc.setFont('helvetica', 'bold');
         doc.text(order.id, 82, 85);
 
-        if (data.invoiceNum) {
+        if (invoiceNum) {
             doc.setFontSize(8);
             doc.setFont('helvetica', 'normal');
             doc.text('No. FACTURA:', 110, 75);
-            doc.text(data.invoiceNum, 110, 85);
+            doc.text(invoiceNum, 110, 85);
         }
 
         doc.save(`Etiqueta_${order.id}.pdf`);
 
-        setShippingData(prev => ({
-            ...prev,
-            [order.id]: { ...prev[order.id], dispatched: true }
-        }));
+        // Update in Supabase
+        await supabase.from('orders').update({
+            dispatched_at: new Date().toISOString(),
+            status: 'Despachado'
+        }).eq('order_number', order.id);
+
+        await refreshData();
     };
 
     // Filter Logic
@@ -224,17 +233,22 @@ const Shipping = () => {
         if (searchTerm) {
             const q = searchTerm.toLowerCase();
             result = result.filter(o => {
-                const data = shippingData[o.id] || {};
                 return (
                     o.id.toLowerCase().includes(q) ||
                     o.client.toLowerCase().includes(q) ||
-                    (data.invoiceNum && data.invoiceNum.toLowerCase().includes(q))
+                    (o.invoiceNum && o.invoiceNum.toLowerCase().includes(q))
                 );
             });
         }
 
-        return result.sort((a, b) => new Date(b.date) - new Date(a.date));
-    }, [orders, searchTerm, filterType, customRange, shippingData]);
+        return result.sort((a, b) => {
+            const aFinalized = a.status === 'Despachado' || a.status === 'Entregado';
+            const bFinalized = b.status === 'Despachado' || b.status === 'Entregado';
+            if (aFinalized && !bFinalized) return 1;
+            if (!aFinalized && bFinalized) return -1;
+            return new Date(b.date) - new Date(a.date);
+        });
+    }, [orders, searchTerm, filterType, customRange]);
 
     // KPI Calculations
     const kpis = useMemo(() => {
@@ -248,14 +262,15 @@ const Shipping = () => {
         };
 
         filteredOrders.forEach(o => {
-            const data = shippingData[o.id] || {};
-            const isAvail = checkAvailability(o.items);
+            if (o.dispatchedAt) stats.despachados++;
 
-            if (data.dispatched) stats.despachados++;
-            if (isAvail) stats.disponibles++; else stats.noDisponibles++;
+            const isAvail = checkAvailability(o.items || []);
+            if (isAvail) stats.disponibles++;
+            else stats.noDisponibles++;
 
-            if (data.invoiceDate) {
-                const days = Math.ceil(Math.abs(new Date(data.invoiceDate) - new Date(o.date)) / (1000 * 60 * 60 * 24));
+            if (o.invoiceNum) {
+                // Assuming invoice date was date order was moved to this module
+                const days = Math.ceil(Math.abs(new Date() - new Date(o.date)) / (1000 * 60 * 60 * 24));
                 stats.times.push(days);
             }
         });
@@ -265,7 +280,7 @@ const Shipping = () => {
         const min = stats.times.length > 0 ? Math.min(...stats.times) : 0;
 
         return { ...stats, avg, max, min };
-    }, [filteredOrders, shippingData, items]);
+    }, [filteredOrders, items]);
 
     return (
         <div className="shipping-container" style={{ padding: '0 1rem' }}>
@@ -373,9 +388,8 @@ const Shipping = () => {
                     </thead>
                     <tbody>
                         {filteredOrders.map(order => {
-                            const isAvailable = checkAvailability(order.items);
+                            const isAvailable = checkAvailability(order.items || []);
                             const days = getDaysSince(order.date);
-                            const data = shippingData[order.id] || {};
 
                             return (
                                 <tr key={order.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
@@ -395,9 +409,9 @@ const Shipping = () => {
                                         </div>
                                     </td>
                                     <td style={{ padding: '1.2rem', textAlign: 'center' }}>
-                                        {data.invoiceNum ? (
+                                        {order.invoiceNum ? (
                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.8rem' }}>
-                                                <span style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>{data.invoiceNum}</span>
+                                                <span style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>{order.invoiceNum}</span>
                                                 <button onClick={() => handleCreateInvoice(order)} style={{ background: '#f1f5f9', border: 'none', padding: '0.3rem', borderRadius: '6px', cursor: 'pointer', color: 'var(--color-primary)' }}><Download size={16} /></button>
                                             </div>
                                         ) : (
@@ -409,7 +423,7 @@ const Shipping = () => {
                                     <td style={{ padding: '1.2rem', textAlign: 'center' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.8rem' }}>
                                             <button onClick={() => handleGenerateLabel(order)} style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', padding: '0.5rem 0.8rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 'bold' }}><Tags size={14} style={{ marginRight: '4px' }} /> ETIQUETA</button>
-                                            {data.dispatched && <span style={{ color: '#16a34a', fontWeight: '900', fontSize: '0.7rem' }}>DESPACHADO ✓</span>}
+                                            {order.dispatchedAt && <span style={{ color: '#16a34a', fontWeight: '900', fontSize: '0.7rem' }}>DESPACHADO ✓</span>}
                                         </div>
                                     </td>
                                 </tr>

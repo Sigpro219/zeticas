@@ -1,17 +1,14 @@
 import React, { useState, useMemo } from 'react';
-import { FileText, AlertTriangle, Clock, AlertCircle, ChevronDown, ChevronUp, DollarSign, Search, Filter, Settings, Plus, Trash2, X } from 'lucide-react';
+import { FileText, AlertTriangle, Clock, AlertCircle, ChevronDown, ChevronUp, DollarSign, Search, Filter, Settings, Plus, Trash2, X, Download, Eye } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
 import { supabase } from '../lib/supabase';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const Cartera = () => {
     const { banks, setBanks, orders, setOrders, updateBankBalance } = useBusiness();
     const [expandedInvoice, setExpandedInvoice] = useState(null);
 
-    // Persistence for invoices from Shipping module
-    const [shippingData] = useState(() => {
-        const saved = localStorage.getItem('zeticas_shipping_persistence');
-        return saved ? JSON.parse(saved) : {};
-    });
 
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [isBankManagerOpen, setIsBankManagerOpen] = useState(false);
@@ -19,11 +16,20 @@ const Cartera = () => {
     const [bankToDelete, setBankToDelete] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedInvoice, setSelectedInvoice] = useState(null);
+    const [previewPdfUrl, setPreviewPdfUrl] = useState(null);
     const [paymentData, setPaymentData] = useState({
         paymentDate: new Date().toISOString().split('T')[0],
         bank: '',
         observations: ''
     });
+
+    const zeticasInfo = {
+        name: 'ZETICAs S.A.S.',
+        nit: '901.234.567-8',
+        address: 'Carrera 45 # 100-24, Bogotá, Colombia',
+        phone: '312 456 7890',
+        email: 'ventas@zeticas.com'
+    };
 
     // Date Filter State
     const [filterType, setFilterType] = useState('month');
@@ -49,21 +55,20 @@ const Cartera = () => {
 
         return filteredByDate.map(order => {
             if (!order) return null;
-            const data = (shippingData && order.id) ? (shippingData[order.id] || {}) : {};
-            const invoiceDate = data.invoiceDate ? new Date(data.invoiceDate) : (order.date ? new Date(order.date) : new Date());
+            const invoiceDate = order.dispatchedAt ? new Date(order.dispatchedAt) : (order.date ? new Date(order.date) : new Date());
             const diffTime = Math.abs(new Date() - invoiceDate);
             const dueDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
             let status = 'Por Facturar';
             if (order.status === 'Pagado') status = 'Pagada';
-            else if (data.invoiceNum) {
+            else if (order.invoiceNum) {
                 if (dueDays > 60) status = 'Vencida > 60 días';
                 else if (dueDays > 30) status = 'Vencida > 30 días';
                 else status = 'Vencida < 30 días';
             }
 
             return {
-                id: data.invoiceNum || `P-${order.id || 'err'}`,
+                id: order.invoiceNum || `P-${order.id || 'err'}`,
                 orderId: order.id,
                 client: order.client || 'Cliente Sin Nombre',
                 amount: order.amount || 0,
@@ -71,10 +76,20 @@ const Cartera = () => {
                 dueDays: order.status === 'Pagado' ? '-' : dueDays,
                 status: status,
                 isPaid: order.status === 'Pagado',
-                orders: [order.id].filter(Boolean)
+                orders: [order.id].filter(Boolean),
+                bank: order.bankId
             };
-        }).filter(Boolean);
-    }, [orders, shippingData, filterType, customRange]);
+        }).filter(Boolean).sort((a, b) => {
+            // 1. Paid invoices to bottom
+            const aPaid = a.isPaid;
+            const bPaid = b.isPaid;
+            if (aPaid && !bPaid) return 1;
+            if (!aPaid && bPaid) return -1;
+
+            // 2. Newest first
+            return new Date(b.date) - new Date(a.date);
+        });
+    }, [orders, filterType, customRange]);
 
     const stats = useMemo(() => {
         const pending = invoicesList.filter(i => !i.isPaid);
@@ -85,6 +100,95 @@ const Cartera = () => {
             total: pending.reduce((acc, curr) => acc + curr.amount, 0),
         };
     }, [invoicesList]);
+
+    const handleViewInvoice = (orderRow, mode = 'download') => {
+        const order = orders.find(o => o.id === orderRow.orderId);
+        if (!order) return;
+
+        const doc = new jsPDF();
+        const invNum = order.invoiceNum || orderRow.id;
+
+        // Header
+        doc.setFontSize(20);
+        doc.setTextColor(26, 54, 54);
+        doc.text('FACTURA DE VENTA', 14, 20);
+        doc.setFontSize(10);
+        doc.text(`No. ${invNum}`, 14, 28);
+        doc.text(`Fecha Emisión: ${order.date || new Date().toLocaleDateString()}`, 14, 33);
+
+        // Zeticas Info
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.text(zeticasInfo.name, 120, 20);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`NIT: ${zeticasInfo.nit}`, 120, 25);
+        doc.text(zeticasInfo.address, 120, 30);
+        doc.text(`Tel: ${zeticasInfo.phone}`, 120, 35);
+
+        doc.line(14, 45, 196, 45);
+
+        // Client Info
+        doc.setFont('helvetica', 'bold');
+        doc.text('FACTURAR A:', 14, 55);
+        doc.setFont('helvetica', 'normal');
+        doc.text(order.client, 14, 62);
+        doc.text('Bogotá, Colombia', 14, 67);
+        doc.text(`Pedido Ref: ${order.id}`, 14, 72);
+
+        // Table
+        const tableColumn = ["Ref / SKU", "Descripción", "Cantidad", "Valor Unit.", "Total"];
+        const tableRows = (order.items || []).map(item => [
+            item.sku || item.id || 'N/A', // Use human-readable SKU
+            item.name,
+            item.quantity,
+            `$${(item.price || 0).toLocaleString()}`,
+            `$${((item.price || 0) * (item.quantity || 0)).toLocaleString()}`
+        ]);
+
+        autoTable(doc, {
+            startY: 80,
+            head: [tableColumn],
+            body: tableRows,
+            theme: 'striped',
+            headStyles: { fillColor: [26, 54, 54] },
+            margin: { left: 14, right: 14 }
+        });
+
+        const subtotal = order.amount || 0;
+        const iva = subtotal * 0.19;
+        const total = subtotal + iva;
+
+        let finalY = (doc).lastAutoTable.finalY + 15;
+
+        // Use a consistent x-pos and align to right for values
+        const labelX = 140;
+        const valueX = 196;
+
+        doc.setFontSize(10);
+        doc.text(`Subtotal:`, labelX, finalY);
+        doc.text(`$${subtotal.toLocaleString()}`, valueX, finalY, { align: 'right' });
+
+        finalY += 8;
+        doc.text(`IVA (19%):`, labelX, finalY);
+        doc.text(`$${iva.toLocaleString()}`, valueX, finalY, { align: 'right' });
+
+        finalY += 10;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(12);
+        doc.text(`TOTAL FACTURA:`, labelX, finalY);
+        doc.text(`$${total.toLocaleString()}`, valueX, finalY, { align: 'right' });
+
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'italic');
+        doc.text('Esta factura se asimila en todos sus efectos a una letra de cambio según el Art. 774 del Código de Comercio.', 105, 280, { align: 'center' });
+
+        if (mode === 'download') {
+            doc.save(`Factura_${invNum}_${order.client}.pdf`);
+        } else {
+            const blobUrl = doc.output('bloburl');
+            window.open(blobUrl, '_blank');
+        }
+    };
 
     const toggleExpand = (id) => {
         setExpandedInvoice(expandedInvoice === id ? null : id);
@@ -108,25 +212,20 @@ const Cartera = () => {
         }
 
         try {
-            // Update orders status to "Pagado" in context and Supabase
-            const updatedOrders = orders.map(o => {
-                if (o.id === selectedInvoice.orderId) {
-                    return { ...o, status: 'Pagado' };
-                }
-                return o;
-            });
-            setOrders(updatedOrders);
-
-            // Persist to Supabase if order has dbId
-            const orderToUpdate = orders.find(o => o.id === selectedInvoice.orderId);
-            if (orderToUpdate?.dbId) {
-                await supabase.from('orders').update({ status: 'Pagado' }).eq('id', orderToUpdate.dbId);
-            } else {
-                await supabase.from('orders').update({ status: 'Pagado' }).eq('order_number', selectedInvoice.orderId);
-            }
+            // Persist to Supabase
+            await supabase.from('orders').update({
+                status: 'Pagado',
+                payment_bank_id: selectedBank.id
+            }).eq('order_number', selectedInvoice.orderId);
 
             // Update Bank Balance (Income) using centralized function
-            await updateBankBalance(selectedBank.id, amount, 'income');
+            const result = await updateBankBalance(
+                selectedBank.id,
+                amount,
+                'income',
+                `Pago Recibido - Factura ${selectedInvoice.id}`,
+                selectedInvoice.orderId
+            );
 
             setIsPaymentModalOpen(false);
             setSelectedInvoice(null);
@@ -136,7 +235,9 @@ const Cartera = () => {
                 observations: ''
             });
 
-            alert(`Pago de $${amount.toLocaleString()} registrado en ${selectedBank.name}. Nuevo saldo: $${newBalance.toLocaleString()}`);
+            if (result.success) {
+                alert(`Pago de $${amount.toLocaleString()} registrado en ${selectedBank.name}.`);
+            }
 
         } catch (err) {
             console.error("Error processing delivery payment:", err);
@@ -206,10 +307,7 @@ const Cartera = () => {
         );
     });
 
-    const sortedInvoices = [...filteredInvoices].sort((a, b) => {
-        if (a.isPaid === b.isPaid) return 0;
-        return a.isPaid ? 1 : -1;
-    });
+    const sortedInvoices = filteredInvoices;
 
     return (
         <div className="cartera-module">
@@ -296,7 +394,33 @@ const Cartera = () => {
                                     opacity: inv.isPaid ? 0.8 : 1
                                 }}>
                                     <td style={{ padding: '1.2rem', fontSize: '0.9rem' }}>{inv.date}</td>
-                                    <td style={{ padding: '1.2rem', fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--color-primary)' }}>{inv.id}</td>
+                                    <td style={{ padding: '1.2rem', fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--color-primary)' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                            <span
+                                                onClick={() => handleViewInvoice(inv, 'preview')}
+                                                style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                                                title="Previsualizar Factura"
+                                            >
+                                                {inv.id}
+                                            </span>
+                                            <div style={{ display: 'flex', gap: '4px' }}>
+                                                <button
+                                                    onClick={() => handleViewInvoice(inv, 'preview')}
+                                                    style={{ border: 'none', background: '#f1f5f9', padding: '4px', borderRadius: '4px', cursor: 'pointer', color: 'var(--color-primary)' }}
+                                                    title="Previsualizar"
+                                                >
+                                                    <Eye size={14} />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleViewInvoice(inv, 'download')}
+                                                    style={{ border: 'none', background: '#f1f5f9', padding: '4px', borderRadius: '4px', cursor: 'pointer', color: 'var(--color-primary)' }}
+                                                    title="Descargar"
+                                                >
+                                                    <Download size={14} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </td>
                                     <td style={{ padding: '1.2rem', fontSize: '0.9rem' }}>{inv.client}</td>
                                     <td style={{ padding: '1.2rem', fontSize: '0.9rem', fontWeight: '600' }}>${inv.amount.toLocaleString()}</td>
                                     <td style={{ padding: '1.2rem', fontSize: '0.9rem' }}>{inv.isPaid ? '-' : inv.dueDays}</td>

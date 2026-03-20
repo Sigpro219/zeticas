@@ -16,6 +16,9 @@ const CRM = () => {
     const [taskDate, setTaskDate] = useState('');
     const [taskNote, setTaskNote] = useState('');
 
+    // Modal de Edición de Lead
+    const [editingLead, setEditingLead] = useState(null);
+
     const [convertedLeads, setConvertedLeads] = useState(() => JSON.parse(localStorage.getItem('zeticas_converted_leads') || '[]'));
 
     // Dropdown de Tareas pendientes
@@ -162,27 +165,84 @@ const CRM = () => {
         setSelectedLead(null);
     };
 
+    const handleEditLead = async (e) => {
+        if (e) e.preventDefault();
+        if (!editingLead) return;
+
+        // Optimistic update
+        setLeads(prev => prev.map(l => l.id === editingLead.id ? editingLead : l));
+
+        if (tableError) {
+            const localLeads = JSON.parse(localStorage.getItem('zeticas_local_leads') || '[]');
+            const updated = localLeads.map(l => l.id === editingLead.id ? editingLead : l);
+            localStorage.setItem('zeticas_local_leads', JSON.stringify(updated));
+            setEditingLead(null);
+            return;
+        }
+
+        const { error } = await supabase
+            .from('leads')
+            .update({
+                name: editingLead.name,
+                email: editingLead.email,
+                phone: editingLead.phone,
+                city: editingLead.city,
+                interest_type: editingLead.interest_type,
+                estimated_volume: editingLead.estimated_volume,
+                urgency_date: editingLead.urgency_date
+            })
+            .eq('id', editingLead.id);
+
+        if (error) {
+            console.error("Error updating lead:", error);
+            fetchLeads();
+        }
+
+        setEditingLead(null);
+    };
+
     const handleDeleteLead = async (e, leadId) => {
         e.stopPropagation();
+        if (!leadId) {
+            alert("Error: ID de prospecto no encontrado.");
+            return;
+        }
+
         if (window.confirm('¿Estás seguro que deseas eliminar este prospecto?')) {
-            // Optimistic update
+            console.log("Intentando eliminar lead ID:", leadId);
+
+            // 1. Eliminación Optimista (UI)
             setLeads(prev => prev.filter(l => l.id !== leadId));
 
-            if (tableError) {
-                const localLeads = JSON.parse(localStorage.getItem('zeticas_local_leads') || '[]');
-                const updated = localLeads.filter(l => l.id !== leadId);
-                localStorage.setItem('zeticas_local_leads', JSON.stringify(updated));
-                return;
+            // 2. Intentar eliminar de LocalStorage siempre (por seguridad o si es fallback)
+            const localLeads = JSON.parse(localStorage.getItem('zeticas_local_leads') || '[]');
+            const updatedLocal = localLeads.filter(l => l.id !== leadId);
+            if (localLeads.length !== updatedLocal.length) {
+                console.log("Lead eliminado de LocalStorage");
+                localStorage.setItem('zeticas_local_leads', JSON.stringify(updatedLocal));
+                if (tableError) return; // Si estamos en modo error, ya terminamos
             }
 
-            const { error } = await supabase
-                .from('leads')
-                .delete()
-                .eq('id', leadId);
+            // 3. Intentar eliminar de Supabase
+            if (!tableError) {
+                try {
+                    const { error } = await supabase
+                        .from('leads')
+                        .delete()
+                        .eq('id', leadId);
 
-            if (error) {
-                console.error("Error deleting lead:", error);
-                fetchLeads(); // Revert
+                    if (error) {
+                        console.error("Error al borrar en Supabase:", error);
+                        alert(`No se pudo borrar en la base de datos: ${error.message || 'Error desconocido'}`);
+                        fetchLeads(); // Revertir UI
+                    } else {
+                        console.log("Lead eliminado exitosamente de Supabase");
+                    }
+                } catch (err) {
+                    console.error("Excepción al borrar lead:", err);
+                    alert("Ocurrió un error inesperado al intentar borrar el prospecto.");
+                    fetchLeads();
+                }
             }
         }
     };
@@ -406,68 +466,70 @@ const CRM = () => {
 
     return (
         <div style={{ padding: '2rem', height: '100%', display: 'flex', flexDirection: 'column' }}>
-            <header style={{ marginBottom: '1.5rem', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
+            <header style={{ marginBottom: '2rem', flexShrink: 0 }}>
+                <div style={{ marginBottom: '1.5rem' }}>
                     <h2 className="font-serif" style={{ fontSize: '2.2rem', color: 'var(--color-primary)', margin: 0 }}>Comercial / CRM</h2>
-                    <p style={{ color: '#666', fontSize: '0.95rem', marginTop: '0.5rem' }}>
+                    <p style={{ color: '#666', fontSize: '0.95rem', marginTop: '0.4rem' }}>
                         Gestión de prospectos, embudo y tareas. Presiona un prospecto para agendar actividades.
                     </p>
                 </div>
 
-                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                    {(() => {
-                        const totalProspectos = leads.filter(l => !['Venta Cerrada', 'Perdido'].includes(l.stage)).length;
-                        const cotizacionesEnviadas = leads.filter(l => l.stage === 'Cotización Enviada').length;
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '1rem' }}>
+                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+                        {(() => {
+                            const totalProspectos = leads.filter(l => !['Venta Cerrada', 'Perdido'].includes(l.stage)).length;
+                            const cotizacionesEnviadas = leads.filter(l => l.stage === 'Cotización Enviada').length;
 
-                        // Cuentan los leads en etapa 'Venta Cerrada' y aquellos que han sido convertidos localmente
-                        const clientesIngresados = new Set([
-                            ...leads.filter(l => l.stage === 'Venta Cerrada').map(l => l.id),
-                            ...convertedLeads.filter(id => leads.some(l => l.id === id))
-                        ]).size;
+                            // Cuentan los leads en etapa 'Venta Cerrada' y aquellos que han sido convertidos localmente
+                            const clientesIngresados = new Set([
+                                ...leads.filter(l => l.stage === 'Venta Cerrada').map(l => l.id),
+                                ...convertedLeads.filter(id => leads.some(l => l.id === id))
+                            ]).size;
 
-                        // Max value for the progress bars
-                        const maxVal = Math.max(totalProspectos, cotizacionesEnviadas, clientesIngresados, 1);
+                            // Max value for the progress bars
+                            const maxVal = Math.max(totalProspectos, cotizacionesEnviadas, clientesIngresados, 1);
 
-                        return (
-                            <div style={{ display: 'flex', gap: '1rem' }}>
-                                <div style={{ background: '#f8fafc', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid #e2e8f0', minWidth: '150px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                                    <div>
-                                        <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 'bold', minHeight: '34px' }}>Total Prospectos Activos</div>
-                                        <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--color-primary)', marginTop: '0.2rem' }}>
-                                            {totalProspectos}
+                            return (
+                                <>
+                                    <div style={{ background: '#f8fafc', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid #e2e8f0', minWidth: '150px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                                        <div>
+                                            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 'bold' }}>Total Prospectos Activos</div>
+                                            <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--color-primary)', marginTop: '0.2rem' }}>
+                                                {totalProspectos}
+                                            </div>
+                                        </div>
+                                        <div style={{ height: '6px', background: '#e2e8f0', borderRadius: '4px', marginTop: '0.5rem', overflow: 'hidden' }}>
+                                            <div style={{ height: '100%', width: `${(totalProspectos / maxVal) * 100}%`, background: '#3b82f6', borderRadius: '4px', transition: 'width 0.5s ease-in-out' }}></div>
                                         </div>
                                     </div>
-                                    <div style={{ height: '6px', background: '#e2e8f0', borderRadius: '4px', marginTop: '0.5rem', overflow: 'hidden' }}>
-                                        <div style={{ height: '100%', width: `${(totalProspectos / maxVal) * 100}%`, background: '#3b82f6', borderRadius: '4px', transition: 'width 0.5s ease-in-out' }}></div>
-                                    </div>
-                                </div>
 
-                                <div style={{ background: '#f8fafc', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid #e2e8f0', minWidth: '150px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                                    <div>
-                                        <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 'bold', minHeight: '34px' }}>Cotizaciones Enviadas</div>
-                                        <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--color-primary)', marginTop: '0.2rem' }}>
-                                            {cotizacionesEnviadas}
+                                    <div style={{ background: '#f8fafc', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid #e2e8f0', minWidth: '150px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                                        <div>
+                                            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 'bold' }}>Cotizaciones Enviadas</div>
+                                            <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--color-primary)', marginTop: '0.2rem' }}>
+                                                {cotizacionesEnviadas}
+                                            </div>
+                                        </div>
+                                        <div style={{ height: '6px', background: '#e2e8f0', borderRadius: '4px', marginTop: '0.5rem', overflow: 'hidden' }}>
+                                            <div style={{ height: '100%', width: `${(cotizacionesEnviadas / maxVal) * 100}%`, background: '#8b5cf6', borderRadius: '4px', transition: 'width 0.5s ease-in-out' }}></div>
                                         </div>
                                     </div>
-                                    <div style={{ height: '6px', background: '#e2e8f0', borderRadius: '4px', marginTop: '0.5rem', overflow: 'hidden' }}>
-                                        <div style={{ height: '100%', width: `${(cotizacionesEnviadas / maxVal) * 100}%`, background: '#8b5cf6', borderRadius: '4px', transition: 'width 0.5s ease-in-out' }}></div>
-                                    </div>
-                                </div>
 
-                                <div style={{ background: '#f8fafc', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid #e2e8f0', minWidth: '150px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                                    <div>
-                                        <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 'bold', minHeight: '34px' }}>Clientes Ingresados</div>
-                                        <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--color-primary)', marginTop: '0.2rem' }}>
-                                            {clientesIngresados}
+                                    <div style={{ background: '#f8fafc', padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid #e2e8f0', minWidth: '150px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                                        <div>
+                                            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 'bold' }}>Clientes Ingresados</div>
+                                            <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--color-primary)', marginTop: '0.2rem' }}>
+                                                {clientesIngresados}
+                                            </div>
+                                        </div>
+                                        <div style={{ height: '6px', background: '#e2e8f0', borderRadius: '4px', marginTop: '0.5rem', overflow: 'hidden' }}>
+                                            <div style={{ height: '100%', width: `${(clientesIngresados / maxVal) * 100}%`, background: '#10b981', borderRadius: '4px', transition: 'width 0.5s ease-in-out' }}></div>
                                         </div>
                                     </div>
-                                    <div style={{ height: '6px', background: '#e2e8f0', borderRadius: '4px', marginTop: '0.5rem', overflow: 'hidden' }}>
-                                        <div style={{ height: '100%', width: `${(clientesIngresados / maxVal) * 100}%`, background: '#10b981', borderRadius: '4px', transition: 'width 0.5s ease-in-out' }}></div>
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })()}
+                                </>
+                            );
+                        })()}
+                    </div>
 
                     <div style={{ position: 'relative' }}>
                         <button onClick={() => setShowTasks(!showTasks)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.85rem 1rem', background: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.95rem', fontWeight: 'bold', position: 'relative' }}>
@@ -611,12 +673,12 @@ const CRM = () => {
                                                         {lead.completed_tasks_count || 0}
                                                     </div>
                                                     <button
-                                                        onClick={(e) => handleDeleteLead(e, lead.id)}
+                                                        onClick={(e) => { e.stopPropagation(); setEditingLead(lead); }}
                                                         style={{
                                                             background: 'none',
                                                             border: 'none',
                                                             padding: '4px',
-                                                            color: '#ef4444',
+                                                            color: '#64748b',
                                                             cursor: 'pointer',
                                                             display: 'flex',
                                                             alignItems: 'center',
@@ -624,15 +686,12 @@ const CRM = () => {
                                                             borderRadius: '4px',
                                                             transition: 'background 0.2s'
                                                         }}
-                                                        onMouseEnter={(e) => e.currentTarget.style.background = '#fee2e2'}
+                                                        onMouseEnter={(e) => e.currentTarget.style.background = '#f1f5f9'}
                                                         onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
-                                                        title="Eliminar prospecto"
+                                                        title="Editar prospecto"
                                                     >
-                                                        <Trash2 size={16} />
+                                                        <Edit2 size={16} />
                                                     </button>
-                                                    <div style={{ color: '#cbd5e1', padding: '4px' }}>
-                                                        <Edit2 size={14} />
-                                                    </div>
                                                 </div>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingRight: '20px' }}>
                                                     <h4 style={{ margin: 0, fontSize: '0.85rem', color: isConverted ? '#166534' : 'var(--color-primary)', fontWeight: 'bold' }}>
@@ -652,6 +711,7 @@ const CRM = () => {
                                                     <div><strong>Ciudad:</strong> {lead.city || 'N/A'}</div>
                                                     <div><strong>Interés:</strong> {lead.interest_type || 'N/A'}</div>
                                                     <div><strong>Volumen:</strong> {lead.estimated_volume || 0} unid/cajas</div>
+                                                    <div style={{ color: '#0369a1', fontWeight: 'bold', marginTop: '4px' }}><strong>📍 Fecha Entrega:</strong> {lead.urgency_date || 'Flexible'}</div>
                                                 </div>
 
                                                 <div style={{ marginTop: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }} onClick={e => e.stopPropagation()}>
@@ -823,7 +883,89 @@ const CRM = () => {
                     </div>
                 </div>
             )}
+            {/* Modal de Edición de Lead */}
+            {editingLead && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                    <form onSubmit={handleEditLead} style={{ background: '#fff', padding: '2rem', borderRadius: '12px', width: '500px', maxWidth: '90%', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', overflowY: 'auto', maxHeight: '90vh' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>
+                            <h3 style={{ margin: 0, color: 'var(--color-primary)', fontSize: '1.2rem' }}>Editar Prospecto</h3>
+                            <button type="button" onClick={() => setEditingLead(null)} style={{ background: '#f1f5f9', border: 'none', cursor: 'pointer', borderRadius: '50%', padding: '6px', color: '#64748b' }}><X size={18} /></button>
+                        </div>
 
+                        <div style={{ display: 'grid', gap: '1rem' }}>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', color: '#475569', fontWeight: 'bold' }}>Nombre</label>
+                                <input required value={editingLead.name} onChange={e => setEditingLead({ ...editingLead, name: e.target.value })} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', color: '#475569', fontWeight: 'bold' }}>Teléfono</label>
+                                    <input value={editingLead.phone} onChange={e => setEditingLead({ ...editingLead, phone: e.target.value })} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', color: '#475569', fontWeight: 'bold' }}>Email</label>
+                                    <input value={editingLead.email} onChange={e => setEditingLead({ ...editingLead, email: e.target.value })} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                                </div>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', color: '#475569', fontWeight: 'bold' }}>Ciudad</label>
+                                    <input value={editingLead.city} onChange={e => setEditingLead({ ...editingLead, city: e.target.value })} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', color: '#475569', fontWeight: 'bold' }}>Interés</label>
+                                    <select value={editingLead.interest_type} onChange={e => setEditingLead({ ...editingLead, interest_type: e.target.value })} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                                        <option value="Personal">Personal</option>
+                                        <option value="Corporativo">Corporativo</option>
+                                        <option value="Mayorista">Mayorista</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', color: '#475569', fontWeight: 'bold' }}>Volumen (unid)</label>
+                                    <input type="number" value={editingLead.estimated_volume} onChange={e => setEditingLead({ ...editingLead, estimated_volume: parseInt(e.target.value) || 0 })} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', color: '#475569', fontWeight: 'bold' }}>Fecha Entrega</label>
+                                    <input type="date" value={editingLead.urgency_date || ''} onChange={e => setEditingLead({ ...editingLead, urgency_date: e.target.value })} style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '0.8rem', marginTop: '2rem' }}>
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    handleDeleteLead(e, editingLead.id);
+                                    setEditingLead(null);
+                                }}
+                                style={{
+                                    padding: '0.8rem',
+                                    background: '#fee2e2',
+                                    color: '#ef4444',
+                                    border: '1px solid #fca5a5',
+                                    borderRadius: '8px',
+                                    fontWeight: 'bold',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem'
+                                }}
+                                title="Eliminar prospecto definitivamente"
+                            >
+                                <Trash2 size={18} />
+                            </button>
+                            <button type="button" onClick={() => setEditingLead(null)} style={{ flex: 1, padding: '0.8rem', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>
+                                Cancelar
+                            </button>
+                            <button type="submit" style={{ flex: 1, padding: '0.8rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>
+                                Guardar Cambios
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            )}
         </div>
     );
 };

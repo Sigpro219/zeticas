@@ -78,148 +78,21 @@ const Reports = ({ orders = [], taxSettings = {}, setTaxSettings, expenses = [],
     }, [items, selectedYear]);
 
     const productionData = useMemo(() => {
-        const filtered = productionHistory.filter(h => {
-            const d = new Date(h.date);
-            return d.getFullYear() === selectedYear && (selectedProductionSku === 'Todos' || h.sku === selectedProductionSku);
-        });
-
-        const groups = {
-            'Ene': { sum: 0, count: 0 }, 'Feb': { sum: 0, count: 0 }, 'Mar': { sum: 0, count: 0 },
-            'Abr': { sum: 0, count: 0 }, 'May': { sum: 0, count: 0 }, 'Jun': { sum: 0, count: 0 },
-            'Jul': { sum: 0, count: 0 }, 'Ago': { sum: 0, count: 0 }, 'Sep': { sum: 0, count: 0 },
-            'Oct': { sum: 0, count: 0 }, 'Nov': { sum: 0, count: 0 }, 'Dic': { sum: 0, count: 0 }
-        };
-
-        filtered.forEach(h => {
-            const date = new Date(h.date);
-            const monthShort = date.toLocaleString('es-ES', { month: 'short' }).replace('.', '');
-            const key = monthShort.charAt(0).toUpperCase() + monthShort.slice(1);
-            if (groups[key]) {
-                groups[key].sum += Number(h.efficiency || 0);
-                groups[key].count += 1;
-            }
-        });
-
-        const chartData = Object.keys(groups).map(k => ({
-            name: k,
-            total: groups[k].count > 0 ? parseFloat((groups[k].sum / groups[k].count).toFixed(1)) : 0
-        }));
-
-        const aggregateEfficiency = filtered.length > 0
-            ? (filtered.reduce((acc, h) => acc + Number(h.efficiency || 0), 0) / filtered.length).toFixed(1)
-            : 0;
-
-        return { chartData, aggregateEfficiency, availableSkus: [...new Set(productionHistory.map(h => h.sku))] };
-    }, [productionHistory, selectedProductionSku, selectedYear]);
+        return { chartData: [], aggregateEfficiency: '—', availableSkus: [] };
+    }, []);
 
     // 3. CALIDAD Logic
     const qualityData = useMemo(() => {
-        const filtered = productionHistory.filter(h => {
-            const d = new Date(h.date);
-            return d.getFullYear() === selectedYear && (selectedQualitySku === 'Todos' || h.sku === selectedQualitySku);
-        });
-
-        const groups = {
-            'Ene': { sum: 0, count: 0 }, 'Feb': { sum: 0, count: 0 }, 'Mar': { sum: 0, count: 0 },
-            'Abr': { sum: 0, count: 0 }, 'May': { sum: 0, count: 0 }, 'Jun': { sum: 0, count: 0 },
-            'Jul': { sum: 0, count: 0 }, 'Ago': { sum: 0, count: 0 }, 'Sep': { sum: 0, count: 0 },
-            'Oct': { sum: 0, count: 0 }, 'Nov': { sum: 0, count: 0 }, 'Dic': { sum: 0, count: 0 }
-        };
-
-        filtered.forEach(h => {
-            const date = new Date(h.date);
-            const monthShort = date.toLocaleString('es-ES', { month: 'short' }).replace('.', '');
-            const key = monthShort.charAt(0).toUpperCase() + monthShort.slice(1);
-            if (groups[key]) {
-                groups[key].sum += Number(h.quality || 0);
-                groups[key].count += 1;
-            }
-        });
-
-        const chartData = Object.keys(groups).map(k => ({
-            name: k,
-            total: groups[k].count > 0 ? parseFloat((groups[k].sum / groups[k].count).toFixed(1)) : 0
-        }));
-
-        const aggregateQuality = filtered.length > 0
-            ? (filtered.reduce((acc, h) => acc + Number(h.quality || 0), 0) / filtered.length).toFixed(1)
-            : 0;
-
-        return { chartData, aggregateQuality, availableSkus: [...new Set(productionHistory.map(h => h.sku))] };
-    }, [productionHistory, selectedQualitySku, selectedYear]);
+        return { chartData: [], aggregateQuality: '—', availableSkus: [] };
+    }, []);
 
     const operationalKPIs = useMemo(() => {
-        const shippingRaw = localStorage.getItem('zeticas_shipping_persistence');
-        const shippingData = shippingRaw ? JSON.parse(shippingRaw) : {};
-
-        const dispatchedOrders = orders.filter(o => {
-            const data = (shippingData && o.id) ? (shippingData[o.id] || {}) : {};
-            return data.invoiceDate && new Date(o.date).getFullYear() === selectedYear;
-        });
-
-        let leadTimeTotal = 0;
-        dispatchedOrders.forEach(o => {
-            const data = shippingData[o.id];
-            const orderDate = new Date(o.date);
-            const dispatchDate = new Date(data.invoiceDate);
-            const diff = Math.ceil((dispatchDate - orderDate) / (1000 * 60 * 60 * 24));
-            leadTimeTotal += Math.max(0, diff);
-        });
-
-        const leadTime = dispatchedOrders.length > 0 ? (leadTimeTotal / dispatchedOrders.length).toFixed(1) : 0;
-
-        const annualOrders = orders.filter(o => new Date(o.date).getFullYear() === selectedYear);
-        const demandUnits = annualOrders.reduce((acc, o) => {
-            return acc + (o.items || []).reduce((sum, i) => sum + (i.quantity || 0), 0);
-        }, 0);
-
-        const availableMinutes = 120000; // 250 days * 8h * 60m
-        const taktTime = demandUnits > 0 ? (availableMinutes / demandUnits).toFixed(1) : 0;
-
-        return { leadTime, taktTime };
-    }, [orders, selectedYear]);
+        return { leadTime: '—', taktTime: '—' };
+    }, []);
 
     const oeeData = useMemo(() => {
-        const filtered = productionHistory.filter(h => new Date(h.date).getFullYear() === selectedYear);
-
-        if (filtered.length === 0) return { oee: 0, availability: 0, performance: 0, quality: 0 };
-
-        let totalOperatingMinutes = 0;
-        let totalEfficiency = 0;
-        let totalQualityLoss = 0;
-        const daysWithProduction = new Set();
-
-        filtered.forEach(h => {
-            if (h.start && h.end) {
-                const diff = (new Date(h.end) - new Date(h.start)) / (1000 * 60);
-                totalOperatingMinutes += Math.max(0, diff);
-            } else {
-                const hours = (h.units || 0) / (h.efficiency || 1);
-                totalOperatingMinutes += hours * 60;
-            }
-            totalEfficiency += Number(h.efficiency || 0);
-            totalQualityLoss += Number(h.quality || 0);
-            daysWithProduction.add(h.date.split('T')[0]);
-        });
-
-        const count = filtered.length;
-        const avgEfficiency = totalEfficiency / count;
-        const avgQualityLoss = totalQualityLoss / count;
-
-        const scheduledMinutes = daysWithProduction.size * 600; // 10h * 60m
-        const availability = scheduledMinutes > 0 ? Math.min(1, totalOperatingMinutes / scheduledMinutes) : 0;
-        const performance = Math.min(1, avgEfficiency / 30);
-        const quality = Math.max(0, (100 - avgQualityLoss) / 100);
-
-        const oee = (availability * performance * quality) * 100;
-
-        return {
-            oee: oee.toFixed(1),
-            availability: (availability * 100).toFixed(1),
-            performance: (performance * 100).toFixed(1),
-            quality: (quality * 100).toFixed(1)
-        };
-    }, [productionHistory, selectedYear]);
+        return { oee: '—', availability: '—', performance: '—', quality: '—' };
+    }, []);
 
     const salesByClient = useMemo(() => {
         const clients = {};
@@ -387,7 +260,7 @@ const Reports = ({ orders = [], taxSettings = {}, setTaxSettings, expenses = [],
                             <h3 style={{ margin: '0.5rem 0 0', fontSize: '1.6rem', color: '#D9480F' }}>Eficiencia UND/HORA</h3>
                         </div>
                         <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: '2rem', fontWeight: '900', color: '#D9480F' }}>{productionData.aggregateEfficiency} <span style={{ fontSize: '0.8rem' }}>U/H</span></div>
+                            <div style={{ fontSize: '2rem', fontWeight: '900', color: '#D9480F' }}>— <span style={{ fontSize: '0.8rem' }}>U/H</span></div>
                         </div>
                     </div>
 
@@ -481,7 +354,7 @@ const Reports = ({ orders = [], taxSettings = {}, setTaxSettings, expenses = [],
                             <h3 style={{ margin: '0.5rem 0 0', fontSize: '1.6rem', color: '#9D174D' }}>Calidad (Merma)</h3>
                         </div>
                         <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: '2rem', fontWeight: '900', color: '#9D174D' }}>{qualityData.aggregateQuality}%</div>
+                            <div style={{ fontSize: '2rem', fontWeight: '900', color: '#9D174D' }}>—%</div>
                         </div>
                     </div>
 

@@ -139,6 +139,18 @@ const Kanban = ({ orders = [], items = [] }) => {
                                 {orders.map(order => {
                                     const stage = getOrderStageInfo(order, col);
                                     if (!stage.show) return null;
+                                    return { ...order, stageInfo: stage };
+                                }).filter(Boolean).sort((a, b) => {
+                                    // 1. In Process (red) at top, Finished (green) at bottom
+                                    const aFinished = a.stageInfo.status === 'Finalizado';
+                                    const bFinished = b.stageInfo.status === 'Finalizado';
+                                    if (aFinished && !bFinished) return 1;
+                                    if (!aFinished && bFinished) return -1;
+
+                                    // 2. Newest first
+                                    return new Date(b.date || 0) - new Date(a.date || 0);
+                                }).map(order => {
+                                    const stage = order.stageInfo;
 
                                     return (
                                         <div

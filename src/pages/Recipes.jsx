@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ChefHat, RefreshCw, Plus, Edit3, Trash2, X, PlusCircle, MinusCircle, Save, AlertTriangle, Search } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useBusiness } from '../context/BusinessContext';
 
 const Recipes = () => {
+    const { recalculatePTCosts } = useBusiness();
     const [recipesList, setRecipesList] = useState([]);
     const [materials, setMaterials] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -185,6 +187,9 @@ const Recipes = () => {
                 if (error) throw error;
             }
 
+            // Recalculate PT costs based on the new recipe
+            await recalculatePTCosts();
+
             await loadData();
             setIsModalOpen(false);
         } catch (error) {
@@ -305,9 +310,13 @@ const Recipes = () => {
                                     style={{ width: '100%', padding: '0.8rem', borderRadius: '10px', border: '1px solid #cbd5e1', outline: 'none', background: !!editingRecipe ? '#f8fafc' : '#fff' }}
                                 >
                                     <option value="">Seleccionar producto...</option>
-                                    {recipesList.filter(r => !editingRecipe ? r.ingredients.length === 0 : true).map(p => (
-                                        <option key={p.id} value={p.id}>{p.name}</option>
-                                    ))}
+                                    {recipesList.length > 0 ? (
+                                        recipesList.filter(r => !editingRecipe ? r.ingredients.length === 0 : true).map(p => (
+                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                        ))
+                                    ) : (
+                                        <option value="" disabled>No existe en Módulo de Datos Maestros de Productos, Crealo primero</option>
+                                    )}
                                 </select>
                             </div>
 
@@ -350,9 +359,13 @@ const Recipes = () => {
                                                         style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem' }}
                                                     >
                                                         <option value="">Seleccionar...</option>
-                                                        {materials.map(m => (
-                                                            <option key={m.id} value={m.id}>{m.name}</option>
-                                                        ))}
+                                                        {materials.length > 0 ? (
+                                                            materials.map(m => (
+                                                                <option key={m.id} value={m.id}>{m.name}</option>
+                                                            ))
+                                                        ) : (
+                                                            <option value="" disabled>No existe en Módulo de Datos Maestros de Productos, Crealo primero</option>
+                                                        )}
                                                     </select>
                                                 </td>
                                                 <td style={{ padding: '0.5rem' }}>

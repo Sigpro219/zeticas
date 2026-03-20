@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ShoppingCart, Menu, User, LogOut, Settings, LayoutDashboard } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
@@ -10,7 +10,14 @@ const Navbar = () => {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
     const [showUserMenu, setShowUserMenu] = useState(false);
-    const [isHoveringUser, setIsHoveringUser] = useState(false);
+
+    useEffect(() => {
+        const handleClickOutside = () => setShowUserMenu(false);
+        if (showUserMenu) {
+            window.addEventListener('click', handleClickOutside);
+        }
+        return () => window.removeEventListener('click', handleClickOutside);
+    }, [showUserMenu]);
 
     const handleLogout = () => {
         logout();
@@ -60,8 +67,7 @@ const Navbar = () => {
             <div className="nav-icons" style={{ display: 'flex', gap: '1.5rem', color: '#fff', alignItems: 'center', position: 'relative' }}>
                 <div
                     style={{ position: 'relative', display: 'flex', alignItems: 'center' }}
-                    onMouseEnter={() => setIsHoveringUser(true)}
-                    onMouseLeave={() => setIsHoveringUser(false)}
+                    onClick={(e) => e.stopPropagation()}
                 >
                     {user ? (
                         /* LOGGED IN: Show toggle menu */
@@ -80,13 +86,6 @@ const Navbar = () => {
                                 }}
                             >
                                 <User size={18} strokeWidth={1.5} />
-                                {!showUserMenu && isHoveringUser && (
-                                    <div style={{
-                                        position: 'absolute', top: '40px', right: '50%', transform: 'translateX(50%)',
-                                        background: 'rgba(0, 77, 77, 0.95)', color: '#fff', padding: '0.4rem 0.8rem',
-                                        borderRadius: '4px', fontSize: '0.65rem', whiteSpace: 'nowrap', fontWeight: 'bold'
-                                    }}>MI CUENTA</div>
-                                )}
                             </button>
 
                             {showUserMenu && (
@@ -123,16 +122,6 @@ const Navbar = () => {
                             }}
                         >
                             <User size={18} strokeWidth={1.5} />
-                            {isHoveringUser && (
-                                <div style={{
-                                    position: 'absolute', top: '40px', right: '50%', transform: 'translateX(50%)',
-                                    background: 'rgba(0, 77, 77, 0.95)', color: '#fff', padding: '0.4rem 0.8rem',
-                                    borderRadius: '4px', fontSize: '0.65rem', whiteSpace: 'nowrap', fontWeight: 'bold',
-                                    boxShadow: '0 4px 10px rgba(0,0,0,0.2)', pointerEvents: 'none'
-                                }}>
-                                    INICIAR SESIÓN
-                                </div>
-                            )}
                         </Link>
                     )}
                 </div>
