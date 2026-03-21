@@ -1,6 +1,33 @@
-import { MessageCircle, ArrowUp, Check, Leaf, Users, Factory, Tractor, Umbrella, HeartHandshake, Bookmark, Globe, Building2, Globe2, Share2, ListOrdered, Eye, Carrot, Fish, PencilRuler, Trees, Handshake, Venus, Mars, BookOpen, Network, Bug, Coffee, Wheat, Flower2, TreePalm } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { MessageCircle, ArrowUp, Check, Leaf, Users, Factory, Tractor, Umbrella, HeartHandshake, Bookmark, Globe, Building2, Globe2, Share2, ListOrdered, Eye, Carrot, Fish, PencilRuler, Trees, Handshake, Venus, Mars, BookOpen, Network, Bug, Coffee, Wheat, Flower2, TreePalm, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
+import { GiFishingNet, GiBeehive, GiSugarCane, GiBanana, GiCow, GiPalmTree, GiPineTree, GiCompass, GiSprout, GiPlantRoots, GiProcessor } from "react-icons/gi";
+import { FaCoffee, FaPalette, FaLeaf, FaBuilding, FaUniversity, FaUmbrellaBeach, FaClipboardList, FaClipboardCheck, FaSearchPlus, FaHandshake, FaVenusMars, FaUsersCog, FaChalkboardTeacher, FaBookReader, FaHandHoldingHeart, FaGlobe, FaHeart, FaTractor, FaIndustry } from "react-icons/fa";
+import { MdBrush } from "react-icons/md";
 
 const HomeCZ = () => {
+    const imagesConsulting = [
+        '/assets/consultoria/863125fb-99a6-41bd-9da2-3079f747cf87.JPG',
+        '/assets/consultoria/IMG_1653.JPG',
+        '/assets/consultoria/IMG_2257.JPG',
+        '/assets/consultoria/IMG_4002.JPG',
+        '/assets/consultoria/IMG_4447.jpeg',
+        '/assets/consultoria/IMG_4523.jpeg',
+        '/assets/consultoria/IMG_4545.jpeg',
+        '/assets/consultoria/IMG_4597.jpeg'
+    ];
+    const [currentImage, setCurrentImage] = useState(0);
+    const aliados = Array.from({ length: 11 }, (_, i) => `/assets/aliados/aliado${i + 1}.png`);
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setCurrentImage(prev => (prev + 1) % imagesConsulting.length);
+        }, 5000);
+        return () => clearInterval(timer);
+    }, [imagesConsulting.length]);
+
+    const nextImage = () => setCurrentImage(prev => (prev + 1) % imagesConsulting.length);
+    const prevImage = () => setCurrentImage(prev => (prev - 1 + imagesConsulting.length) % imagesConsulting.length);
+    
     const yarumoUrl = '/assets/yarumo_tree.png';
     const logoCZ = 'https://www.zeticas.com/wp-content/uploads/2023/11/cropped-cropped-logo-removebg-preview-e1698878511967.png';
     const institutionalOcre = '#B59E74';
@@ -9,19 +36,9 @@ const HomeCZ = () => {
     return (
         <div className="home-cz" style={{ backgroundColor: '#fff', minHeight: '100vh', fontFamily: "'Quicksand', sans-serif" }}>
             
-            {/* 1. Header & Hero Section */}
-            <header style={{ position: 'relative' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 5%', background: '#fff' }}>
-                    <span style={{ color: deepTeal, fontWeight: '700', fontSize: '1.1rem' }}>Conservas</span>
-                    <img src={logoCZ} alt="Zeticas CZ" style={{ height: '50px' }} />
-                    <button style={{ background: deepTeal, color: '#fff', border: 'none', padding: '0.6rem 2rem', borderRadius: '4px', fontWeight: '700', cursor: 'pointer' }}>AQUÍ</button>
-                </div>
-                <nav style={{ background: institutionalOcre, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '1rem 0', gap: '2.5rem' }}>
-                    {['FILOSOFÍA', 'APOYO', 'CONOCIMIENTO', 'IMPACTO', 'CONTACTO'].map(item => (
-                        <a key={item} href={`#${item.toLowerCase()}`} style={{ color: '#fff', textDecoration: 'none', fontSize: '0.9rem', fontWeight: '600', letterSpacing: '0.1em' }}>{item}</a>
-                    ))}
-                </nav>
-                <section style={{ padding: '6rem 5% 10rem', position: 'relative', display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: '2rem' }}>
+            {/* 1. Hero Section */}
+            <div id="inicio" style={{ scrollMarginTop: '150px' }}></div>
+            <section style={{ padding: '6rem 5% 10rem', position: 'relative', display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: '2rem' }}>
                     <div style={{ textAlign: 'center', padding: '0 2rem' }}>
                         <p style={{ fontStyle: 'italic', color: '#666', fontSize: '1.2rem', lineHeight: '1.8' }} className="font-serif">
                              "Los árboles son solo un elemento del bosque, hacen parte de un ecosistema, que aprende, colabora, conecta, se comunica y responde; Nuestro “Yarumo” ancestral, pensativo y reflexivo nos permite ser parte dé ser cada día mejor."
@@ -37,12 +54,11 @@ const HomeCZ = () => {
                         </p>
                     </div>
                 </section>
-            </header>
 
             {/* 2. Filosofía Section */}
-            <section id="filosofía" style={{ padding: '8rem 5%', background: '#F8F9FA' }}>
+            <section id="filosofia" style={{ padding: '8rem 5%', background: '#F8F9FA', scrollMarginTop: '130px' }}>
                 <div style={{ textAlign: 'center', marginBottom: '5rem' }}>
-                    <h2 className="font-serif" style={{ color: deepTeal, fontSize: '3rem', marginBottom: '1rem' }}>Filosofía & Enfoque</h2>
+                    <h2 className="font-serif" style={{ color: deepTeal, fontSize: '3rem', marginBottom: '1.5rem' }}>Filosofía & Enfoque</h2>
                     <h3 style={{ color: '#4CAF50', fontSize: '1.8rem', fontWeight: '400' }}>{'{ SER para HACER }'}</h3>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3rem', maxWidth: '1200px', margin: '0 auto' }}>
@@ -50,13 +66,13 @@ const HomeCZ = () => {
                         { title: 'POTENCIAL AUTÓCTONO', icon: <Check size={18} color="#9DB547" />, items: ['Volver a las raíces', 'Valoración de la sabiduría ancestral', 'Resaltar identidad cultural', 'Empoderar estructuras autónomas'] },
                         { title: 'MERCADOS CONSCIENTES', icon: <Users size={18} color="#9DB547" />, items: ['Comercio justo', 'Impacto comunitario', 'Desarrollo de productos con calidad', 'Mercados diferenciados', 'Principios de conservación', 'Experiencias de consumo'] },
                         { title: 'PRÁCTICAS SOSTENIBLES', icon: <Leaf size={18} color="#9DB547" />, items: ['Diversidad de cultivos', 'Autonomía agroalimentaria', 'Respeto por la tradición y cultura', 'Producción limpia', 'Circuitos cortos de valor', 'Trabajo colaborativo', 'Arraigo al territorio'] },
-                        { title: 'ESPIRITU LEAN AGILE', icon: <div style={{ background: '#9DB547', color: '#fff', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={12} strokeWidth={4} /></div>, items: ['Gestión colegiada y dinámica', 'Misión y visión – Hoshin Kanri', 'Gestión visual y frecuente- mieruka + scrum', 'Mejor persona -mejor organización- kaizen', 'Flujo de valor – Nagare', 'Orientado a resultados responsables'] }
+                        { title: 'ESPÍRITU LEAN AGILE', icon: <div style={{ background: '#9DB547', color: '#fff', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={12} strokeWidth={4} /></div>, items: ['Gestión colegiada y dinámica', 'Misión y visión – Hoshin Kanri', 'Gestión visual y frecuente- mieruka + scrum', 'Mejor persona -mejor organización- kaizen', 'Flujo de valor – Nagare', 'Orientado a resultados responsables'] }
                     ].map((block, i) => (
-                        <div key={i} style={{ background: '#fff', padding: '1.75rem', borderRadius: '16px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', borderTop: `4px solid ${i % 2 === 0 ? institutionalOcre : deepTeal}` }}>
-                            <h4 style={{ color: deepTeal, fontWeight: '800', marginBottom: '1.5rem', fontSize: '1rem' }}>{block.title}</h4>
+                        <div key={i} style={{ background: '#fff', padding: '2.5rem', borderRadius: '16px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', borderTop: `4px solid ${i % 2 === 0 ? institutionalOcre : deepTeal}` }}>
+                            <h4 style={{ color: deepTeal, fontWeight: '800', marginBottom: '1.5rem', fontSize: '1.1rem' }}>{block.title}</h4>
                             <ul style={{ listStyle: 'none', padding: 0 }}>
                                 {block.items.map((item, idx) => (
-                                    <li key={idx} style={{ display: 'flex', gap: '12px', marginBottom: '0.9rem', fontSize: '0.9rem', color: '#444' }}>
+                                    <li key={idx} style={{ display: 'flex', gap: '12px', marginBottom: '0.9rem', fontSize: '1rem', color: '#444' }}>
                                         <div style={{ marginTop: '2px' }}>{block.icon}</div> <span>{item}</span>
                                     </li>
                                 ))}
@@ -67,89 +83,111 @@ const HomeCZ = () => {
             </section>
 
             {/* 3. Quote Section */}
-            <section style={{ padding: '5rem 5%', textAlign: 'center', background: '#fff', position: 'relative', overflow: 'hidden' }}>
+            <section style={{ padding: '8rem 5%', textAlign: 'center', background: '#fff', position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '360px', height: '360px', backgroundImage: 'url(https://www.zeticas.com/wp-content/uploads/2025/05/yarumo.png)', backgroundSize: 'contain', backgroundRepeat: 'no-repeat', opacity: 0.1, zIndex: 1 }}></div>
                 <div style={{ maxWidth: '850px', margin: '0 auto', position: 'relative', zIndex: 2 }}>
-                    <h2 className="font-serif" style={{ color: deepTeal, fontSize: '3.2rem', lineHeight: '1.25' }}>Yarumo árbol del pensamiento y la sabiduría ancestral, su fortaleza radica en su crecimiento</h2>
+                    <h2 className="font-serif" style={{ color: deepTeal, fontSize: '3rem', lineHeight: '1.3' }}>Yarumo árbol del pensamiento y la sabiduría ancestral, su fortaleza radica en su crecimiento</h2>
                 </div>
             </section>
 
             {/* 4. Apoyo Section */}
-            <section id="apoyo" style={{ padding: '6rem 5%', background: '#e0e2bd', backgroundImage: 'url(https://www.zeticas.com/wp-content/uploads/2025/05/roots-illustration.png)', backgroundSize: 'cover', backgroundBlendMode: 'multiply', position: 'relative', textAlign: 'center' }}>
-                <h2 className="font-serif" style={{ color: deepTeal, fontSize: '3rem', marginBottom: '4rem' }}>Apoyo & soporte</h2>
-                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '5rem', maxWidth: '1100px', margin: '0 auto' }}>
-                    <div style={{ textAlign: 'left' }}>
-                        <h4 style={{ color: deepTeal, marginBottom: '2rem', fontSize: '1rem', fontWeight: '800' }}>EXPERIENCIA EN DIFERENTES SECTORES</h4>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                            {[
-                                { title: 'Industria', icon: <Factory size={28} /> },
-                                { title: 'Agroindustria', icon: <Tractor size={28} /> },
-                                { title: 'Turismo', icon: <Umbrella size={28} /> },
-                                { title: 'Servicios', icon: <HeartHandshake size={28} /> }
-                            ].map((s, i) => (
-                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '20px', color: '#333', fontWeight: '800', fontSize: '0.9rem' }}>
-                                    <div style={{ width: '40px', display: 'flex', justifyContent: 'center', color: deepTeal }}>{s.icon}</div> {s.title.toUpperCase()}
-                                </div>
-                            ))}
+            <section id="apoyo" style={{ padding: '8rem 5%', background: '#e0e2bd', position: 'relative', textAlign: 'center', overflow: 'hidden', scrollMarginTop: '130px' }}>
+                <div style={{ 
+                    position: 'absolute', 
+                    top: '0', 
+                    left: '50%', 
+                    transform: 'translateX(-50%)', 
+                    width: '100%',
+                    height: '100%',
+                    backgroundImage: 'url(/assets/raiz_sin_fondo.png)',
+                    backgroundSize: 'contain',
+                    backgroundPosition: 'top',
+                    backgroundRepeat: 'no-repeat',
+                    opacity: 0.15,
+                    zIndex: 0
+                }}></div>
+                <h2 className="font-serif" style={{ color: deepTeal, fontSize: '3rem', marginBottom: '5.5rem' }}>Apoyo & soporte</h2>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '5rem', maxWidth: '1100px', margin: '0 auto', position: 'relative', zIndex: 1 }}>
+                        <div style={{ textAlign: 'left' }}>
+                            <h4 style={{ color: deepTeal, marginBottom: '2rem', fontSize: '1.1rem', fontWeight: '800' }}>EXPERIENCIA EN DIFERENTES SECTORES</h4>
+                            <p style={{ color: '#444', marginBottom: '1.5rem', fontWeight: '700', fontSize: '1rem' }}>Productos Forestales y no maderables</p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                                {[
+                                    { title: 'Industria', icon: <FaIndustry size={28} /> },
+                                    { title: 'Agroindustria', icon: <FaTractor size={28} /> },
+                                    { title: 'Turismo', icon: <FaUmbrellaBeach size={28} /> },
+                                    { title: 'Servicios', icon: <FaHandHoldingHeart size={28} /> }
+                                ].map((s, i) => (
+                                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '20px', color: '#333', fontWeight: '700', fontSize: '1rem' }}>
+                                        <div style={{ width: '40px', display: 'flex', justifyContent: 'center', color: deepTeal }}>{s.icon}</div> {s.title}
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                    </div>
-                    <div style={{ textAlign: 'left' }}>
-                        <h4 style={{ color: deepTeal, marginBottom: '2rem', fontSize: '1rem', fontWeight: '800' }}>TIPO DE ORGANIZACIONES</h4>
+                        <div style={{ textAlign: 'left' }}>
+                            <h4 style={{ color: deepTeal, marginBottom: '2rem', fontSize: '1.1rem', fontWeight: '800' }}>TIPO DE ORGANIZACIONES DONDE HEMOS APOYADO</h4>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                             {[
-                                { title: 'Privado', icon: <Bookmark size={28} /> },
-                                { title: 'Internacionales', icon: <Globe size={28} /> },
-                                { title: 'Gobierno', icon: <Building2 size={28} /> },
-                                { title: 'ONG´ s', icon: <Globe2 size={28} /> },
-                                { title: 'Asociaciones', icon: <Share2 size={28} /> }
+                                { title: 'Privado', icon: <FaBuilding size={28} /> },
+                                { title: 'Organizaciones internacionales', icon: <FaGlobe size={28} /> },
+                                { title: 'Gobierno', icon: <FaUniversity size={28} /> },
+                                { title: 'ONG´ s', icon: <FaHeart size={28} /> },
+                                { title: 'Asociaciones – Economía solidaria', icon: <GiSprout size={28} /> }
                             ].map((o, i) => (
-                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '20px', color: '#333', fontWeight: '800', fontSize: '0.9rem' }}>
-                                    <div style={{ width: '40px', display: 'flex', justifyContent: 'center', color: deepTeal }}>{o.icon}</div> {o.title.toUpperCase()}
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '20px', color: '#333', fontWeight: '700', fontSize: '1rem' }}>
+                                    <div style={{ width: '40px', display: 'flex', justifyContent: 'center', color: deepTeal }}>{o.icon}</div> {o.title}
                                 </div>
                             ))}
                         </div>
                     </div>
+                </div>
+                <div style={{ marginTop: '7rem', textAlign: 'center', position: 'relative', zIndex: 1 }}>
+                    <h2 className="font-serif" style={{ color: deepTeal, fontSize: '2.5rem', marginBottom: '1.5rem' }}>Sinergias de vida</h2>
+                    <p style={{ color: '#444', fontSize: '1.2rem', fontWeight: '500' }}>Sistema megadiverso que aumentan la eficiencia en el ecosistema</p>
                 </div>
             </section>
 
             {/* 5. Conocimiento Section */}
             <section id="conocimiento" style={{ padding: '8rem 5%', background: '#fff' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4rem', maxWidth: '1200px', margin: '0 auto' }}>
+                <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+                    <h2 className="font-serif" style={{ color: deepTeal, fontSize: '3rem', marginBottom: '5rem', textAlign: 'center' }}>Conocimiento – Maestría</h2>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4rem' }}>
                     <div style={{ textAlign: 'left' }}>
-                        <h3 style={{ color: deepTeal, fontSize: '1.2rem', fontWeight: '800', marginBottom: '2.5rem' }}>GESTIÓN DE PROYECTOS</h3>
+                        <h3 style={{ color: deepTeal, fontSize: '1.1rem', fontWeight: '800', marginBottom: '2rem' }}>GESTIÓN DE PROYECTOS</h3>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                            {[{ title: 'Formulación', icon: <ListOrdered size={24} /> }, { title: 'Evaluación', icon: <Check size={24} /> }, { title: 'Seguimiento', icon: <Eye size={24} /> }].map((item, i) => (
-                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '15px', color: '#333', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                            {[{ title: 'Formulación', icon: <FaClipboardList size={24} /> }, { title: 'Evaluación', icon: <FaClipboardCheck size={24} /> }, { title: 'Seguimiento', icon: <FaSearchPlus size={24} /> }].map((item, i) => (
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '15px', color: '#444', fontWeight: '700', fontSize: '1rem' }}>
                                     <div style={{ width: '30px', color: deepTeal }}>{item.icon}</div> {item.title}
                                 </div>
                             ))}
                         </div>
                     </div>
                     <div style={{ textAlign: 'left' }}>
-                        <h3 style={{ color: deepTeal, fontSize: '1.2rem', fontWeight: '800', marginBottom: '2.5rem' }}>DESARROLLO CADENAS DE VALOR</h3>
+                        <h3 style={{ color: deepTeal, fontSize: '1.1rem', fontWeight: '800', marginBottom: '2rem' }}>DESARROLLO CADENAS DE VALOR</h3>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                            {[{ title: 'Productos agrícolas', icon: <Carrot size={24} /> }, { title: 'No maderables', icon: <Leaf size={24} /> }, { title: 'Pesca artesanal', icon: <Fish size={24} /> }, { title: 'Artesanías', icon: <PencilRuler size={24} /> }, { title: 'Productos innovadores', icon: <Factory size={24} /> }, { title: 'Forestal', icon: <Trees size={24} /> }].map((item, i) => (
-                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '15px', color: '#333', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                            {[{ title: 'Productos agrícolas', icon: <FaLeaf size={24} /> }, { title: 'No maderables', icon: <GiPlantRoots size={24} /> }, { title: 'Pesca artesanal', icon: <GiFishingNet size={24} /> }, { title: 'Artesanías', icon: <MdBrush size={24} /> }, { title: 'Productos innovadores', icon: <GiProcessor size={24} /> }, { title: 'Forestal', icon: <GiPineTree size={24} /> }].map((item, i) => (
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '15px', color: '#444', fontWeight: '700', fontSize: '1rem' }}>
                                     <div style={{ width: '30px', color: deepTeal }}>{item.icon}</div> {item.title}
                                 </div>
                             ))}
                         </div>
                     </div>
                     <div style={{ textAlign: 'left' }}>
-                        <h3 style={{ color: deepTeal, fontSize: '1.2rem', fontWeight: '800', marginBottom: '2.5rem' }}>RELACIONAMIENTO COMUNITARIO</h3>
+                        <h3 style={{ color: deepTeal, fontSize: '1.1rem', fontWeight: '800', marginBottom: '2rem' }}>RELACIONAMIENTO COMUNITARIO & ACOMPAÑAMIENTO</h3>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                            {[{ title: 'Construcción de confianza', icon: <Handshake size={24} /> }, { title: 'Enfoque de género', icon: <div style={{ display: 'flex', gap: '2px' }}><Venus size={18} /><Mars size={18} /></div> }, { title: 'Equipos autónomos', icon: <Users size={24} /> }, { title: 'Formación de líderes', icon: <Network size={24} /> }, { title: 'Intercambio de saberes', icon: <BookOpen size={24} /> }].map((item, i) => (
-                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '15px', color: '#333', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                            {[{ title: 'Construcción de confianza', icon: <FaHandshake size={24} /> }, { title: 'Enfoque de género', icon: <FaVenusMars size={24} /> }, { title: 'Equipos autónomos', icon: <FaUsersCog size={24} /> }, { title: 'Formación de líderes', icon: <FaChalkboardTeacher size={24} /> }, { title: 'Intercambio de saberes', icon: <FaBookReader size={24} /> }].map((item, i) => (
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '15px', color: '#444', fontWeight: '700', fontSize: '1rem' }}>
                                     <div style={{ width: '40px', color: deepTeal }}>{item.icon}</div> {item.title}
                                 </div>
                             ))}
                         </div>
                     </div>
                 </div>
-            </section>
+            </div>
+        </section>
             {/* 6. Tronco Section */}
             <section style={{ 
-                padding: '6rem 5%', 
+                padding: '8rem 5%', 
                 textAlign: 'center', 
                 background: '#fff',
                 position: 'relative',
@@ -170,7 +208,7 @@ const HomeCZ = () => {
                     zIndex: 1
                 }}></div>
                 <div style={{ maxWidth: '800px', margin: '0 auto', position: 'relative', zIndex: 2 }}>
-                    <p className="font-serif" style={{ color: '#444', fontSize: '2.2rem', lineHeight: '1.4', fontWeight: '500' }}>
+                    <p className="font-serif" style={{ color: '#444', fontSize: '2.5rem', lineHeight: '1.4', fontWeight: '500' }}>
                         El tronco nos permite la nutrición y es el medio para alimentarse y llenarse de energía para florecer. No hay yarumos sin hormigas, los defienden
                     </p>
                 </div>
@@ -178,11 +216,10 @@ const HomeCZ = () => {
 
             {/* 7. Poetic Divider: Colaboración */}
             <section style={{ 
-                padding: '4rem 5%', 
+                padding: '8rem 5%', 
                 backgroundColor: '#f1f4f9', 
                 textAlign: 'center',
-                position: 'relative',
-                borderBottom: '25px solid #ebecc5'
+                position: 'relative'
             }}>
                 <div style={{ 
                     position: 'absolute', 
@@ -198,55 +235,140 @@ const HomeCZ = () => {
                     zIndex: 1
                 }}></div>
                 <div style={{ position: 'relative', zIndex: 2, maxWidth: '900px', margin: '0 auto' }}>
-                    <p className="font-serif" style={{ color: institutionalOcre, fontSize: '1.45rem', lineHeight: '1.6', fontWeight: '500', fontStyle: 'italic' }}>
+                    <p className="font-serif" style={{ color: institutionalOcre, fontSize: '1.6rem', lineHeight: '1.6', fontWeight: '500', fontStyle: 'italic' }}>
                         Sentido de colaboración y cooperación mutua son fundamentales para lograr lo que te propones
                     </p>
                 </div>
             </section>
 
-            {/* 8. Impacto Section (Moved to the end) */}
-            <section id="impacto" style={{ padding: '6rem 5%', background: '#fff' }}>
-                <div style={{ textAlign: 'left', marginBottom: '4rem' }}>
-                    <h2 className="font-serif" style={{ color: deepTeal, fontSize: '3rem', marginBottom: '1rem' }}>Impacto</h2>
+            {/* 8. Impacto Section (Redesigned Layout) */}
+            <section id="impacto" style={{ padding: '8rem 5%', background: '#fdfcf7', scrollMarginTop: '130px' }}>
+                <div style={{ textAlign: 'center', marginBottom: '5rem' }}>
+                    <h2 className="font-serif" style={{ color: deepTeal, fontSize: '3rem', marginBottom: '1.5rem' }}>Impacto</h2>
                     <h3 style={{ color: deepTeal, fontSize: '1.2rem', fontWeight: '800' }}>Trabajo comunitario en todas las regiones de Colombia</h3>
                 </div>
 
-                <div style={{ display: 'flex', gap: '4rem', maxWidth: '1400px', margin: '0 auto' }}>
-                    <div style={{ width: '250px', flexShrink: 0 }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-                            {[
-                                { title: 'Pesca artesanal', icon: <Fish size={24} /> },
-                                { title: 'Artesanías', icon: <PencilRuler size={24} /> },
-                                { title: 'Apicultura', icon: <Bug size={24} /> },
-                                { title: 'Café', icon: <Coffee size={24} /> },
-                                { title: 'Caña / Panela', icon: <Wheat size={24} /> },
-                                { title: 'Flores', icon: <Flower2 size={24} /> },
-                                { title: 'Plátano', icon: <Carrot size={24} /> },
-                                { title: 'Palmas- Acai', icon: <TreePalm size={24} /> },
-                                { title: 'Forestales', icon: <Trees size={24} /> },
-                                { title: 'Turismo', icon: <Globe size={24} /> },
-                                { title: 'Pecuarios', icon: <HeartHandshake size={24} /> }
-                            ].map((item, i) => (
-                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '15px', color: '#333', fontWeight: '800', fontSize: '0.85rem' }}>
-                                    <div style={{ width: '30px', display: 'flex', justifyContent: 'center', color: deepTeal }}>{item.icon}</div> {item.title}
-                                </div>
-                            ))}
+                {/* Row 1: Carousel + Map */}
+                <div style={{ display: 'flex', gap: '3rem', maxWidth: '1200px', margin: '0 auto', marginBottom: '6rem' }}>
+                    {/* Carousel (70%) */}
+                    <div style={{ flex: '0 0 70%', position: 'relative' }}>
+                        <div style={{ width: '100%', height: '600px', background: '#eee', borderRadius: '20px', overflow: 'hidden', position: 'relative', boxShadow: '0 25px 50px rgba(0,0,0,0.12)' }}>
+                             {imagesConsulting.map((img, index) => (
+                                 <div 
+                                    key={index} 
+                                    style={{ 
+                                        position: 'absolute', 
+                                        top: 0, 
+                                        left: 0, 
+                                        width: '100%', 
+                                        height: '100%', 
+                                        opacity: index === currentImage ? 1 : 0, 
+                                        transition: 'opacity 1s ease-in-out',
+                                        zIndex: index === currentImage ? 1 : 0
+                                    }}
+                                 >
+                                    <img 
+                                        src={img} 
+                                        alt={`Impacto ${index}`} 
+                                        style={{ 
+                                            width: '100%', 
+                                            height: '100%', 
+                                            objectFit: 'cover', 
+                                            transform: index === currentImage ? 'scale(1.1)' : 'scale(1)', 
+                                            transition: 'transform 8s ease-out'
+                                        }} 
+                                    />
+                                 </div>
+                             ))}
+                             
+                             <button 
+                                onClick={prevImage} 
+                                style={{ position: 'absolute', top: '50%', left: '20px', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.4)', border: 'none', borderRadius: '50%', width: '50px', height: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10, color: '#fff' }}
+                             >
+                                <ChevronLeft size={30} />
+                             </button>
+                             <button 
+                                onClick={nextImage} 
+                                style={{ position: 'absolute', top: '50%', right: '20px', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.4)', border: 'none', borderRadius: '50%', width: '50px', height: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10, color: '#fff' }}
+                             >
+                                <ChevronRight size={30} />
+                             </button>
                         </div>
                     </div>
-                    <div style={{ flexGrow: 1, position: 'relative' }}>
-                        <div style={{ width: '100%', height: '700px', background: '#eee', borderRadius: '12px', overflow: 'hidden' }}>
-                             <img src="https://images.unsplash.com/photo-1596405838058-ada2dd667da5?auto=format&fit=crop&q=80&w=1200" alt="Comunidad" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8 }} />
-                        </div>
+
+                    {/* Map (30%) */}
+                    <div style={{ flex: '1', display: 'flex', alignItems: 'center' }}>
+                        <img 
+                            src="https://obsvdzlsbbqmhpsxksnd.supabase.co/storage/v1/object/public/products/Mapa_Regiones_Naturales_de_Colombia_small.jpg" 
+                            alt="Mapa de impacto Colombia" 
+                            style={{ width: '100%', height: 'auto', borderRadius: '20px', boxShadow: '0 15px 35px rgba(0,0,0,0.1)' }} 
+                        />
                     </div>
+                </div>
+
+                {/* Row 2: Icons Grid (Centered) */}
+                <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '3rem 2.5rem', textAlign: 'center' }}>
+                    {[
+                        { title: 'Pesca artesanal', icon: <GiFishingNet size={32} /> },
+                        { title: 'Artesanías', icon: <MdBrush size={32} /> },
+                        { title: 'Apicultura', icon: <GiBeehive size={32} /> },
+                        { title: 'Café', icon: <FaCoffee size={32} /> },
+                        { title: 'Caña / Panela', icon: <GiSugarCane size={32} /> },
+                        { title: 'Flores', icon: <FaLeaf size={32} /> },
+                        { title: 'Plátano', icon: <GiBanana size={32} /> },
+                        { title: 'Palmas- Acai', icon: <GiPalmTree size={32} /> },
+                        { title: 'Forestales', icon: <GiPineTree size={32} /> },
+                        { title: 'Turismo', icon: <GiCompass size={32} /> },
+                        { title: 'Pecuarios', icon: <GiCow size={32} /> }
+                    ].map((item, i) => (
+                        <div key={i} style={{ width: '160px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                            <div style={{ color: deepTeal, background: '#fff', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 20px rgba(0,0,0,0.06)' }}>
+                                {item.icon}
+                            </div>
+                            <span style={{ fontSize: '0.9rem', color: '#444', fontWeight: '700', lineHeight: '1.2' }}>{item.title}</span>
+                        </div>
+                    ))}
                 </div>
             </section>
             
-            <div style={{ position: 'fixed', bottom: '2rem', right: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem', zIndex: 100 }}>
-                <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} style={{ background: '#888', color: '#fff', border: 'none', width: '45px', height: '45px', borderRadius: '4px', cursor: 'pointer' }}><ArrowUp size={24} /></button>
-                <a href="https://wa.me/3144336525" target="_blank" rel="noopener noreferrer" style={{ background: '#25D366', color: '#fff', padding: '10px 20px', borderRadius: '30px', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold' }}>
-                    <MessageCircle size={24} /> <span>¡Escríbenos!</span>
-                </a>
-            </div>
+            {/* 9. Aliados y Socios Section */}
+            <section id="aliados" style={{ padding: '8rem 0', background: '#fff', overflow: 'hidden', scrollMarginTop: '130px' }}>
+                <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 5%', textAlign: 'center', marginBottom: '5.5rem' }}>
+                    <h2 className="font-serif" style={{ color: deepTeal, fontSize: '3rem' }}>Aliados y socios</h2>
+                </div>
+
+                <div className="marquee-container" style={{ position: 'relative', width: '100%' }}>
+                    <style>
+                        {`
+                        @keyframes marquee {
+                            0% { transform: translateX(0); }
+                            100% { transform: translateX(-50%); }
+                        }
+                        .marquee-inner {
+                            display: flex;
+                            width: max-content;
+                            animation: marquee 38s linear infinite;
+                        }
+                        .marquee-inner:hover {
+                            animation-play-state: paused;
+                        }
+                        `}
+                    </style>
+                    <div className="marquee-inner">
+                        {[...aliados, ...aliados].map((logo, i) => (
+                            <div key={i} style={{ width: '250px', padding: '0 40px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <img 
+                                    src={logo} 
+                                    alt={`Aliado ${i + 1}`} 
+                                    style={{ maxWidth: '100%', maxHeight: '100px', objectFit: 'contain' }} 
+                                />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+
         </div>
     );
 };

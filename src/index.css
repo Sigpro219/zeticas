@@ -24,6 +24,17 @@
   padding: 0;
 }
 
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 130px;
+}
+
+@media (max-width: 768px) {
+  html {
+    scroll-padding-top: 110px;
+  }
+}
+
 body {
   font-family: var(--font-sans);
   background-color: var(--color-bg);
@@ -138,13 +149,13 @@ h4,
 
 /* Navbar specific */
 .navbar-dark {
-  background-color: var(--color-primary) !important;
-  color: #fff !important;
+  background-color: var(--color-primary);
+  color: #fff;
 }
 
 .navbar-dark .nav-links a,
 .navbar-dark .nav-icons a {
-  color: #fff !important;
+  color: #fff;
 }
 
 /* Infinite Scroll Animation for Brands */

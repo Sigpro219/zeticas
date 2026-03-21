@@ -1,50 +1,85 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Menu, User, LogOut, Settings, LayoutDashboard, Instagram, Mail, Phone, ChevronUp } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { ShoppingCart, Menu, User, LogOut, LayoutDashboard, Instagram, Mail, Phone, ChevronUp } from 'lucide-react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 const logo = '/logo.png';
+const logoCZ = '/assets/logos/logo-cz.png';
 
-const UtilityBar = ({ isMobile }) => (
+const deepTeal = "#025357";
+const institutionOcre = "#D6BD98";
+
+const UtilityBar = ({ isConsulting }) => (
     <div style={{
-        background: 'var(--color-utility)',
-        padding: '0 1.5rem',
-        height: '35px',
+        background: isConsulting ? '#f8f9fa' : 'var(--color-utility)',
+        padding: '0 5%',
+        height: '40px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         fontSize: '0.75rem',
         fontWeight: '600',
-        color: 'var(--color-primary)',
-        borderBottom: '1px solid rgba(2, 83, 87, 0.05)'
+        color: deepTeal,
+        borderBottom: '1px solid rgba(2, 83, 87, 0.08)',
+        zIndex: 1100
     }}>
         <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <span style={{ opacity: 0.7 }}>Contacto</span>
-                <a href="https://instagram.com" target="_blank" rel="noreferrer" style={{ color: 'inherit', display: 'flex' }}><Instagram size={14} /></a>
-                <a href="https://wa.me/573000000000" target="_blank" rel="noreferrer" style={{ color: 'inherit', display: 'flex' }}><Phone size={14} /></a>
-                <a href="mailto:contacto@zeticas.com" style={{ color: 'inherit', display: 'flex' }}><Mail size={14} /></a>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                <span style={{ opacity: 0.6, fontSize: '0.7rem' }}>CONTACTO</span>
+                <a href="https://instagram.com" target="_blank" rel="noreferrer" style={{ color: 'inherit', display: 'flex', transition: 'opacity 0.2s' }}><Instagram size={14} /></a>
+                <a href="https://wa.me/573000000000" target="_blank" rel="noreferrer" style={{ color: 'inherit', display: 'flex', transition: 'opacity 0.2s' }}><Phone size={14} /></a>
+                <a href="mailto:contacto@zeticas.com" style={{ color: 'inherit', display: 'flex', transition: 'opacity 0.2s' }}><Mail size={14} /></a>
             </div>
         </div>
-        {!isMobile && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span>Consultorías <span style={{ fontWeight: '800' }}>CZ</span></span>
-                    <Link to="/consultoria" style={{
-                        background: 'var(--color-secondary)',
-                        color: '#fff',
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                        textDecoration: 'none',
-                        fontSize: '0.65rem'
-                    }}>AQUÍ</Link>
-                </div>
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', height: '100%' }}>
+            <div style={{ 
+                display: 'flex', 
+                background: '#eee', 
+                borderRadius: '20px', 
+                padding: '2px', 
+                height: '28px',
+                alignItems: 'center',
+                boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.1)'
+            }}>
+                <Link to="/" style={{
+                    padding: '0 12px',
+                    height: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    borderRadius: '18px',
+                    textDecoration: 'none',
+                    fontSize: '0.65rem',
+                    letterSpacing: '1px',
+                    transition: 'all 0.3s ease',
+                    background: !isConsulting ? deepTeal : 'transparent',
+                    color: !isConsulting ? '#fff' : '#888',
+                    fontWeight: !isConsulting ? '800' : '500'
+                }}>
+                    CONSERVAS
+                </Link>
+                <Link to="/consultoria" style={{
+                    padding: '0 12px',
+                    height: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    borderRadius: '18px',
+                    textDecoration: 'none',
+                    fontSize: '0.65rem',
+                    letterSpacing: '1px',
+                    transition: 'all 0.3s ease',
+                    background: isConsulting ? institutionOcre : 'transparent',
+                    color: isConsulting ? deepTeal : '#888',
+                    fontWeight: isConsulting ? '800' : '500'
+                }}>
+                    CONSULTORÍA
+                </Link>
             </div>
-        )}
+        </div>
     </div>
 );
 
-const Navbar = () => {
+const Navbar = ({ isConsulting }) => {
     const { cartCount } = useCart();
     const { user, logout } = useAuth();
     const navigate = useNavigate();
@@ -80,9 +115,9 @@ const Navbar = () => {
         <nav className="navbar navbar-dark" style={{
             width: '100%',
             height: isMobile ? '70px' : '85px',
-            backgroundColor: 'var(--color-primary)',
-            borderBottom: '1px solid rgba(255,255,255,0.08)',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+            backgroundColor: isConsulting ? '#fff' : 'var(--color-primary)',
+            borderBottom: isConsulting ? `4px solid ${institutionOcre}` : '1px solid rgba(255,255,255,0.08)',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
             transition: 'all 0.3s ease'
         }}>
             <div className="container" style={{
@@ -93,13 +128,20 @@ const Navbar = () => {
                 padding: '0 1.5rem'
             }}>
                 <div className="logo" style={{ display: 'flex', alignItems: 'center', height: '100%' }}>
-                    <Link to="/" style={{ height: '100%', display: 'flex', alignItems: 'center' }}>
-                        <img src={logo} alt="Zeticas" style={{ 
-                            height: isMobile ? '50%' : '65%', 
+                    <Link to={isConsulting ? "/consultoria" : "/"} style={{ height: '100%', display: 'flex', alignItems: 'center', gap: '15px', textDecoration: 'none' }}>
+                        <img src={isConsulting ? logoCZ : logo} alt={isConsulting ? "CZ" : "Zeticas"} style={{ 
+                            height: isConsulting ? (isMobile ? '80%' : '90%') : (isMobile ? '50%' : '65%'), 
                             width: 'auto', 
                             objectFit: 'contain', 
-                            transition: 'transform 0.3s ease'
+                            transition: 'transform 0.3s ease',
+                            filter: isConsulting ? 'none' : 'brightness(0) invert(1)'
                         }} />
+                        {isConsulting && !isMobile && (
+                            <div style={{ height: '35px', width: '1px', background: '#ddd' }}></div>
+                        )}
+                        {isConsulting && !isMobile && (
+                            <span style={{ fontSize: '1.25rem', color: deepTeal, fontWeight: '800', letterSpacing: '1px' }}>Consultoría</span>
+                        )}
                     </Link>
                 </div>
 
@@ -111,42 +153,56 @@ const Navbar = () => {
                     {!isMobile && (
                         <div className="nav-links" style={{ 
                             display: 'flex', 
-                            gap: '2rem', 
+                            gap: '2.5rem', 
                             fontSize: '0.75rem', 
                             letterSpacing: '0.15em', 
                             textTransform: 'uppercase', 
                             fontWeight: '600', 
                             alignItems: 'center' 
                         }}>
-                            <Link to="/" style={{ textDecoration: 'none', color: '#fff', opacity: 0.9 }}>Inicio</Link>
-                            <Link to="/tienda" style={{ textDecoration: 'none', color: '#fff', opacity: 0.9 }}>Tienda</Link>
-                            <Link to="/catering" style={{ textDecoration: 'none', color: '#fff', opacity: 0.9 }}>Catering</Link>
-                            <Link to="/nosotros" style={{ textDecoration: 'none', color: '#fff', opacity: 0.9 }}>Nosotros</Link>
-                            <Link to="/consultoria" style={{ textDecoration: 'none', color: '#fff', opacity: 0.9 }}>Consultoría</Link>
-                            <Link to="/recurrentes" style={{
-                                textDecoration: 'none',
-                                color: '#fff',
-                                background: 'var(--color-secondary)',
-                                padding: '0.6rem 1.25rem',
-                                borderRadius: '50px',
-                                fontWeight: '800',
-                                fontSize: '0.7rem',
-                                boxShadow: '0 4px 15px rgba(243, 124, 121, 0.2)',
-                                marginLeft: '0.5rem'
-                            }}>RECURRENTES</Link>
+                            {isConsulting ? (
+                                <>
+                                    <a href="/consultoria#inicio" style={{ textDecoration: 'none', color: deepTeal, opacity: 0.9 }}>Inicio</a>
+                                    <a href="/consultoria#filosofia" style={{ textDecoration: 'none', color: deepTeal, opacity: 0.9 }}>Filosofía</a>
+                                    <a href="/consultoria#apoyo" style={{ textDecoration: 'none', color: deepTeal, opacity: 0.9 }}>Servicios</a>
+                                    <a href="/consultoria#impacto" style={{ textDecoration: 'none', color: deepTeal, opacity: 0.9 }}>Impacto</a>
+                                    <a href="/consultoria#aliados" style={{ textDecoration: 'none', color: deepTeal, opacity: 0.9 }}>Aliados</a>
+                                </>
+                            ) : (
+                                <>
+                                    <Link to="/" style={{ textDecoration: 'none', color: '#fff', opacity: 0.9 }}>Inicio</Link>
+                                    <Link to="/tienda" style={{ textDecoration: 'none', color: '#fff', opacity: 0.9 }}>Tienda</Link>
+                                    <Link to="/catering" style={{ textDecoration: 'none', color: '#fff', opacity: 0.9 }}>Catering</Link>
+                                    <Link to="/nosotros" style={{ textDecoration: 'none', color: '#fff', opacity: 0.9 }}>Nosotros</Link>
+                                    <Link to="/consultoria" style={{ textDecoration: 'none', color: '#fff', opacity: 0.9 }}>Consultoría</Link>
+                                    <Link to="/recurrentes" style={{
+                                        textDecoration: 'none',
+                                        color: '#fff',
+                                        background: 'var(--color-secondary)',
+                                        padding: '0.6rem 1.25rem',
+                                        borderRadius: '50px',
+                                        fontWeight: '800',
+                                        fontSize: '0.7rem',
+                                        boxShadow: '0 4px 15px rgba(243, 124, 121, 0.2)',
+                                        marginLeft: '0.5rem'
+                                    }}>RECURRENTES</Link>
+                                </>
+                            )}
                         </div>
                     )}
 
-                    <div className="nav-icons" style={{ display: 'flex', gap: '1.2rem', color: '#fff', alignItems: 'center' }}>
-                    <Link to="/carrito" title="Ver Carrito" style={{ color: '#fff', textDecoration: 'none', position: 'relative', display: 'flex', alignItems: 'center', padding: '0.5rem' }}>
-                        <ShoppingCart size={18} strokeWidth={2} />
-                        {cartCount > 0 && (
-                            <span style={{
-                                position: 'absolute', top: '-2px', right: '-2px', background: 'var(--color-secondary)',
-                                color: '#fff', fontSize: '0.6rem', padding: '2px 6px', borderRadius: '12px', fontWeight: '900'
-                            }}>{cartCount}</span>
-                        )}
-                    </Link>
+                    <div className="nav-icons" style={{ display: 'flex', gap: '1.2rem', color: isConsulting ? deepTeal : '#fff', alignItems: 'center' }}>
+                    {!isConsulting && (
+                        <Link to="/carrito" title="Ver Carrito" style={{ color: '#fff', textDecoration: 'none', position: 'relative', display: 'flex', alignItems: 'center', padding: '0.5rem' }}>
+                            <ShoppingCart size={18} strokeWidth={2} />
+                            {cartCount > 0 && (
+                                <span style={{
+                                    position: 'absolute', top: '-2px', right: '-2px', background: 'var(--color-secondary)',
+                                    color: '#fff', fontSize: '0.6rem', padding: '2px 6px', borderRadius: '12px', fontWeight: '900'
+                                }}>{cartCount}</span>
+                            )}
+                        </Link>
+                    )}
 
                     <div
                         style={{ position: 'relative', display: 'flex', alignItems: 'center' }}
@@ -159,7 +215,7 @@ const Navbar = () => {
                                     style={{
                                         background: 'none',
                                         border: 'none',
-                                        color: '#fff',
+                                        color: isConsulting ? deepTeal : '#fff',
                                         cursor: 'pointer',
                                         display: 'flex',
                                         alignItems: 'center',
@@ -190,7 +246,7 @@ const Navbar = () => {
                                 )}
                             </>
                         ) : (
-                            <Link to="/login" style={{ color: '#fff', textDecoration: 'none', display: 'flex', alignItems: 'center', padding: '0.5rem' }}>
+                            <Link to="/login" style={{ color: isConsulting ? deepTeal : '#fff', textDecoration: 'none', display: 'flex', alignItems: 'center', padding: '0.5rem' }}>
                                 <User size={18} strokeWidth={2} />
                             </Link>
                         )}
@@ -201,7 +257,7 @@ const Navbar = () => {
                                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                                 style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: '0.5rem' }}
                             >
-                                <Menu size={20} strokeWidth={2} />
+                                <Menu size={20} strokeWidth={2} color={isConsulting ? deepTeal : '#fff'} />
                             </button>
                         )}
                     </div>
@@ -224,22 +280,34 @@ const Navbar = () => {
                     zIndex: 999,
                     animation: 'fadeIn 0.3s ease'
                 }}>
-                    <Link to="/" onClick={() => setIsMobileMenuOpen(false)} style={{ textDecoration: 'none', color: '#fff', fontSize: '1.25rem', fontWeight: '600', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>Inicio</Link>
-                    <Link to="/tienda" onClick={() => setIsMobileMenuOpen(false)} style={{ textDecoration: 'none', color: '#fff', fontSize: '1.25rem', fontWeight: '600', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>Tienda</Link>
-                    <Link to="/catering" onClick={() => setIsMobileMenuOpen(false)} style={{ textDecoration: 'none', color: '#fff', fontSize: '1.25rem', fontWeight: '600', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>Catering</Link>
-                    <Link to="/nosotros" onClick={() => setIsMobileMenuOpen(false)} style={{ textDecoration: 'none', color: '#fff', fontSize: '1.25rem', fontWeight: '600', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>Nosotros</Link>
-                    <Link to="/consultoria" onClick={() => setIsMobileMenuOpen(false)} style={{ textDecoration: 'none', color: '#fff', fontSize: '1.25rem', fontWeight: '600', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>Consultoría</Link>
-                    <Link to="/recurrentes" onClick={() => setIsMobileMenuOpen(false)} style={{ 
-                        textDecoration: 'none', 
-                        color: 'var(--color-primary)', 
-                        background: '#D6BD98',
-                        padding: '1.2rem',
-                        borderRadius: '12px',
-                        textAlign: 'center',
-                        fontWeight: '800',
-                        fontSize: '1rem',
-                        marginTop: '1rem'
-                    }}>CLIENTES RECURRENTES</Link>
+                    {isConsulting ? (
+                        <>
+                            <a href="/consultoria#inicio" onClick={() => setIsMobileMenuOpen(false)} style={{ textDecoration: 'none', color: deepTeal, fontSize: '1.25rem', fontWeight: '800', borderBottom: '1px solid rgba(2, 83, 87, 0.1)', paddingBottom: '0.5rem' }}>Inicio</a>
+                            <a href="/consultoria#filosofia" onClick={() => setIsMobileMenuOpen(false)} style={{ textDecoration: 'none', color: deepTeal, fontSize: '1.25rem', fontWeight: '800', borderBottom: '1px solid rgba(2, 83, 87, 0.1)', paddingBottom: '0.5rem' }}>Filosofía</a>
+                            <a href="/consultoria#apoyo" onClick={() => setIsMobileMenuOpen(false)} style={{ textDecoration: 'none', color: deepTeal, fontSize: '1.25rem', fontWeight: '800', borderBottom: '1px solid rgba(2, 83, 87, 0.1)', paddingBottom: '0.5rem' }}>Servicios</a>
+                            <a href="/consultoria#impacto" onClick={() => setIsMobileMenuOpen(false)} style={{ textDecoration: 'none', color: deepTeal, fontSize: '1.25rem', fontWeight: '800', borderBottom: '1px solid rgba(2, 83, 87, 0.1)', paddingBottom: '0.5rem' }}>Impacto</a>
+                            <a href="/consultoria#aliados" onClick={() => setIsMobileMenuOpen(false)} style={{ textDecoration: 'none', color: deepTeal, fontSize: '1.25rem', fontWeight: '800', borderBottom: '1px solid rgba(2, 83, 87, 0.1)', paddingBottom: '0.5rem' }}>Aliados</a>
+                        </>
+                    ) : (
+                        <>
+                            <Link to="/" onClick={() => setIsMobileMenuOpen(false)} style={{ textDecoration: 'none', color: '#fff', fontSize: '1.25rem', fontWeight: '600', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>Inicio</Link>
+                            <Link to="/tienda" onClick={() => setIsMobileMenuOpen(false)} style={{ textDecoration: 'none', color: '#fff', fontSize: '1.25rem', fontWeight: '600', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>Tienda</Link>
+                            <Link to="/catering" onClick={() => setIsMobileMenuOpen(false)} style={{ textDecoration: 'none', color: '#fff', fontSize: '1.25rem', fontWeight: '600', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>Catering</Link>
+                            <Link to="/nosotros" onClick={() => setIsMobileMenuOpen(false)} style={{ textDecoration: 'none', color: '#fff', fontSize: '1.25rem', fontWeight: '600', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>Nosotros</Link>
+                            <Link to="/consultoria" onClick={() => setIsMobileMenuOpen(false)} style={{ textDecoration: 'none', color: '#fff', fontSize: '1.25rem', fontWeight: '600', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>Consultoría</Link>
+                            <Link to="/recurrentes" onClick={() => setIsMobileMenuOpen(false)} style={{ 
+                                textDecoration: 'none', 
+                                color: 'var(--color-primary)', 
+                                background: '#D6BD98',
+                                padding: '1.2rem',
+                                borderRadius: '12px',
+                                textAlign: 'center',
+                                fontWeight: '800',
+                                fontSize: '1rem',
+                                marginTop: '1rem'
+                            }}>CLIENTES RECURRENTES</Link>
+                        </>
+                    )}
                 </div>
             )}
 
@@ -254,34 +322,48 @@ const Navbar = () => {
 };
 
 
-const Footer = () => (
-    <footer style={{ padding: '4rem 2rem', backgroundColor: 'var(--color-primary)', color: '#fff' }}>
-        <div className="container" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '3rem', textAlign: 'left' }}>
-            <div style={{ maxWidth: '300px' }}>
-                <img src={logo} alt="Zeticas" style={{ height: '40px', marginBottom: '1rem', filter: 'brightness(0) invert(1)' }} />
-                <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)', lineHeight: '1.6' }}>Exaltando los ecosistemas colombianos a través de productos agroecológicos de alta calidad.</p>
+const Footer = ({ isConsulting }) => (
+    <footer style={{ 
+        padding: '6rem 5%', 
+        backgroundColor: isConsulting ? institutionOcre : 'var(--color-primary)', 
+        color: isConsulting ? deepTeal : '#fff',
+        borderTop: isConsulting ? `1px solid rgba(2, 83, 87, 0.1)` : 'none'
+    }}>
+        <div className="container" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '4rem', textAlign: 'left' }}>
+            <div style={{ maxWidth: '350px' }}>
+                <img src={isConsulting ? logoCZ : logo} alt="Zeticas" style={{ 
+                    height: isConsulting ? '60px' : '50px', 
+                    marginBottom: '1.5rem', 
+                    filter: isConsulting ? 'none' : 'brightness(0) invert(1)' 
+                }} />
+                {isConsulting && (
+                    <div style={{ fontSize: '1.25rem', color: deepTeal, fontWeight: '800', marginBottom: '1.2rem', letterSpacing: '1px' }}>
+                        Consultoría
+                    </div>
+                )}
+                <p style={{ fontSize: '0.9rem', color: isConsulting ? '#666' : 'rgba(255,255,255,0.7)', lineHeight: '1.8' }}>Exaltando los ecosistemas colombianos a través de productos agroecológicos de alta calidad.</p>
             </div>
             <div>
-                <h4 className="font-serif" style={{ fontSize: '1.1rem', marginBottom: '1.2rem', color: '#fff' }}>Navegación</h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                    <Link to="/tienda" style={{ color: 'rgba(255,255,255,0.8)', textDecoration: 'none', fontSize: '0.85rem' }}>Tienda</Link>
-                    <Link to="/nosotros" style={{ color: 'rgba(255,255,255,0.8)', textDecoration: 'none', fontSize: '0.85rem' }}>Nuestra Historia</Link>
-                    <Link to="/catering" style={{ color: 'rgba(255,255,255,0.8)', textDecoration: 'none', fontSize: '0.85rem' }}>Catering</Link>
-                    <Link to="/consultoria" style={{ color: 'rgba(255,255,255,0.8)', textDecoration: 'none', fontSize: '0.85rem' }}>Consultoría</Link>
+                <h4 className="font-serif" style={{ fontSize: '1.2rem', marginBottom: '1.5rem', color: isConsulting ? deepTeal : '#fff' }}>Navegación</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                    <Link to="/tienda" style={{ color: isConsulting ? `${deepTeal}dd` : 'rgba(255,255,255,0.8)', textDecoration: 'none', fontSize: '0.9rem' }}>Tienda</Link>
+                    <Link to="/nosotros" style={{ color: isConsulting ? `${deepTeal}dd` : 'rgba(255,255,255,0.8)', textDecoration: 'none', fontSize: '0.9rem' }}>Nuestra Historia</Link>
+                    <Link to="/catering" style={{ color: isConsulting ? `${deepTeal}dd` : 'rgba(255,255,255,0.8)', textDecoration: 'none', fontSize: '0.9rem' }}>Catering</Link>
+                    <Link to="/consultoria" style={{ color: isConsulting ? `${deepTeal}dd` : 'rgba(255,255,255,0.8)', textDecoration: 'none', fontSize: '0.9rem' }}>Consultoría</Link>
                 </div>
             </div>
             <div>
-                <h4 className="font-serif" style={{ fontSize: '1.1rem', marginBottom: '1.2rem', color: '#fff' }}>Guasca, Cund.</h4>
-                <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)', marginBottom: '0.3rem' }}>Finca Mingalaba</p>
-                <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)', marginBottom: '1rem' }}>Vereda la Floresta</p>
-                <div style={{ display: 'flex', gap: '1rem' }}>
-                    <a href="https://instagram.com" style={{ color: '#fff', opacity: 0.8 }}><Instagram size={18} /></a>
-                    <a href="mailto:contacto@zeticas.com" style={{ color: '#fff', opacity: 0.8 }}><Mail size={18} /></a>
+                <h4 className="font-serif" style={{ fontSize: '1.2rem', marginBottom: '1.5rem', color: isConsulting ? deepTeal : '#fff' }}>Guasca, Cund.</h4>
+                <p style={{ fontSize: '0.9rem', color: isConsulting ? `${deepTeal}bb` : 'rgba(255,255,255,0.7)', marginBottom: '0.4rem' }}>Finca Mingalaba</p>
+                <p style={{ fontSize: '0.9rem', color: isConsulting ? `${deepTeal}bb` : 'rgba(255,255,255,0.7)', marginBottom: '1.5rem' }}>Vereda la Floresta</p>
+                <div style={{ display: 'flex', gap: '1.5rem' }}>
+                    <a href="https://instagram.com" style={{ color: isConsulting ? deepTeal : '#fff', opacity: 0.8 }}><Instagram size={20} /></a>
+                    <a href="mailto:contacto@zeticas.com" style={{ color: isConsulting ? deepTeal : '#fff', opacity: 0.8 }}><Mail size={20} /></a>
                 </div>
             </div>
         </div>
-        <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: '3rem', paddingTop: '1.5rem', textAlign: 'center' }}>
-            <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)' }}>© 2026 Zeticas. Sabana de Bogotá, Colombia.</p>
+        <div style={{ borderTop: isConsulting ? `1px solid rgba(2, 83, 87, 0.1)` : '1px solid rgba(255,255,255,0.1)', marginTop: '4rem', paddingTop: '2rem', textAlign: 'center' }}>
+            <p style={{ fontSize: '0.8rem', color: isConsulting ? deepTeal : 'rgba(255,255,255,0.5)', opacity: 0.6 }}>© 2026 Zeticas. Sabana de Bogotá, Colombia.</p>
         </div>
     </footer>
 );
@@ -332,17 +414,20 @@ const FloatingButtons = () => {
 };
 
 export default function Layout({ children }) {
+    const location = useLocation();
+    const isConsulting = location.pathname.startsWith('/consultoria');
     const isMobile = window.innerWidth <= 992;
+    
     return (
         <div className="layout">
-            <header style={{ position: 'fixed', top: 0, width: '100%', zIndex: 1000 }}>
-                <UtilityBar isMobile={isMobile} />
-                <Navbar />
+            <header style={{ position: 'fixed', top: 0, width: '100%', zIndex: 1200 }}>
+                <UtilityBar isMobile={isMobile} isConsulting={isConsulting} />
+                <Navbar isConsulting={isConsulting} />
             </header>
-            <main style={{ paddingTop: isMobile ? '105px' : '120px' }}>
+            <main style={{ paddingTop: isMobile ? '110px' : '125px' }}>
                 {children}
             </main>
-            <Footer />
+            <Footer isConsulting={isConsulting} />
             <FloatingButtons />
         </div>
     );
