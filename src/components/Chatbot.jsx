@@ -1,38 +1,39 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, X, Send, User, Bot, CheckCircle } from 'lucide-react';
+import { X, Send, User, Bot, ExternalLink, MessageCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+
+const WHATSAPP_NUMBER = '573138865666'; // Official Zeticas number
 
 const Chatbot = () => {
     const [isOpen, setIsOpen] = useState(false);
-    const [step, setStep] = useState(0);
+    const [step, setStep] = useState('CHOICE'); // Choice / B2B_FLOW / FAST_HELP
+    const [subStep, setSubStep] = useState(0);
     const [inputValue, setInputValue] = useState('');
     const [messages, setMessages] = useState([
-        { sender: 'bot', text: '¡Hola! Bienvenido a Zeticas Conservas Artesanales. Soy tu asistente virtual. ¿Me podrías indicar tu nombre completo para comenzar?' }
+        { sender: 'bot', text: '¡Hola! 🌿 Soy el asistente de Zeticas. Es un gusto saludarte. ¿Cómo podemos ayudarte hoy?' }
     ]);
+    
     const initialLeadData = {
         name: '',
         city: '',
         interest_type: '',
-        estimated_volume: 1,
-        urgency_date: null,
+        estimated_volume: '',
         email: '',
         phone: ''
     };
     const [leadData, setLeadData] = useState(initialLeadData);
-
+    const [isHovered, setIsHovered] = useState(false);
     const chatEndRef = useRef(null);
 
     const resetChat = () => {
         setIsOpen(false);
-        setStep(0);
+        setStep('CHOICE');
+        setSubStep(0);
         setInputValue('');
         setLeadData(initialLeadData);
-        setMessages([
-            { sender: 'bot', text: '¡Hola! Bienvenido a Zeticas Conservas Artesanales. Soy tu asistente virtual. ¿Me podrías indicar tu nombre completo para comenzar?' }
-        ]);
+        setMessages([{ sender: 'bot', text: '¡Hola! 🌿 Soy el asistente de Zeticas. Es un gusto saludarte. ¿Cómo podemos ayudarte hoy?' }]);
     };
 
-    // Scroll al final del chat
     useEffect(() => {
         if (chatEndRef.current) {
             chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -43,329 +44,241 @@ const Chatbot = () => {
         setMessages(prev => [...prev, { text, sender }]);
     };
 
-    const handleSend = async (textOverride) => {
-        const text = textOverride !== undefined ? textOverride : inputValue.trim();
-        if (!text && step !== 4 && step !== 2) return; // Permitir saltar fechas quizás, o type options
+    const generateWhatsAppLink = (data, isGeneral = false) => {
+        let text = "";
+        if (isGeneral) {
+            text = "Hola Zeticas! 👋 Tengo una duda sobre sus productos y me gustaría hablar con un encargado.";
+        } else {
+            text = `Hola Zeticas! 👋 Soy ${data.name}. Me interesa comprar ${data.interest_type} para la ciudad de ${data.city}. Estimo un volumen de ${data.estimated_volume || 'N/A'}. Mi correo es ${data.email}. Quedo atento!`;
+        }
+        return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`;
+    };
 
+    const handleChoice = (choice) => {
+        addMessage(choice, 'user');
+        
+        if (choice === 'Duda Rápida / Atención') {
+            setStep('FAST_HELP');
+            setTimeout(() => {
+                addMessage("¡Perfecto! Te voy a comunicar de inmediato con el encargado. Solo pulsa el botón de abajo para iniciar el chat. 👇", 'bot');
+            }, 600);
+        } else {
+            setStep('B2B_FLOW');
+            setLeadData(prev => ({ ...prev, interest_type: choice }));
+            setTimeout(() => {
+                addMessage(`¡Excelente elección! Nos encanta trabajar con nuevos distribuidores y aliados. Para darte una atención personalizada, ¿cuál es tu nombre o el de tu negocio?`, 'bot');
+            }, 600);
+        }
+    };
+
+    const handleB2BStep = async (text) => {
+        if (!text.trim() && subStep !== 2) return;
         addMessage(text, 'user');
         setInputValue('');
-
+        
         let updatedData = { ...leadData };
 
-        // Máquina de estados para las preguntas
-        switch (step) {
-            case 0:
+        switch (subStep) {
+            case 0: // Name
                 updatedData.name = text;
                 setLeadData(updatedData);
-                setTimeout(() => {
-                    addMessage(`¡Un gusto saludarte, ${text}! ¿A qué ciudad sería el envío o destino del pedido?`, 'bot');
-                    setStep(1);
-                }, 600);
+                setSubStep(1);
+                setTimeout(() => addMessage(`¡Gusto en saludarte, ${text}! ¿En qué ciudad te encuentras o dónde sería el destino?`, 'bot'), 600);
                 break;
-            case 1:
+            case 1: // City
                 updatedData.city = text;
                 setLeadData(updatedData);
-                setTimeout(() => {
-                    addMessage(`Perfecto. ¿Qué tipo de interés tienes en nuestros productos? (Selecciona una opción abajo)`, 'bot');
-                    setStep(2);
-                }, 600);
+                setSubStep(2);
+                setTimeout(() => addMessage(`Anotado. ¿Qué volumen o cantidad de kits/unidades (o cajas de 12 unidades) estimas que necesitas para iniciar?`, 'bot'), 600);
                 break;
-            case 2:
-                updatedData.interest_type = text;
+            case 2: // Volume
+                updatedData.estimated_volume = text;
                 setLeadData(updatedData);
-                setTimeout(() => {
-                    addMessage(`Entendido (${text}). ¿Cuántas unidades o cajas estimas que necesitas? (Ej: Cajas de 12 o Kits de 3. Solo ingresa el número estimado)`, 'bot');
-                    setStep(3);
-                }, 600);
+                setSubStep(3);
+                setTimeout(() => addMessage(`Perfecto. Por último, déjanos tu correo electrónico para enviarte la lista de precios mayorista y el catálogo formal.`, 'bot'), 600);
                 break;
-            case 3:
-                updatedData.estimated_volume = parseInt(text.replace(/\D/g, ''), 10) || 1;
-                setLeadData(updatedData);
-                setTimeout(() => {
-                    addMessage(`Muy bien. ¿Para cuándo necesitas el pedido? (Ingresa la fecha aproximada DD/MM/AAAA o deja en blanco si es flexible)`, 'bot');
-                    setStep(4);
-                }, 600);
-                break;
-            case 4:
-                // Intentar parsear fecha o null
-                const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-                if (dateRegex.test(text)) {
-                    updatedData.urgency_date = text;
-                } else {
-                    updatedData.urgency_date = null; // flexible
-                }
-                setLeadData(updatedData);
-                setTimeout(() => {
-                    addMessage(`Anotado. Para poder enviarte la cotización y asignar tu requerimiento, ¿cuál es tu correo electrónico?`, 'bot');
-                    setStep(5);
-                }, 600);
-                break;
-            case 5:
+            case 3: // Email
                 updatedData.email = text;
                 setLeadData(updatedData);
-                setTimeout(() => {
-                    addMessage(`Finalmente, ¿Me puedes confirmar un número de teléfono o celular (ej. WhatsApp) para contactarte?`, 'bot');
-                    setStep(6);
-                }, 600);
-                break;
-            case 6:
-                updatedData.phone = text;
-                setLeadData(updatedData);
-                setStep(7);
-
-                // Enviar a la base de datos (Supabase leads table)
+                setSubStep(4);
                 setTimeout(async () => {
-                    addMessage(`Procesando tu solicitud...`, 'bot');
+                    addMessage(`¡Listo! He registrado tu interés en nuestro panel de gestión. Ahora te pondré en contacto directo con el encargado para agilizar tu pedido. 👇`, 'bot');
+                    
+                    // CRM Save
                     try {
-                        const { error } = await supabase.from('leads').insert([{
+                        await supabase.from('leads').insert([{
                             name: updatedData.name,
                             city: updatedData.city,
                             interest_type: updatedData.interest_type,
                             estimated_volume: updatedData.estimated_volume,
-                            urgency_date: updatedData.urgency_date,
                             email: updatedData.email,
-                            phone: updatedData.phone,
                             stage: 'Nuevo Lead'
-                            // assigned_to se asignaría de forma automática por el backend o el RR logic.
                         }]);
-
-                        if (error) {
-                            console.error('Error al insertar lead', error);
-                            if (error.code === '42P01' || error.code === 'PGRST205') {
-                                // Fallback a LocalStorage si falta la tabla.
-                                const localLeads = JSON.parse(localStorage.getItem('zeticas_local_leads') || '[]');
-                                localLeads.unshift({
-                                    id: crypto.randomUUID(),
-                                    name: updatedData.name,
-                                    city: updatedData.city,
-                                    interest_type: updatedData.interest_type,
-                                    estimated_volume: updatedData.estimated_volume,
-                                    urgency_date: updatedData.urgency_date,
-                                    email: updatedData.email,
-                                    phone: updatedData.phone,
-                                    stage: 'Nuevo Lead',
-                                    created_at: new Date().toISOString(),
-                                    value_projection: updatedData.estimated_volume * 30000 // Estimado
-                                });
-                                localStorage.setItem('zeticas_local_leads', JSON.stringify(localLeads));
-                                window.dispatchEvent(new Event('local_leads_updated')); // Disparar actualización de CRM
-
-                                addMessage(`¡Listo! un comercial de Zeticas se comunicará con usted, lo antes posible !!`, 'bot');
-                                setTimeout(resetChat, 3500);
-                            } else {
-                                addMessage(`Ocurrió un pequeño inconveniente al registrar tus datos. Por favor, intenta de nuevo más tarde o comunícate a nuestro teléfono principal.`, 'bot');
-                            }
-                        } else {
-                            window.dispatchEvent(new Event('lead_added_db'));
-                            addMessage(`¡Listo! un comercial de Zeticas se comunicará con usted, lo antes posible !!`, 'bot');
-                            setTimeout(resetChat, 3500);
-                        }
-                    } catch (err) {
-                        console.error('Catch error', err);
-                        addMessage(`Tuvimos un error al procesar tu solicitud. Un momento por favor.`, 'bot');
-                    }
+                    } catch (e) { console.error("Error saving lead", e); }
+                    
                 }, 800);
                 break;
             default:
-                addMessage(`Tu solicitud ya ha sido registrada, ¡pronto nos comunicaremos!`, 'bot');
                 break;
-        }
-    };
-
-    const handleKeyPress = (e) => {
-        if (e.key === 'Enter') {
-            handleSend();
         }
     };
 
     return (
         <>
-            {/* Botón flotante para abrir el chat */}
             {!isOpen && (
-                <div style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
-                    {/* Burbuja de saludo opcional */}
-                    <div style={{ background: '#fff', padding: '8px 16px', borderRadius: '18px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: '0.85rem', color: 'var(--color-primary)', fontWeight: '500', border: '1px solid #e2e8f0', marginBottom: '4px', animation: 'fadeInUp 0.5s ease' }}>
-                        ¡Hola! 👋 ¿En qué puedo ayudarte?
-                    </div>
-                    <button
-                        onClick={() => setIsOpen(true)}
-                        style={{
-                            background: 'white',
-                            color: 'var(--color-primary)',
-                            border: '2px solid var(--color-primary)',
-                            borderRadius: '50%',
-                            width: '70px',
-                            height: '70px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: 'pointer',
-                            boxShadow: '0 10px 25px rgba(0,77,77,0.2)',
-                            transition: 'all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-                            padding: '0',
-                            overflow: 'hidden'
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.1) rotate(5deg)'; e.currentTarget.style.boxShadow = '0 15px 30px rgba(0,77,77,0.3)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1) rotate(0deg)'; e.currentTarget.style.boxShadow = '0 10px 25px rgba(0,77,77,0.2)'; }}
-                    >
-                        <img src="/bot_icon.png" alt="Zeticas Bot" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    </button>
-                </div>
+                <button
+                    onClick={() => setIsOpen(true)}
+                    onMouseEnter={() => setIsHovered(true)}
+                    onMouseLeave={() => setIsHovered(false)}
+                    style={{
+                        position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999,
+                        background: 'white', color: 'var(--color-primary)', border: '3px solid var(--color-primary)',
+                        borderRadius: '50%', width: '70px', height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer', boxShadow: '0 12px 30px rgba(2, 83, 87, 0.25)',
+                        transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                        transform: isHovered ? 'scale(1.1) rotate(5deg)' : 'scale(1) rotate(0deg)',
+                        overflow: 'hidden'
+                    }}
+                >
+                    <img src="/bot_icon.png" alt="Bot" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                </button>
             )}
 
-            {/* Ventana del Chatbot */}
             {isOpen && (
                 <div style={{
-                    position: 'fixed',
-                    bottom: '90px',
-                    right: '24px',
-                    width: '360px',
-                    height: '500px',
-                    backgroundColor: '#fff',
-                    borderRadius: '16px',
-                    boxShadow: '0 12px 36px rgba(0,0,0,0.15)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    overflow: 'hidden',
-                    zIndex: 9999,
-                    border: '1px solid #e2e8f0'
+                    position: 'fixed', bottom: '90px', right: '24px', width: '360px', height: '520px',
+                    backgroundColor: '#fff', borderRadius: '16px', boxShadow: '0 15px 45px rgba(0,0,0,0.15)',
+                    display: 'flex', flexDirection: 'column', overflow: 'hidden', zIndex: 9999, border: '1px solid #e2e8f0'
                 }}>
                     {/* Header */}
                     <div style={{
-                        padding: '16px',
-                        background: 'linear-gradient(135deg, var(--color-primary) 0%, #2a5a5a 100%)',
-                        color: '#fff',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center'
+                        padding: '16px', background: 'var(--color-primary)', color: '#fff',
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center'
                     }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <div style={{ background: '#fff', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                                <img src="/bot_icon.png" alt="Zeticas Bot" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <div style={{ background: '#fff', borderRadius: '50%', width: '32px', height: '32px', overflow: 'hidden' }}>
+                                <img src="/bot_icon.png" alt="Bot" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             </div>
-                            <div>
-                                <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 'bold' }}>Zeticas CRM Bot</h4>
-                                <span style={{ fontSize: '0.75rem', opacity: 0.9 }}>Respuestas automatizadas</span>
-                            </div>
+                            <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: '800', letterSpacing: '0.05em' }}>RECEPCIÓN ZETICAS</h4>
                         </div>
-                        <button
-                            onClick={() => setIsOpen(false)}
-                            style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer' }}
-                        >
-                            <X size={20} />
-                        </button>
+                        <button onClick={() => setIsOpen(false)} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer' }}><X size={20} /></button>
                     </div>
 
-                    {/* Mensajes */}
-                    <div style={{
-                        flex: 1,
-                        padding: '16px',
-                        overflowY: 'auto',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '12px',
-                        backgroundColor: '#f8fafc'
-                    }}>
+                    {/* Messages Body */}
+                    <div style={{ flex: 1, padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px', backgroundColor: '#fcfaf9' }}>
                         {messages.map((msg, idx) => (
-                            <div key={idx} style={{
-                                display: 'flex',
-                                justifyContent: msg.sender === 'user' ? 'flex-end' : 'flex-start'
-                            }}>
+                            <div key={idx} style={{ display: 'flex', justifyContent: msg.sender === 'user' ? 'flex-end' : 'flex-start' }}>
                                 <div style={{
-                                    maxWidth: '85%',
-                                    padding: '10px 14px',
-                                    borderRadius: '16px',
-                                    fontSize: '0.9rem',
-                                    lineHeight: '1.4',
+                                    maxWidth: '85%', padding: '12px 16px', borderRadius: '18px', fontSize: '0.92rem',
                                     backgroundColor: msg.sender === 'user' ? 'var(--color-primary)' : '#fff',
-                                    color: msg.sender === 'user' ? '#fff' : '#334155',
-                                    boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                                    borderBottomRightRadius: msg.sender === 'user' ? '4px' : '16px',
-                                    borderBottomLeftRadius: msg.sender === 'bot' ? '4px' : '16px',
-                                    border: msg.sender === 'bot' ? '1px solid #e2e8f0' : 'none'
+                                    color: msg.sender === 'user' ? '#fff' : 'var(--color-text)',
+                                    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                                    border: msg.sender === 'bot' ? '1px solid #eee' : 'none'
                                 }}>
                                     {msg.text}
                                 </div>
                             </div>
                         ))}
 
-                        {/* Opciones rápidas para Step 2 (Tipo de Interés) */}
-                        {step === 2 && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
-                                {['Personal', 'Corporativo', 'Mayorista'].map(opt => (
-                                    <button
-                                        key={opt}
-                                        onClick={() => {
-                                            setInputValue(opt);
-                                            handleSend(opt);
-                                        }}
+                        {/* INITIAL CHOICES */}
+                        {step === 'CHOICE' && messages.length === 1 && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+                                {['Comprar al Por Mayor', 'Consultoría / Aliados', 'Duda Rápida / Atención'].map(btn => (
+                                    <button 
+                                        key={btn}
+                                        onClick={() => handleChoice(btn)}
                                         style={{
-                                            background: '#fff',
-                                            border: '1px solid var(--color-primary)',
-                                            color: 'var(--color-primary)',
-                                            padding: '8px',
-                                            borderRadius: '8px',
-                                            fontSize: '0.85rem',
-                                            fontWeight: 'bold',
-                                            cursor: 'pointer',
-                                            transition: 'background 0.2s'
+                                            background: '#fff', border: '2px solid var(--color-primary)', color: 'var(--color-primary)',
+                                            padding: '10px', borderRadius: '12px', fontSize: '0.85rem', fontWeight: '800', cursor: 'pointer',
+                                            transition: 'all 0.2s ease', display: 'flex', justifyContent: 'space-between', alignItems: 'center'
                                         }}
-                                        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-primary)'; e.currentTarget.style.color = '#fff'; }}
-                                        onMouseLeave={(e) => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.color = 'var(--color-primary)'; }}
+                                        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-primary)'; e.currentTarget.style.color = '#fff' }}
+                                        onMouseLeave={(e) => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.color = 'var(--color-primary)' }}
                                     >
-                                        {opt}
+                                        {btn}
+                                        <ExternalLink size={14} opacity={0.5} />
                                     </button>
                                 ))}
                             </div>
                         )}
+
+                        {/* FAST HELP FINAL BUTTON */}
+                        {step === 'FAST_HELP' && (
+                            <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center' }}>
+                                <a 
+                                    href={generateWhatsAppLink({}, true)} 
+                                    target="_blank" rel="noreferrer"
+                                    style={{
+                                        background: '#25D366', color: '#fff', textDecoration: 'none',
+                                        padding: '12px 24px', borderRadius: '50px', fontWeight: '900',
+                                        display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 8px 20px rgba(37, 211, 102, 0.3)'
+                                    }}
+                                >
+                                    <MessageCircle size={20} /> IR A WHATSAPP
+                                </a>
+                            </div>
+                        )}
+
+                        {/* B2B FLOW FINAL BUTTON (Step 4) */}
+                        {step === 'B2B_FLOW' && subStep === 4 && (
+                            <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center' }}>
+                                <a 
+                                    href={generateWhatsAppLink(leadData)} 
+                                    target="_blank" rel="noreferrer"
+                                    style={{
+                                        background: 'var(--color-primary)', color: '#fff', textDecoration: 'none',
+                                        padding: '12px 24px', borderRadius: '50px', fontWeight: '900',
+                                        display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 8px 20px rgba(2, 83, 87, 0.3)'
+                                    }}
+                                >
+                                    <MessageCircle size={20} /> HABLAR CON ENCARGADO
+                                </a>
+                            </div>
+                        )}
+                        {/* BACK BUTTON (ONLY IF NOT AT CHOICE STEP) */}
+                        {step !== 'CHOICE' && (
+                            <button 
+                                onClick={resetChat}
+                                style={{
+                                    alignSelf: 'center',
+                                    marginTop: 'auto',
+                                    background: 'transparent',
+                                    border: 'none',
+                                    color: 'var(--color-text-light)',
+                                    fontSize: '0.75rem',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.1em',
+                                    cursor: 'pointer',
+                                    opacity: 0.6,
+                                    textDecoration: 'underline',
+                                    padding: '10px'
+                                }}
+                            >
+                                Regresar al menú principal
+                            </button>
+                        )}
                         <div ref={chatEndRef}></div>
                     </div>
 
-                    {/* Input Area */}
-                    <div style={{
-                        padding: '12px',
-                        borderTop: '1px solid #e2e8f0',
-                        display: 'flex',
-                        gap: '8px',
-                        backgroundColor: '#fff',
-                        alignItems: 'center'
-                    }}>
-                        <input
-                            type={step === 4 ? "date" : "text"}
-                            placeholder={step === 7 ? "Chat finalizado..." : "Escribe tu mensaje..."}
-                            value={inputValue}
-                            onChange={(e) => setInputValue(e.target.value)}
-                            onKeyDown={handleKeyPress}
-                            disabled={step === 7 || step === 2} // Desactiva input libre si está en opciones select o final
-                            style={{
-                                flex: 1,
-                                padding: '10px 14px',
-                                borderRadius: '24px',
-                                border: '1px solid #cbd5e1',
-                                outline: 'none',
-                                fontSize: '0.9rem'
-                            }}
-                        />
-                        <button
-                            onClick={() => handleSend()}
-                            disabled={step === 7 || (!inputValue.trim() && step !== 4 && step !== 2) || step === 2}
-                            style={{
-                                background: 'var(--color-primary)',
-                                color: '#fff',
-                                border: 'none',
-                                borderRadius: '50%',
-                                width: '40px',
-                                height: '40px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: 'pointer',
-                                opacity: step === 7 ? 0.5 : 1
-                            }}
-                        >
-                            <Send size={18} style={{ marginLeft: '2px' }} />
-                        </button>
-                    </div>
+                    {/* Input Area (Only for B2B flow) */}
+                    {step === 'B2B_FLOW' && subStep < 4 && (
+                        <div style={{ padding: '15px', borderTop: '1px solid #eee', display: 'flex', gap: '10px', alignItems: 'center' }}>
+                            <input 
+                                type="text"
+                                placeholder="Escribe aquí..."
+                                value={inputValue}
+                                onChange={(e) => setInputValue(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleB2BStep(inputValue)}
+                                style={{ flex: 1, padding: '12px 18px', borderRadius: '50px', border: '1px solid #ddd', outline: 'none', fontSize: '0.9rem' }}
+                            />
+                            <button 
+                                onClick={() => handleB2BStep(inputValue)}
+                                style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: '50%', width: '45px', height: '45px', cursor: 'pointer' }}
+                            >
+                                <Send size={18} />
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
         </>

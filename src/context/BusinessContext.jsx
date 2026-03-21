@@ -286,7 +286,12 @@ export const BusinessProvider = ({ children }) => {
             .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
                 refreshData();
             })
-            .subscribe();
+            .subscribe((status) => {
+                if (status === 'CHANNEL_ERROR') {
+                    console.warn('Business Realtime connection failed (Channel Error). Realtime updates may be disabled.');
+                    supabase.removeChannel(channel);
+                }
+            });
 
         return () => {
             supabase.removeChannel(channel);

@@ -54,7 +54,12 @@ const CRM = () => {
             .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, payload => {
                 fetchLeads();
             })
-            .subscribe();
+            .subscribe((status) => {
+                if (status === 'CHANNEL_ERROR') {
+                    console.warn('CRM Leads Realtime connection failed (Channel Error).');
+                    supabase.removeChannel(channel);
+                }
+            });
 
         const handleLocalUpdate = () => {
             const localLeads = JSON.parse(localStorage.getItem('zeticas_local_leads') || '[]');
@@ -361,7 +366,7 @@ const CRM = () => {
 
             // Logo
             try {
-                const logoUrl = 'https://obsvdzlsbbqmhpsxksnd.supabase.co/storage/v1/object/public/assets/logo.png';
+                const logoUrl = '/logo.png';
                 const img = new Image();
                 img.crossOrigin = 'Anonymous';
                 img.src = logoUrl;
@@ -374,12 +379,12 @@ const CRM = () => {
 
             // Header - Título
             doc.setFontSize(22);
-            doc.setTextColor(0, 77, 77); // Zeticas Teal
+            doc.setTextColor(2, 83, 87); // Zeticas Green
             doc.setFont('helvetica', 'bold');
             doc.text('COTIZACIÓN COMERCIAL', 14, 25);
 
             // Divider
-            doc.setDrawColor(0, 77, 77);
+            doc.setDrawColor(2, 83, 87);
             doc.setLineWidth(0.5);
             doc.line(14, 32, 196, 32);
 
@@ -418,7 +423,7 @@ const CRM = () => {
                 head: [tableColumn],
                 body: tableRows,
                 theme: 'grid',
-                headStyles: { fillColor: [0, 77, 77], textColor: [255, 255, 255], fontStyle: 'bold' },
+                headStyles: { fillColor: [2, 83, 87], textColor: [255, 255, 255], fontStyle: 'bold' },
                 bodyStyles: { textColor: [51, 65, 85] },
                 columnStyles: {
                     0: { halign: 'left' },
@@ -431,7 +436,7 @@ const CRM = () => {
             const finalY = (doc.lastAutoTable?.finalY || 65) + 15;
             doc.setFontSize(14);
             doc.setFont('helvetica', 'bold');
-            doc.setTextColor(0, 77, 77);
+            doc.setTextColor(2, 83, 87);
             doc.text(`TOTAL COTIZADO: $${total.toLocaleString()}`, 196, finalY, { align: 'right' });
 
             // Footer

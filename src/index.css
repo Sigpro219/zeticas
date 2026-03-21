@@ -3,15 +3,13 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap');
 
 :root {
-  --color-primary: #004D4D;
-  /* Official Zeticas Teal */
-  --color-secondary: #EBA080;
-  /* Official Zeticas Salmon */
-  --color-sage: #9AB4A2;
-  /* Sage Green */
-  --color-bg: #FFFFFF;
-  --color-text: #2D2D2D;
-  --color-text-light: #6B7280;
+  --color-primary: #025357; /* Official Zeticas Teal */
+  --color-secondary: #F37C79; /* Official Zeticas Salmon/Coral */
+  --color-sage: #AFBF71; /* Official Zeticas Sage Green */
+  --color-bg: #FDF8F6; /* Organic Cream Background */
+  --color-text: #353535; /* Main Body Text */
+  --color-text-light: #6B7280; 
+  --color-utility: #EEF1F8; /* Light Utility Bar */
 
   --font-serif: 'Playfair Display', serif;
   --font-sans: 'Inter', sans-serif;
@@ -59,7 +57,7 @@ h4,
 .btn {
   display: inline-block;
   padding: 0.75rem 2rem;
-  border-radius: 2px;
+  border-radius: 50px;
   text-decoration: none;
   font-weight: 500;
   transition: all 0.3s ease;
@@ -75,7 +73,7 @@ h4,
 }
 
 .btn-primary:hover {
-  background-color: #003d3d;
+  background-color: #013d40;
   transform: translateY(-2px);
 }
 
@@ -95,11 +93,35 @@ h4,
 }
 
 .botanical-bg {
-  background-image: url('https://obsvdzlsbbqmhpsxksnd.supabase.co/storage/v1/object/public/assets/pattern.png');
+  position: relative;
+  overflow: hidden;
+  background-color: var(--bg-filter, var(--color-bg));
+}
+
+.botanical-bg::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: url('/assets/bg-pattern.png');
   background-repeat: repeat;
-  background-size: 400px;
+  background-size: 1200px;
   background-attachment: fixed;
-  background-color: #fafafa;
+  mix-blend-mode: multiply; /* Ensures lines blend but pattern background is clear */
+  opacity: 0.15; /* Subtly tinted lines */
+  filter: var(--bg-pattern-filter, none);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.container, 
+.allies-section > *, 
+.hero > *,
+.allies-section {
+  position: relative;
+  z-index: 1;
 }
 
 .bg-salmon-light {
@@ -123,4 +145,59 @@ h4,
 .navbar-dark .nav-links a,
 .navbar-dark .nav-icons a {
   color: #fff !important;
+}
+
+/* Infinite Scroll Animation for Brands */
+@keyframes scroll-brands {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.scroll-viewport {
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.scroll-container {
+  display: flex;
+  width: max-content;
+  animation: scroll-brands 40s linear infinite;
+  gap: 2rem;
+  padding: 2rem 0;
+}
+
+.scroll-container:hover {
+  animation-play-state: paused;
+}
+
+.brand-card {
+  width: 320px;
+  height: auto;
+  min-height: 180px; 
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  flex-shrink: 0;
+}
+
+.brand-card:hover {
+  transform: translateY(-10px) scale(1.05);
+}
+
+.brand-card img {
+  max-width: 200px;
+  max-height: 120px;
+  object-fit: contain;
+  filter: grayscale(1) opacity(0.7); 
+  transition: all 0.4s ease;
+}
+
+.brand-card:hover img {
+  filter: grayscale(0) brightness(1) contrast(1) drop-shadow(0 15px 30px rgba(0,0,0,0.15));
+  opacity: 1;
 }

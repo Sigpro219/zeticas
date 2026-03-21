@@ -5,14 +5,18 @@ const farmPhoto = 'https://obsvdzlsbbqmhpsxksnd.supabase.co/storage/v1/object/pu
 
 const Nosotros = () => {
     return (
-        <div className="nosotros-page botanical-bg" style={{ minHeight: '100vh', padding: '6rem 0' }}>
+        <div className="nosotros-page botanical-bg" style={{ minHeight: '100vh', padding: '5rem 0' }}>
             <div className="container">
                 {/* Hero Section for Nosotros */}
-                <section className="nosotros-hero" style={{ marginBottom: '6rem' }}>
+                <section className="nosotros-hero" style={{ marginBottom: '8rem' }}>
                     <h1 className="font-serif" style={{ color: 'var(--color-primary)', fontSize: '5rem', marginBottom: '4rem', textAlign: 'center' }}>Nosotros</h1>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '4rem', alignItems: 'center' }}>
-                        <div className="nosotros-content salmon-box" style={{ boxShadow: '20px 20px 60px rgba(0,0,0,0.1)', padding: '4rem' }}>
+                        <div className="nosotros-content salmon-box" style={{ 
+                            boxShadow: '20px 20px 60px rgba(0,0,0,0.1)', 
+                            padding: '4rem',
+                            borderRadius: '24px' 
+                        }}>
                             <p style={{ color: '#fff', fontSize: '1.2rem', lineHeight: '1.8', opacity: 0.9 }}>
                                 Zeticas nace de la pasión por nuestra tierra y el deseo de transformar la riqueza de la Sabana de Bogotá en productos excepcionales que cuentan una historia de sostenibilidad y respeto.
                             </p>
@@ -21,14 +25,14 @@ const Nosotros = () => {
                             <img
                                 src={teamPhoto}
                                 alt="Equipo Zeticas"
-                                style={{ width: '100%', height: 'auto', borderRadius: '4px', boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}
+                                style={{ width: '100%', height: 'auto', borderRadius: '24px', boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}
                             />
                         </div>
                     </div>
                 </section>
 
                 {/* Detailed Story Section */}
-                <section className="nosotros-details" style={{ maxWidth: '800px', margin: '0 auto', background: '#fff', padding: '4rem', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', borderRadius: '4px' }}>
+                <section className="nosotros-details" style={{ maxWidth: '800px', margin: '0 auto', background: '#fff', padding: '4rem', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', borderRadius: '24px' }}>
                     <h2 className="font-serif" style={{ fontSize: '2.5rem', marginBottom: '2rem', textAlign: 'center' }}>Camila Zambrano</h2>
                     <p style={{ marginBottom: '2rem', fontSize: '1.1rem', color: '#444' }}>
                         Ingeniera de Producción Agroindustrial con 15 años de experiencia en desarrollo rural. Camila ha unido su conocimiento técnico con una passion profunda por la biodiversidad colombiana.
@@ -52,7 +56,7 @@ const Nosotros = () => {
                 </section>
 
                 {/* ZetaMovil Section */}
-                <section style={{ marginTop: '6rem', textAlign: 'center', position: 'relative' }}>
+                <section style={{ marginTop: '8rem', textAlign: 'center', position: 'relative' }}>
                     <div style={{
                         position: 'absolute',
                         top: '-100px',
@@ -68,7 +72,7 @@ const Nosotros = () => {
                     <img
                         src={farmPhoto}
                         alt="Finca Zeticas"
-                        style={{ width: '100%', maxHeight: '400px', objectFit: 'cover', borderRadius: '8px', marginBottom: '3rem', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}
+                        style={{ width: '100%', maxHeight: '400px', objectFit: 'cover', borderRadius: '24px', marginBottom: '3rem', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}
                     />
                     <h2 className="font-serif" style={{ fontSize: '2.5rem', marginBottom: '2rem' }}>El Zetamóvil</h2>
                     <p style={{ maxWidth: '600px', margin: '0 auto 3rem', color: '#666' }}>

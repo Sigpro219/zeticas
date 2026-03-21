@@ -13,6 +13,12 @@ const ProductDetail = () => {
     const [quantity, setQuantity] = useState(1);
     const [isZoomed, setIsZoomed] = useState(false);
 
+    // Optimization: Supabase Image Transformation helper
+    const getOptimizedUrl = (url) => {
+        // Reverting to direct link as render/image/public is failing
+        return url;
+    };
+
     useEffect(() => {
         const foundProduct = products.find(p => p.id === id);
         if (foundProduct) {
@@ -75,8 +81,9 @@ const ProductDetail = () => {
                             onClick={() => setIsZoomed(!isZoomed)}
                         >
                             <img
-                                src={product.imagen_url}
+                                src={getOptimizedUrl(product.imagen_url, 800)}
                                 alt={product.nombre}
+                                decoding="async"
                                 style={{
                                     width: '100%',
                                     height: 'auto',
@@ -221,7 +228,13 @@ const ProductDetail = () => {
                                     boxShadow: '0 5px 20px rgba(0,0,0,0.03)',
                                     transition: 'transform 0.3s ease'
                                 }}>
-                                    <img src={rp.imagen_url} alt={rp.nombre} style={{ width: '100%', height: 'auto', borderRadius: '2px', marginBottom: '1rem' }} />
+                                    <img 
+                                        src={getOptimizedUrl(rp.imagen_url, 400)} 
+                                        alt={rp.nombre} 
+                                        loading="lazy"
+                                        decoding="async"
+                                        style={{ width: '100%', height: 'auto', borderRadius: '2px', marginBottom: '1rem' }} 
+                                    />
                                     <h3 style={{ fontSize: '1.1rem', color: 'var(--color-primary)', margin: '0 0 0.5rem' }}>{rp.nombre}</h3>
                                     <p style={{ fontWeight: 'bold', color: 'var(--color-secondary)', margin: 0 }}>
                                         ${rp.precio.toLocaleString('es-CO')}

@@ -1,12 +1,16 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 const savannaImg = 'https://obsvdzlsbbqmhpsxksnd.supabase.co/storage/v1/object/public/assets/savanna.png';
 
 const ConsultingSection = () => {
     return (
-        <section className="consulting whitespace-xl">
+        <section className="consulting whitespace-xl" style={{ 
+            backgroundColor: '#ffffff',
+            padding: '10.8rem 0 8rem' // Reduced bottom for more compact flow
+        }}>
             <div className="container" style={{
                 display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
+                gridTemplateColumns: window.innerWidth <= 768 ? '1fr' : '1fr 1fr', // Basic responsive check
                 gap: '4rem',
                 alignItems: 'center'
             }}>
@@ -31,7 +35,14 @@ const ConsultingSection = () => {
                             Optimización de cadena de valor local
                         </li>
                     </ul>
-                    <a href="/consultoria" className="btn btn-primary">Conocer más</a>
+                    <Link to="/consultoria" className="btn btn-primary" style={{
+                        padding: '1rem 2.5rem',
+                        fontWeight: '800',
+                        fontSize: '0.85rem',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.1em',
+                        borderRadius: '50px' // Polishing button
+                    }}>Conocer más</Link>
                 </div>
                 <div className="consulting-image">
                     <img
@@ -39,7 +50,7 @@ const ConsultingSection = () => {
                         alt="Sabana de Bogotá Landscape"
                         style={{
                             width: '100%',
-                            height: '500px',
+                            height: '420px', // Slightly reduced height
                             objectFit: 'cover',
                             borderRadius: '2px'
                         }}
