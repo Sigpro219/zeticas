@@ -21,11 +21,13 @@ import { CartProvider } from './context/CartContext'
 import { AuthProvider } from './context/AuthContext'
 import { BusinessProvider } from './context/BusinessContext'
 import Chatbot from './components/Chatbot'
+import ScrollToTop from './components/ScrollToTop'
 import './index.css'
 
 function App() {
   return (
     <Router>
+      <ScrollToTop />
       <BusinessProvider>
         <CartProvider>
           <AuthProvider>

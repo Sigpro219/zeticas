@@ -22,7 +22,10 @@ import autoTable from 'jspdf-autotable';
 import { supabase } from '../lib/supabase';
 
 const Shipping = () => {
-    const { orders, setOrders, items, setItems, refreshData } = useBusiness();
+    useEffect(() => {
+        window.scrollTo(0, 0);
+    }, []);
+    const { orders, items, refreshData } = useBusiness();
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState('month');
     const [customRange, setCustomRange] = useState({ from: '', to: '' });
@@ -37,7 +40,7 @@ const Shipping = () => {
     };
 
     // Calculate inventory availability for an order
-    const checkAvailability = (orderItems) => {
+    const checkAvailability = React.useCallback((orderItems) => {
         for (const item of orderItems) {
             const inventoryItem = items.find(i => i.name === item.name || i.id === item.id);
             if (!inventoryItem) return false;
@@ -45,7 +48,7 @@ const Shipping = () => {
             if (currentStock < item.quantity) return false;
         }
         return true;
-    };
+    }, [items]);
 
     // Calculate days since order
     const getDaysSince = (orderDate) => {
@@ -61,10 +64,8 @@ const Shipping = () => {
         localStorage.setItem('zeticas_last_invoice_num', nextNum.toString());
         return `FE-${nextNum}`;
     };
-
     const handleCreateInvoice = async (order) => {
         const invNum = generateInvoiceNumber();
-        const invDate = new Date().toISOString();
 
         // Generate PDF
         const doc = new jsPDF();
@@ -280,150 +281,386 @@ const Shipping = () => {
         const min = stats.times.length > 0 ? Math.min(...stats.times) : 0;
 
         return { ...stats, avg, max, min };
-    }, [filteredOrders, items]);
+    }, [filteredOrders, checkAvailability]);
+
+    // Premium Style Constants
+    const deepTeal = "#025357";
+    const institutionOcre = "#D6BD98";
+    const premiumSalmon = "#D4785A";
+    const glassWhite = "rgba(255, 255, 255, 0.85)";
 
     return (
-        <div className="shipping-container" style={{ padding: '0 1rem' }}>
-            <header style={{ marginBottom: '2.5rem' }}>
-                <h2 className="font-serif" style={{ fontSize: '2.2rem', color: 'var(--color-primary)', margin: 0 }}>Logística y Despachos</h2>
-                <p style={{ color: '#666', fontSize: '0.95rem', marginTop: '0.4rem' }}>Optimización de flujo JIT y facturación automática.</p>
-            </header>
+        <div style={{ 
+            padding: '0 0.5rem', 
+            background: 'transparent', 
+            minHeight: '100vh',
+            animation: 'fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1)'
+        }}>
+            {/* Header Section Removed - Handled by Gestion.jsx */}
+            <div style={{ marginBottom: '2rem' }} />
 
-            {/* Filter Bar */}
-            <div style={{ background: '#fff', padding: '1.2rem', borderRadius: '16px', border: '1px solid #f1f5f9', marginBottom: '2rem', display: 'flex', gap: '1.5rem', alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
-                <div style={{ display: 'flex', background: '#f1f5f9', padding: '0.3rem', borderRadius: '10px' }}>
+            {/* Filter Section - Premium Glass Search & Dates */}
+            <div style={{ 
+                display: 'flex', 
+                gap: '2rem', 
+                marginBottom: '4rem', 
+                alignItems: 'center',
+                background: glassWhite,
+                backdropFilter: 'blur(10px)',
+                padding: '1.8rem 2.5rem',
+                borderRadius: '40px',
+                border: '1px solid rgba(255, 255, 255, 0.5)',
+                boxShadow: '0 20px 50px rgba(0,0,0,0.03)',
+                animation: 'fadeUp 0.6s ease-out'
+            }}>
+                <div style={{ display: 'flex', background: 'rgba(2, 83, 87, 0.05)', padding: '6px', borderRadius: '22px', border: '1px solid rgba(2, 83, 87, 0.08)' }}>
                     {['week', 'month', 'custom'].map(t => (
                         <button
                             key={t}
                             onClick={() => setFilterType(t)}
-                            style={{ padding: '0.5rem 1rem', border: 'none', borderRadius: '8px', fontSize: '0.8rem', fontWeight: '700', cursor: 'pointer', background: filterType === t ? '#fff' : 'transparent', color: filterType === t ? 'var(--color-primary)' : '#64748b', boxShadow: filterType === t ? '0 2px 4px rgba(0,0,0,0.05)' : 'none' }}>
-                            {t === 'week' ? 'Despachos Semana' : t === 'month' ? 'Despachos Mes' : 'Personalizado'}
+                            style={{ 
+                                padding: '0.9rem 2rem', 
+                                border: 'none', 
+                                borderRadius: '18px', 
+                                fontSize: '0.8rem', 
+                                fontWeight: '900', 
+                                cursor: 'pointer', 
+                                background: filterType === t ? deepTeal : 'transparent', 
+                                color: filterType === t ? '#fff' : '#64748b', 
+                                transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+                                textTransform: 'uppercase',
+                                letterSpacing: '1px',
+                                boxShadow: filterType === t ? '0 8px 20px rgba(2, 83, 87, 0.2)' : 'none'
+                            }}>
+                            {t === 'week' ? 'Semana' : t === 'month' ? 'Mes' : 'Personalizado'}
                         </button>
                     ))}
                 </div>
+                
                 {filterType === 'custom' && (
-                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        <input type="date" value={customRange.from} onChange={e => setCustomRange({ ...customRange, from: e.target.value })} style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.8rem' }} />
-                        <span style={{ color: '#94a3b8' }}>a</span>
-                        <input type="date" value={customRange.to} onChange={e => setCustomRange({ ...customRange, to: e.target.value })} style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.8rem' }} />
+                    <div style={{ 
+                        display: 'flex', 
+                        gap: '1.2rem', 
+                        alignItems: 'center', 
+                        background: '#fff', 
+                        padding: '0 1.8rem', 
+                        height: '64px',
+                        borderRadius: '24px', 
+                        border: '1px solid #f1f5f9',
+                        animation: 'slideInRight 0.5s cubic-bezier(0.16, 1, 0.3, 1)',
+                        boxShadow: '0 10px 30px rgba(0,0,0,0.03)'
+                    }}>
+                        <input type="date" value={customRange.from} onChange={e => setCustomRange({ ...customRange, from: e.target.value })} style={{ border: 'none', background: 'transparent', fontSize: '0.95rem', fontWeight: '900', color: deepTeal, outline: 'none', cursor: 'pointer' }} />
+                        <ArrowRight size={18} color="#94a3b8" />
+                        <input type="date" value={customRange.to} onChange={e => setCustomRange({ ...customRange, to: e.target.value })} style={{ border: 'none', background: 'transparent', fontSize: '0.95rem', fontWeight: '900', color: deepTeal, outline: 'none', cursor: 'pointer' }} />
                     </div>
                 )}
+
                 <div style={{ flex: 1, position: 'relative' }}>
-                    <Search size={16} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                    <Search size={24} style={{ position: 'absolute', left: '1.8rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', opacity: 0.6 }} />
                     <input
                         type="text"
-                        placeholder="Busca por Pedido, Cliente, O.D.P o Factura"
+                        placeholder="Buscar por cliente, pedido o referencia de despacho..."
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
-                        style={{ width: '100%', padding: '0.6rem 1rem 0.6rem 2.8rem', borderRadius: '10px', border: '1px solid #e2e8f0', outline: 'none', fontSize: '0.9rem' }}
+                        style={{ 
+                            width: '100%', 
+                            padding: '1.8rem 1.8rem 1.8rem 4.5rem', 
+                            borderRadius: '30px', 
+                            border: '1px solid #f1f5f9', 
+                            background: '#fff',
+                            outline: 'none', 
+                            fontSize: '1rem',
+                            fontWeight: '900',
+                            transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+                            color: '#1e293b',
+                            boxShadow: '0 10px 30px rgba(0,0,0,0.02)',
+                            letterSpacing: '-0.2px'
+                        }}
+                        onFocus={e => { e.target.style.borderColor = deepTeal; e.target.style.boxShadow = `0 15px 40px ${deepTeal}10`; e.target.style.transform = 'translateY(-2px)'; }}
+                        onBlur={e => { e.target.style.borderColor = '#f1f5f9'; e.target.style.boxShadow = '0 10px 30px rgba(0,0,0,0.02)'; e.target.style.transform = 'translateY(0)'; }}
                     />
                 </div>
             </div>
 
-            {/* KPI Dashboard */}
-            <div style={{ display: 'grid', gridTemplateColumns: '0.8fr 1.1fr 1.1fr', gap: '1rem', marginBottom: '2.5rem' }}>
-                <div style={{ background: '#fff', padding: '1.2rem', borderRadius: '20px', border: '1px solid #f1f5f9', boxShadow: '0 4px 12px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: 'var(--color-primary)', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                        <TrendingUp size={18} /> PEDIDOS / VALOR
+            {/* Premium Logistic Command KPIs */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.1fr 1fr', gap: '2.5rem', marginBottom: '4rem' }}>
+                {/* Global Volume - Logistics Master Card */}
+                <div style={{ 
+                    background: `linear-gradient(135deg, ${deepTeal} 0%, #037075 100%)`, 
+                    padding: '3rem', 
+                    borderRadius: '45px', 
+                    color: '#fff',
+                    boxShadow: `0 30px 60px ${deepTeal}30`,
+                    position: 'relative',
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    animation: 'fadeUp 0.6s ease-out'
+                }}>
+                    <div style={{ position: 'absolute', right: '-10px', top: '-10px', opacity: 0.05 }}>
+                        <Truck size={250} />
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                        <div style={{ fontSize: '1.8rem', fontWeight: '800', color: '#1a3636' }}>{kpis.totalOrders} <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>und</span></div>
-                        <div style={{ fontSize: '1.2rem', fontWeight: '700', color: '#059669' }}>${kpis.totalValue.toLocaleString()}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+                        <div style={{ background: 'rgba(255,255,255,0.15)', padding: '0.6rem', borderRadius: '15px' }}><Activity size={24} /></div>
+                        <span style={{ fontSize: '0.9rem', fontWeight: '900', opacity: 0.8, textTransform: 'uppercase', letterSpacing: '2px' }}>Salidas Totales</span>
+                    </div>
+                    <div style={{ fontSize: '4.5rem', fontWeight: '900', letterSpacing: '-3px', lineHeight: 1 }}>{kpis.totalOrders}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '2rem' }}>
+                        <div style={{ background: 'rgba(255,255,255,0.1)', padding: '0.8rem 1.8rem', borderRadius: '20px', fontSize: '1.1rem', fontWeight: '900', border: '1px solid rgba(255,255,255,0.1)' }}>
+                            <span style={{opacity: 0.6, fontSize: '0.8rem', marginRight: '4px'}}>$</span>
+                            {kpis.totalValue.toLocaleString()}
+                        </div>
+                        <span style={{ fontSize: '0.75rem', fontWeight: '900', opacity: 0.5, textTransform: 'uppercase', letterSpacing: '1px' }}>Valoración Logística</span>
                     </div>
                 </div>
 
-                <div style={{ background: '#fff', padding: '1.2rem', borderRadius: '20px', border: '1px solid #f1f5f9', boxShadow: '0 4px 12px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: 'var(--color-primary)', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                        <Activity size={18} /> ESTADO PEDIDOS
+                {/* Accuracy/Stock KPIs - Glass Effect */}
+                <div style={{ 
+                    background: glassWhite,
+                    backdropFilter: 'blur(10px)',
+                    padding: '3rem', 
+                    borderRadius: '45px', 
+                    border: '1px solid rgba(255,255,255,0.5)',
+                    boxShadow: '0 20px 50px rgba(0,0,0,0.03)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    animation: 'fadeUp 0.7s ease-out'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2.5rem' }}>
+                        <div style={{ width: '56px', height: '56px', borderRadius: '20px', background: `${institutionOcre}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: institutionOcre }}>
+                            <Package size={26} />
+                        </div>
+                        <span style={{ fontSize: '0.85rem', fontWeight: '900', color: deepTeal, textTransform: 'uppercase', letterSpacing: '1px' }}>Fulfillment & Stock</span>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
-                        <div style={{ background: '#f0fdf4', padding: '0.5rem', borderRadius: '12px', textAlign: 'center' }}>
-                            <div style={{ fontSize: '0.65rem', color: '#16a34a', fontWeight: '800', whiteSpace: 'nowrap' }}>DESPACHADOS</div>
-                            <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#16a34a' }}>{kpis.despachados}</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                        <div style={{ background: '#fff', padding: '1.8rem', borderRadius: '28px', display: 'flex', flexDirection: 'column', gap: '4px', border: '1px solid #f1f5f9', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
+                            <div style={{ fontSize: '2.5rem', fontWeight: '900', color: '#10b981', lineHeight: 1 }}>{kpis.disponibles}</div>
+                            <div style={{ fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginTop: '0.5rem' }}>Surtido OK</div>
                         </div>
-                        <div style={{ background: '#fffbeb', padding: '0.5rem', borderRadius: '12px', textAlign: 'center' }}>
-                            <div style={{ fontSize: '0.65rem', color: '#d97706', fontWeight: '800', whiteSpace: 'nowrap' }}>DISPONIBLES</div>
-                            <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#d97706' }}>{kpis.disponibles}</div>
-                        </div>
-                        <div style={{ background: '#fef2f2', padding: '0.5rem', borderRadius: '12px', textAlign: 'center' }}>
-                            <div style={{ fontSize: '0.65rem', color: '#dc2626', fontWeight: '800', whiteSpace: 'nowrap' }}>NO DISP.</div>
-                            <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#dc2626' }}>{kpis.noDisponibles}</div>
+                        <div style={{ background: '#fff', padding: '1.8rem', borderRadius: '28px', display: 'flex', flexDirection: 'column', gap: '4px', border: '1px solid #f1f5f9', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
+                            <div style={{ fontSize: '2.5rem', fontWeight: '900', color: premiumSalmon, lineHeight: 1 }}>{kpis.noDisponibles}</div>
+                            <div style={{ fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginTop: '0.5rem' }}>En Quiebre</div>
                         </div>
                     </div>
                 </div>
 
-                <div style={{ background: '#fff', padding: '1.5rem', borderRadius: '20px', border: '1px solid #f1f5f9', boxShadow: '0 4px 12px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: 'var(--color-primary)', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                        <Clock size={18} /> TIEMPO OPERACION
+                {/* Lead Time - Advanced Analytics View */}
+                <div style={{ 
+                    background: glassWhite,
+                    backdropFilter: 'blur(10px)',
+                    padding: '3rem', 
+                    borderRadius: '45px', 
+                    border: '1px solid rgba(255,255,255,0.5)',
+                    boxShadow: '0 20px 50px rgba(0,0,0,0.03)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    animation: 'fadeUp 0.8s ease-out'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+                         <div style={{ width: '56px', height: '56px', borderRadius: '20px', background: 'rgba(2, 54, 54, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: deepTeal }}>
+                            <Clock size={26} />
+                        </div>
+                        <span style={{ fontSize: '0.85rem', fontWeight: '900', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px' }}>Eficiencia (Lead Time)</span>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
-                        <div style={{ background: '#fffbeb', padding: '0.5rem', borderRadius: '12px', textAlign: 'center' }}>
-                            <div style={{ fontSize: '0.65rem', color: '#d97706', fontWeight: '800' }}>PROMEDIO</div>
-                            <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#d97706' }}>{kpis.avg} <span style={{ fontSize: '0.6rem' }}>días</span></div>
-                        </div>
-                        <div style={{ background: '#fef2f2', padding: '0.5rem', borderRadius: '12px', textAlign: 'center' }}>
-                            <div style={{ fontSize: '0.65rem', color: '#dc2626', fontWeight: '800' }}>MÁXIMO</div>
-                            <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#dc2626' }}>{kpis.max}</div>
-                        </div>
-                        <div style={{ background: '#f0fdf4', padding: '0.5rem', borderRadius: '12px', textAlign: 'center' }}>
-                            <div style={{ fontSize: '0.65rem', color: '#16a34a', fontWeight: '800' }}>MÍNIMO</div>
-                            <div style={{ fontSize: '1.2rem', fontWeight: '900', color: '#16a34a' }}>{kpis.min}</div>
-                        </div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.8rem' }}>
+                        <div style={{ fontSize: '4.5rem', fontWeight: '900', color: deepTeal, lineHeight: 1 }}>{kpis.avg}</div>
+                        <span style={{ fontSize: '1.2rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase' }}>Días Prom.</span>
+                    </div>
+                    <div style={{ marginTop: '2rem', display: 'flex', gap: '1.5rem', background: '#f8fafc', padding: '1rem 1.5rem', borderRadius: '20px', width: 'fit-content' }}>
+                        <div style={{ fontSize: '0.8rem', fontWeight: '900', color: '#64748b' }}>OPTIMO: <span style={{ color: '#10b981' }}>{kpis.min}d</span></div>
+                        <div style={{ fontSize: '0.8rem', fontWeight: '900', color: '#64748b' }}>TECHO: <span style={{ color: premiumSalmon }}>{kpis.max}d</span></div>
                     </div>
                 </div>
             </div>
 
-            {/* Main Table */}
-            <div style={{ background: '#fff', borderRadius: '24px', border: '1px solid #f1f5f9', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            {/* Main Operational Logistics Table */}
+            <div style={{ 
+                background: glassWhite, 
+                backdropFilter: 'blur(10px)',
+                borderRadius: '45px', 
+                border: '1px solid rgba(255, 255, 255, 0.5)', 
+                overflow: 'hidden', 
+                boxShadow: '0 20px 60px rgba(0,0,0,0.03)',
+                animation: 'fadeUp 0.9s ease-out'
+            }}>
+                <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
                     <thead>
-                        <tr style={{ background: '#f8fafc', borderBottom: '2px solid #f1f5f9' }}>
-                            <th style={{ padding: '1.2rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: '800', color: '#475569', textTransform: 'uppercase' }}>PEDIDO</th>
-                            <th style={{ padding: '1.2rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: '800', color: '#475569', textTransform: 'uppercase' }}>CLIENTE</th>
-                            <th style={{ padding: '1.2rem', textAlign: 'center', fontSize: '0.75rem', fontWeight: '800', color: '#475569', textTransform: 'uppercase' }}>DIAS PEDIDO</th>
-                            <th style={{ padding: '1.2rem', textAlign: 'center', fontSize: '0.75rem', fontWeight: '800', color: '#475569', textTransform: 'uppercase' }}>INV. DISPONIBLE</th>
-                            <th style={{ padding: '1.2rem', textAlign: 'center', fontSize: '0.75rem', fontWeight: '800', color: '#475569', textTransform: 'uppercase' }}>CREAR FACTURA</th>
-                            <th style={{ padding: '1.2rem', textAlign: 'center', fontSize: '0.75rem', fontWeight: '800', color: '#475569', textTransform: 'uppercase' }}>ETIQUETAS / DESPACHO</th>
+                        <tr style={{ background: 'rgba(2, 83, 87, 0.02)' }}>
+                            <th style={{ padding: '2rem 2.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px', borderBottom: '1px solid rgba(2, 83, 87, 0.05)' }}>ID Despacho</th>
+                            <th style={{ padding: '2rem 2.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px', borderBottom: '1px solid rgba(2, 83, 87, 0.05)' }}>Cliente Consignatario</th>
+                            <th style={{ padding: '2rem 1.5rem', textAlign: 'center', fontSize: '0.75rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px', borderBottom: '1px solid rgba(2, 83, 87, 0.05)' }}>Lead Time</th>
+                            <th style={{ padding: '2rem 1.5rem', textAlign: 'center', fontSize: '0.75rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px', borderBottom: '1px solid rgba(2, 83, 87, 0.05)' }}>Disponibilidad</th>
+                            <th style={{ padding: '2rem 1.5rem', textAlign: 'center', fontSize: '0.75rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px', borderBottom: '1px solid rgba(2, 83, 87, 0.05)' }}>Admin & Facturación</th>
+                            <th style={{ padding: '2rem 2.5rem', textAlign: 'center', fontSize: '0.75rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px', borderBottom: '1px solid rgba(2, 83, 87, 0.05)' }}>Acción Logística</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {filteredOrders.map(order => {
+                        {filteredOrders.length === 0 ? (
+                            <tr>
+                                <td colSpan="6" style={{ padding: '10rem', textAlign: 'center' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2rem', opacity: 0.15 }}>
+                                        <Truck size={100} />
+                                        <div style={{ fontSize: '1.4rem', fontWeight: '900', letterSpacing: '1px' }}>SIN OPERACIONES PENDIENTES</div>
+                                    </div>
+                                </td>
+                            </tr>
+                        ) : filteredOrders.map(order => {
                             const isAvailable = checkAvailability(order.items || []);
                             const days = getDaysSince(order.date);
 
                             return (
-                                <tr key={order.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                    <td style={{ padding: '1.2rem', fontWeight: 'bold', color: 'var(--color-primary)' }}>{order.id}</td>
-                                    <td style={{ padding: '1.2rem' }}>
-                                        <div style={{ fontWeight: '600' }}>{order.client}</div>
-                                        <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{order.items.length} Referencias</div>
+                                <tr key={order.id} style={{ 
+                                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                    animation: 'fadeUp 0.5s ease-out',
+                                    cursor: 'default'
+                                }} className="ship-row-premium">
+                                    <td style={{ padding: '2.5rem 2.5rem' }}>
+                                        <div style={{ fontWeight: '900', color: deepTeal, fontSize: '1.2rem', letterSpacing: '-0.5px' }}>#{order.id}</div>
+                                        <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.5rem', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.5px' }}>REF: LOG-{order.id.slice(-4).toUpperCase()}</div>
                                     </td>
-                                    <td style={{ padding: '1.2rem', textAlign: 'center' }}>
-                                        <div style={{ display: 'inline-flex', padding: '0.4rem 0.8rem', borderRadius: '12px', background: days > 5 ? '#fef2f2' : '#f8fafc', color: days > 5 ? '#dc2626' : '#64748b', fontSize: '0.8rem', fontWeight: 'bold' }}>
-                                            {days} Días
+                                    <td style={{ padding: '2.5rem 2.5rem' }}>
+                                        <div style={{ fontSize: '1.25rem', color: '#1e293b', fontWeight: '900', letterSpacing: '-0.3px' }}>{order.client}</div>
+                                        <div style={{ display: 'flex', gap: '10px', marginTop: '0.6rem' }}>
+                                            <span style={{ fontSize: '0.7rem', color: institutionOcre, fontWeight: '900', background: `${institutionOcre}15`, padding: '4px 10px', borderRadius: '8px', textTransform: 'uppercase' }}>
+                                                {order.items.length} Referencias
+                                            </span>
+                                            <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '900', background: 'rgba(2, 83, 87, 0.04)', padding: '4px 10px', borderRadius: '8px' }}>
+                                                ${order.amount.toLocaleString()}
+                                            </span>
                                         </div>
                                     </td>
-                                    <td style={{ padding: '1.2rem', textAlign: 'center' }}>
-                                        <div style={{ color: isAvailable ? '#16a34a' : '#dc2626', fontWeight: '800', fontSize: '0.7rem' }}>
-                                            {isAvailable ? 'DISPONIBLE' : 'NO DISPONIBLE'}
+                                    <td style={{ padding: '2.5rem 1.5rem', textAlign: 'center' }}>
+                                        <div style={{ 
+                                            display: 'inline-flex', 
+                                            flexDirection: 'column',
+                                            alignItems: 'center',
+                                            padding: '0.8rem 1.2rem', 
+                                            borderRadius: '20px', 
+                                            background: days > 5 ? `${premiumSalmon}10` : 'rgba(16, 185, 129, 0.05)', 
+                                            color: days > 5 ? premiumSalmon : '#10b981',
+                                            border: days > 5 ? `1px solid ${premiumSalmon}20` : '1px solid rgba(16, 185, 129, 0.1)',
+                                            minWidth: '70px'
+                                        }}>
+                                            <div style={{ fontSize: '1.3rem', fontWeight: '900', lineHeight: 1 }}>{days}</div>
+                                            <div style={{ fontSize: '0.6rem', fontWeight: '900', textTransform: 'uppercase', marginTop: '4px' }}>Días</div>
                                         </div>
                                     </td>
-                                    <td style={{ padding: '1.2rem', textAlign: 'center' }}>
+                                    <td style={{ padding: '2.5rem 1.5rem', textAlign: 'center' }}>
+                                        <div style={{ 
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.6rem',
+                                            color: isAvailable ? '#10b981' : premiumSalmon, 
+                                            fontWeight: '900', 
+                                            fontSize: '0.75rem',
+                                            textTransform: 'uppercase',
+                                            padding: '0.6rem 1.2rem',
+                                            borderRadius: '15px',
+                                            background: isAvailable ? 'rgba(16, 185, 129, 0.05)' : `${premiumSalmon}05`,
+                                            border: `1px solid ${isAvailable ? 'rgba(16, 185, 129, 0.1)' : `${premiumSalmon}15`}`
+                                        }}>
+                                            <div style={{ width: '10px', height: '100%', minHeight: '10px', borderRadius: '50%', background: isAvailable ? '#10b981' : premiumSalmon, boxShadow: `0 0 12px ${isAvailable ? '#10b981' : premiumSalmon}` }} />
+                                            {isAvailable ? 'Surtido OK' : 'Quiebre Stock'}
+                                        </div>
+                                    </td>
+                                    <td style={{ padding: '2.5rem 1.5rem', textAlign: 'center' }}>
                                         {order.invoiceNum ? (
                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.8rem' }}>
-                                                <span style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>{order.invoiceNum}</span>
-                                                <button onClick={() => handleCreateInvoice(order)} style={{ background: '#f1f5f9', border: 'none', padding: '0.3rem', borderRadius: '6px', cursor: 'pointer', color: 'var(--color-primary)' }}><Download size={16} /></button>
+                                                <div style={{ 
+                                                    background: '#fff', 
+                                                    padding: '0.8rem 1.5rem', 
+                                                    borderRadius: '18px', 
+                                                    fontWeight: '900', 
+                                                    fontSize: '0.9rem',
+                                                    color: deepTeal,
+                                                    border: '1px solid #f1f5f9',
+                                                    boxShadow: '0 4px 10px rgba(0,0,0,0.02)'
+                                                }}>
+                                                    {order.invoiceNum}
+                                                </div>
+                                                <button 
+                                                    onClick={() => handleCreateInvoice(order)} 
+                                                    style={{ 
+                                                        width: '48px',
+                                                        height: '48px',
+                                                        borderRadius: '15px',
+                                                        background: '#fff',
+                                                        border: '1px solid #f1f5f9',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        cursor: 'pointer', 
+                                                        color: institutionOcre,
+                                                        transition: 'all 0.3s' 
+                                                    }}
+                                                    onMouseEnter={e => { e.currentTarget.style.borderColor = institutionOcre; e.currentTarget.style.transform = 'translateY(-2px) scale(1.1)'; }}
+                                                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#f1f5f9'; e.currentTarget.style.transform = 'translateY(0) scale(1)'; }}
+                                                >
+                                                    <Download size={22} />
+                                                </button>
                                             </div>
                                         ) : (
-                                            <button disabled={!isAvailable} onClick={() => handleCreateInvoice(order)} style={{ background: isAvailable ? '#fff' : '#f8fafc', border: '1px solid #e2e8f0', padding: '0.5rem 0.8rem', borderRadius: '8px', cursor: isAvailable ? 'pointer' : 'not-allowed', color: isAvailable ? 'var(--color-primary)' : '#cbd5e1' }}>
-                                                <FileText size={16} />
+                                            <button 
+                                                disabled={!isAvailable} 
+                                                onClick={() => handleCreateInvoice(order)} 
+                                                style={{ 
+                                                    background: isAvailable ? '#fff' : 'rgba(241, 245, 249, 0.5)', 
+                                                    border: `2px solid ${isAvailable ? institutionOcre : '#f1f5f9'}`, 
+                                                    padding: '0.9rem 2rem', 
+                                                    borderRadius: '20px', 
+                                                    cursor: isAvailable ? 'pointer' : 'not-allowed', 
+                                                    color: isAvailable ? institutionOcre : '#cbd5e1',
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '1rem',
+                                                    fontSize: '0.85rem',
+                                                    fontWeight: '900',
+                                                    transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+                                                    textTransform: 'uppercase',
+                                                    letterSpacing: '1px'
+                                                }}
+                                                onMouseEnter={(e) => { if(isAvailable) { e.currentTarget.style.background = institutionOcre; e.currentTarget.style.color = '#fff'; e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 10px 25px ${institutionOcre}30`; } }}
+                                                onMouseLeave={(e) => { if(isAvailable) { e.currentTarget.style.background = '#fff'; e.currentTarget.style.color = institutionOcre; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; } }}
+                                            >
+                                                <Printer size={18} /> Emitir Factura
                                             </button>
                                         )}
                                     </td>
-                                    <td style={{ padding: '1.2rem', textAlign: 'center' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.8rem' }}>
-                                            <button onClick={() => handleGenerateLabel(order)} style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', padding: '0.5rem 0.8rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 'bold' }}><Tags size={14} style={{ marginRight: '4px' }} /> ETIQUETA</button>
-                                            {order.dispatchedAt && <span style={{ color: '#16a34a', fontWeight: '900', fontSize: '0.7rem' }}>DESPACHADO ✓</span>}
+                                    <td style={{ padding: '2.5rem 2.5rem', textAlign: 'center' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+                                            <button 
+                                                onClick={() => handleGenerateLabel(order)} 
+                                                style={{ 
+                                                    background: `linear-gradient(135deg, ${deepTeal} 0%, #037075 100%)`, 
+                                                    color: '#fff', 
+                                                    border: 'none', 
+                                                    padding: '1rem 2.2rem', 
+                                                    borderRadius: '20px', 
+                                                    cursor: 'pointer', 
+                                                    fontSize: '0.85rem', 
+                                                    fontWeight: '900',
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '1rem',
+                                                    boxShadow: `0 12px 25px ${deepTeal}30`,
+                                                    transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+                                                    textTransform: 'uppercase',
+                                                    letterSpacing: '1px'
+                                                }}
+                                                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-4px) scale(1.02)'; e.currentTarget.style.boxShadow = `0 20px 40px ${deepTeal}40`; }}
+                                                onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0) scale(1)'; e.currentTarget.style.boxShadow = `0 12px 25px ${deepTeal}30`; }}
+                                            >
+                                                <Tags size={20} /> Despachar
+                                            </button>
+                                            {order.dispatchedAt && (
+                                                <div style={{ color: '#10b981', fontWeight: '900', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                                    <CheckCircle2 size={16} /> Tracking Activo
+                                                </div>
+                                            )}
                                         </div>
                                     </td>
                                 </tr>
@@ -432,6 +669,22 @@ const Shipping = () => {
                     </tbody>
                 </table>
             </div>
+
+            <style>{`
+                @keyframes fadeUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+                @keyframes slideInRight { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+                @keyframes scaleUp { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+                
+                .ship-row-premium:hover {
+                    background-color: rgba(2, 83, 87, 0.02) !important;
+                }
+                .ship-row-premium td {
+                    border-bottom: 1px solid rgba(2, 83, 87, 0.03);
+                }
+                .ship-row-premium:last-child td {
+                    border-bottom: none;
+                }
+            `}</style>
         </div>
     );
 };

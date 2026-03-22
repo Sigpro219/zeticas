@@ -14,12 +14,19 @@ import {
     TrendingUp,
     Package,
     AlertCircle,
-    User
+    User,
+    Calendar
 } from 'lucide-react';
 
 const Kanban = ({ orders = [], items = [] }) => {
     const { purchaseOrders } = useBusiness();
     const [selectedOrder, setSelectedOrder] = useState(null);
+
+    // Premium Branding Colors
+    const deepTeal = "#025357";
+    const institutionOcre = "#D6BD98";
+    const premiumSalmon = "#D4785A";
+    const glassWhite = "rgba(255, 255, 255, 0.7)";
 
     // Define the columns and their status mappings
     const columns = [
@@ -76,7 +83,6 @@ const Kanban = ({ orders = [], items = [] }) => {
         let inProcess = 0;
         let finished = 0;
 
-        // Collect all statuses belonging to any stage AFTER this column
         const downstreamStatuses = [...column.finishedStatuses];
         for (let i = colIndex + 1; i < columns.length; i++) {
             downstreamStatuses.push(...columns[i].inProcessStatuses);
@@ -93,61 +99,123 @@ const Kanban = ({ orders = [], items = [] }) => {
         return { inProcess, finished };
     };
 
-    return (
-        <div className="kanban-module" style={{ height: 'calc(100vh - 10rem)', display: 'flex', flexDirection: 'column' }}>
-            <header style={{ marginBottom: '2rem' }}>
-                <h2 className="font-serif" style={{ fontSize: '2.2rem', color: 'var(--color-primary)', margin: 0 }}>Tablero Kanban Maestro</h2>
-                <p style={{ color: '#666', fontSize: '0.95rem', marginTop: '0.5rem' }}>Monitoreo en línea y automático del flujo total de pedidos.</p>
-            </header>
+    const StatusTag = ({ color, text }) => (
+        <div style={{ 
+            background: `${color}15`, 
+            color: color, 
+            fontSize: '0.65rem', 
+            fontWeight: '900', 
+            padding: '4px 10px', 
+            borderRadius: '50px',
+            border: `1px solid ${color}30`,
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px'
+        }}>
+            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: color }} />
+            {text}
+        </div>
+    );
 
+    return (
+        <div className="kanban-module" style={{ height: 'calc(100vh - 12rem)', display: 'flex', flexDirection: 'column', animation: 'fadeIn 0.5s ease-out' }}>
+            {/* Header Removed - Handled by Gestion.jsx */}
+            
             <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(5, 1fr)',
-                gap: '1rem',
+                gap: '1.5rem',
                 flex: 1,
-                minHeight: 0 // Crucial for overflow scroll to work
+                minHeight: 0,
+                padding: '0.5rem'
             }}>
                 {columns.map((col, index) => {
                     const stats = getColumnStats(col, index);
                     return (
                         <div key={col.id} style={{
-                            background: '#f8fafc',
-                            borderRadius: '20px',
+                            background: glassWhite,
+                            borderRadius: '28px',
                             display: 'flex',
                             flexDirection: 'column',
-                            border: '1px solid #e2e8f0',
-                            overflow: 'hidden'
+                            border: '1px solid rgba(2, 83, 87, 0.05)',
+                            overflow: 'hidden',
+                            boxShadow: '0 10px 30px rgba(0,0,0,0.03)',
+                            backdropFilter: 'blur(10px)'
                         }}>
-                            {/* Column Header */}
-                            <div style={{ padding: '1.2rem', background: '#fff', borderBottom: '1px solid #e2e8f0' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: 'var(--color-primary)', marginBottom: '0.8rem' }}>
-                                    {col.icon}
-                                    <span style={{ fontWeight: '800', fontSize: '1rem' }}>{col.label.toUpperCase()}</span>
-                                </div>
-                                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                    <div style={{ flex: 1, background: '#fee2e2', color: '#b91c1c', padding: '0.4rem', borderRadius: '8px', textAlign: 'center', fontSize: '0.7rem', fontWeight: 'bold' }}>
-                                        {stats.inProcess} Proceso
+                            {/* Column Header - Premium Style */}
+                            <div style={{ 
+                                padding: '1.5rem', 
+                                background: '#fff', 
+                                borderBottom: '1px solid rgba(2, 83, 87, 0.05)',
+                                position: 'relative'
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', color: deepTeal, marginBottom: '1rem' }}>
+                                    <div style={{ 
+                                        width: '40px', 
+                                        height: '40px', 
+                                        borderRadius: '12px', 
+                                        background: `${deepTeal}0D`, 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        justifyContent: 'center',
+                                        color: deepTeal,
+                                        boxShadow: `0 4px 10px ${deepTeal}1A`
+                                    }}>
+                                        {col.icon}
                                     </div>
-                                    <div style={{ flex: 1, background: '#dcfce7', color: '#15803d', padding: '0.4rem', borderRadius: '8px', textAlign: 'center', fontSize: '0.7rem', fontWeight: 'bold' }}>
-                                        {stats.finished} Final
+                                    <span style={{ fontWeight: '900', fontSize: '1rem', letterSpacing: '0.5px', textTransform: 'uppercase' }}>{col.label}</span>
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.8rem' }}>
+                                    <div style={{ 
+                                        flex: 1, 
+                                        background: `${premiumSalmon}0D`, 
+                                        color: premiumSalmon, 
+                                        padding: '0.6rem', 
+                                        borderRadius: '14px', 
+                                        textAlign: 'center', 
+                                        fontSize: '0.75rem', 
+                                        fontWeight: '900',
+                                        border: `1px solid ${premiumSalmon}1A`
+                                    }}>
+                                        {stats.inProcess} <span style={{ opacity: 0.6 }}>WAIT</span>
+                                    </div>
+                                    <div style={{ 
+                                        flex: 1, 
+                                        background: '#F0FDF4', 
+                                        color: '#16a34a', 
+                                        padding: '0.6rem', 
+                                        borderRadius: '14px', 
+                                        textAlign: 'center', 
+                                        fontSize: '0.75rem', 
+                                        fontWeight: '900',
+                                        border: '1px solid #DCFCE7'
+                                    }}>
+                                        {stats.finished} <span style={{ opacity: 0.6 }}>DONE</span>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Column Body */}
-                            <div style={{ padding: '1rem', flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                            {/* Column Body - Smooth Scroll */}
+                            <div style={{ 
+                                padding: '1.2rem', 
+                                flex: 1, 
+                                overflowY: 'auto', 
+                                display: 'flex', 
+                                flexDirection: 'column', 
+                                gap: '1rem',
+                                scrollbarWidth: 'none'
+                            }}>
                                 {orders.map(order => {
                                     const stage = getOrderStageInfo(order, col);
                                     if (!stage.show) return null;
                                     return { ...order, stageInfo: stage };
                                 }).filter(Boolean).sort((a, b) => {
-                                    // 1. In Process (red) at top, Finished (green) at bottom
                                     const aFinished = a.stageInfo.status === 'Finalizado';
                                     const bFinished = b.stageInfo.status === 'Finalizado';
                                     if (aFinished && !bFinished) return 1;
                                     if (!aFinished && bFinished) return -1;
-
-                                    // 2. Newest first
                                     return new Date(b.date || 0) - new Date(a.date || 0);
                                 }).map(order => {
                                     const stage = order.stageInfo;
@@ -158,30 +226,43 @@ const Kanban = ({ orders = [], items = [] }) => {
                                             onClick={() => setSelectedOrder({ ...order, stageName: col.label })}
                                             style={{
                                                 background: '#fff',
-                                                padding: '1rem',
-                                                borderRadius: '16px',
-                                                border: `1px solid ${stage.color}40`,
-                                                borderLeft: `5px solid ${stage.color}`,
-                                                boxShadow: '0 4px 6px rgba(0,0,0,0.02)',
+                                                padding: '1.2rem',
+                                                borderRadius: '20px',
+                                                border: `1px solid ${stage.color}15`,
+                                                borderLeft: `6px solid ${stage.color}`,
+                                                boxShadow: '0 4px 12px rgba(0,0,0,0.02)',
                                                 cursor: 'pointer',
-                                                transition: 'transform 0.2s'
+                                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                                position: 'relative',
+                                                overflow: 'hidden'
                                             }}
-                                            onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-                                            onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                                            onMouseEnter={(e) => {
+                                                e.currentTarget.style.transform = 'translateY(-4px)';
+                                                e.currentTarget.style.boxShadow = '0 12px 25px rgba(0,0,0,0.05)';
+                                            }}
+                                            onMouseLeave={(e) => {
+                                                e.currentTarget.style.transform = 'translateY(0)';
+                                                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.02)';
+                                            }}
                                         >
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.6rem' }}>
-                                                <span style={{ fontWeight: '800', fontSize: '0.75rem', color: '#64748b' }}>{order.id}</span>
-                                                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: stage.color }} />
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem' }}>
+                                                <span style={{ fontWeight: '900', fontSize: '0.7rem', color: '#94a3b8', letterSpacing: '0.5px' }}>#{order.id}</span>
+                                                <StatusTag color={stage.color} text={stage.status} />
                                             </div>
-                                            <div style={{ fontSize: '0.8rem', fontWeight: '700', color: '#1A3636', marginBottom: '0.3rem', lineHeight: '1.2' }}>
-                                                {order.items.map(i => i.name).join(', ')}
+                                            
+                                            <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#1e293b', marginBottom: '0.5rem', lineHeight: '1.3' }}>
+                                                {order.items.map(i => i.name).join(' + ')}
                                             </div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.8rem' }}>
-                                                <div style={{ fontSize: '0.65rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                                                    <User size={10} /> {order.client}
+
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', paddingTop: '0.8rem', borderTop: '1px solid #f8fafc' }}>
+                                                <div style={{ fontSize: '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: '700' }}>
+                                                    <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                        <User size={10} />
+                                                    </div>
+                                                    {order.client.length > 15 ? order.client.substring(0, 15) + '...' : order.client}
                                                 </div>
-                                                <div style={{ fontSize: '0.7rem', fontWeight: '900', color: 'var(--color-primary)' }}>
-                                                    {order.items.reduce((acc, i) => acc + i.quantity, 0)} UND
+                                                <div style={{ fontSize: '0.75rem', fontWeight: '900', color: deepTeal, background: `${deepTeal}0D`, padding: '4px 12px', borderRadius: '10px' }}>
+                                                    {order.items.reduce((acc, i) => acc + i.quantity, 0)} <span style={{ fontSize: '0.65rem', opacity: 0.6 }}>UND</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -220,27 +301,40 @@ const Kanban = ({ orders = [], items = [] }) => {
                             <X size={20} />
                         </button>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
-                            <div style={{ background: '#f0f4f4', padding: '1rem', borderRadius: '20px', color: 'var(--color-primary)' }}>
-                                <Info size={30} />
-                            </div>
-                            <div>
-                                <h3 style={{ margin: 0, fontSize: '1.5rem', color: 'var(--color-primary)' }}>Detalle del Pedido Online</h3>
-                                <p style={{ margin: 0, fontSize: '0.9rem', color: '#64748b' }}>Etapa actual: <span style={{ fontWeight: 'bold' }}>{selectedOrder.stageName.toUpperCase()}</span></p>
-                            </div>
-                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '2.5rem' }}>
+                                                            <div style={{ 
+                                                                width: '64px', 
+                                                                height: '64px', 
+                                                                background: `${deepTeal}0D`, 
+                                                                borderRadius: '20px', 
+                                                                color: deepTeal,
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center'
+                                                            }}>
+                                                                <Info size={32} />
+                                                            </div>
+                                                            <div>
+                                                                <h3 style={{ margin: 0, fontSize: '1.8rem', color: deepTeal, fontWeight: '900', letterSpacing: '-0.5px' }}>Detalle del Pedido</h3>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '0.3rem' }}>
+                                                                    <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '600' }}>Etapa:</span>
+                                                                    <StatusTag color={deepTeal} text={selectedOrder.stageName} />
+                                                                </div>
+                                                            </div>
+                                                        </div>
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
                                 <div>
                                     <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', letterSpacing: '0.05em' }}>CLIENTE / ID</label>
                                     <div style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b' }}>{selectedOrder.client} ({selectedOrder.id})</div>
-                                </div>
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', letterSpacing: '0.05em' }}>PRODUCTO Y CANTIDAD</label>
-                                    {selectedOrder.items.map(item => (
-                                        <div key={item.id} style={{ fontSize: '0.95rem', fontWeight: '600' }}>{item.name} - x{item.quantity} und</div>
-                                    ))}
+                                     <div style={{ fontSize: '0.65rem', color: institutionOcre, fontWeight: '900', marginTop: '4px', textTransform: 'uppercase' }}>Consumidor Final / VIP</div>
+                                 </div>
+                                 <div>
+                                     <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', letterSpacing: '0.05em' }}>PRODUCTO Y CANTIDAD</label>
+                                     {selectedOrder.items.map(item => (
+                                         <div key={item.id} style={{ fontSize: '0.95rem', fontWeight: '700', color: deepTeal }}>{item.name} - x{item.quantity} und</div>
+                                     ))}
                                 </div>
                                 <div>
                                     <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', letterSpacing: '0.05em' }}>STATUS GLOBAL</label>
@@ -338,9 +432,25 @@ const Kanban = ({ orders = [], items = [] }) => {
 
                         <button
                             onClick={() => setSelectedOrder(null)}
-                            style={{ width: '100%', marginTop: '2.5rem', padding: '1rem', borderRadius: '16px', border: 'none', background: 'var(--color-primary)', color: '#fff', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 12px rgba(26, 54, 54, 0.2)' }}
+                            style={{ 
+                                width: '100%', 
+                                marginTop: '2.5rem', 
+                                padding: '1.2rem', 
+                                borderRadius: '20px', 
+                                border: 'none', 
+                                background: deepTeal, 
+                                color: '#fff', 
+                                fontWeight: '900', 
+                                cursor: 'pointer', 
+                                boxShadow: `0 10px 25px ${deepTeal}40`,
+                                textTransform: 'uppercase',
+                                letterSpacing: '1px',
+                                transition: 'all 0.3s'
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+                            onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
                         >
-                            Cerrar Vista de Consulta
+                            Cerrar Vista Operativa
                         </button>
                     </div>
                 </div>

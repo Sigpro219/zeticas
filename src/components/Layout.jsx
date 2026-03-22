@@ -415,7 +415,7 @@ const FloatingButtons = () => {
 
 export default function Layout({ children }) {
     const location = useLocation();
-    const isConsulting = location.pathname.startsWith('/consultoria');
+    const isConsulting = location.pathname.toLowerCase().includes('consultoria');
     const isMobile = window.innerWidth <= 992;
     
     return (

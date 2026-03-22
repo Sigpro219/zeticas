@@ -28,7 +28,7 @@ import {
 import { useBusiness } from '../context/BusinessContext';
 
 const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurchaseOrders, recipes, providers }) => {
-    const { banks, setBanks, updateBankBalance, recalculatePTCosts } = useBusiness();
+    const { banks, updateBankBalance, recalculatePTCosts } = useBusiness();
     // Local State for BOM Explosion & OC Generation
     const [selectedOrderId, setSelectedOrderId] = useState(null);
     const [supplierAssignments, setSupplierAssignments] = useState({}); // { mpId: supplierName }
@@ -476,169 +476,235 @@ const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurc
         }
     };
 
+    const deepTeal = "#025357";
+    const institutionOcre = "#D6BD98";
+    const premiumSalmon = "#D4785A";
+    const glassWhite = "rgba(255, 255, 255, 0.85)";
+
     return (
-        <div className="purchases-module" style={{ padding: '0 1rem' }}>
-            <header style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                    <h2 className="font-serif" style={{ fontSize: '2.2rem', color: 'var(--color-primary)', margin: 0 }}>Gestión Lean de Compras (MP)</h2>
-                    <p style={{ color: '#666', fontSize: '0.95rem', marginTop: '0.5rem' }}>Explosión de requerimientos y abastecimiento JIT basado en pedidos reales.</p>
-                </div>
-            </header>
+        <div className="purchases-module" style={{ 
+            padding: '0 0.5rem',
+            animation: 'fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1)'
+        }}>
+            {/* Gap for UI breathing room */}
+            <div style={{ marginBottom: '2.5rem' }} />
 
-            {/* Filters Bar */}
-            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', background: '#f1f5f9', padding: '4px', borderRadius: '12px', gap: '4px' }}>
-                    <button
-                        onClick={() => setFilterType('week')}
-                        style={{
-                            padding: '0.5rem 1rem',
-                            border: 'none',
-                            borderRadius: '8px',
-                            fontSize: '0.85rem',
-                            fontWeight: '600',
-                            cursor: 'pointer',
-                            background: filterType === 'week' ? '#fff' : 'transparent',
-                            color: filterType === 'week' ? 'var(--color-primary)' : '#64748b',
-                            boxShadow: filterType === 'week' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none'
-                        }}
-                    >Compras última Semana</button>
-                    <button
-                        onClick={() => setFilterType('month')}
-                        style={{
-                            padding: '0.5rem 1rem',
-                            border: 'none',
-                            borderRadius: '8px',
-                            fontSize: '0.85rem',
-                            fontWeight: '600',
-                            cursor: 'pointer',
-                            background: filterType === 'month' ? '#fff' : 'transparent',
-                            color: filterType === 'month' ? 'var(--color-primary)' : '#64748b',
-                            boxShadow: filterType === 'month' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none'
-                        }}
-                    >Compras Mes</button>
-                    <button
-                        onClick={() => setFilterType('custom')}
-                        style={{
-                            padding: '0.5rem 1rem',
-                            border: 'none',
-                            borderRadius: '8px',
-                            fontSize: '0.85rem',
-                            fontWeight: '600',
-                            cursor: 'pointer',
-                            background: filterType === 'custom' ? '#fff' : 'transparent',
-                            color: filterType === 'custom' ? 'var(--color-primary)' : '#64748b',
-                            boxShadow: filterType === 'custom' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none'
-                        }}
-                    >Personalizado</button>
-                </div>
-
-                {filterType === 'custom' && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <input
-                            type="date"
-                            value={customRange.from}
-                            onChange={(e) => setCustomRange({ ...customRange, from: e.target.value })}
-                            style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem' }}
-                        />
-                        <span style={{ color: '#94a3b8' }}>a</span>
-                        <input
-                            type="date"
-                            value={customRange.to}
-                            onChange={(e) => setCustomRange({ ...customRange, to: e.target.value })}
-                            style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem' }}
-                        />
+            {/* Premium Supply Chain KPIs */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.1fr 1fr', gap: '2.5rem', marginBottom: '4rem' }}>
+                {/* Procurement Volume - Main Card */}
+                <div style={{ 
+                    background: `linear-gradient(135deg, ${deepTeal} 0%, #037075 100%)`, 
+                    padding: '3rem', 
+                    borderRadius: '45px', 
+                    color: '#fff',
+                    boxShadow: `0 30px 60px ${deepTeal}30`,
+                    position: 'relative',
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    animation: 'fadeUp 0.6s ease-out'
+                }}>
+                    <div style={{ position: 'absolute', right: '-10px', top: '-10px', opacity: 0.1, transform: 'rotate(-10deg)' }}>
+                        <ShoppingCart size={240} />
                     </div>
-                )}
-
-                <div style={{ flex: 1, position: 'relative', minWidth: '300px' }}>
-                    <Search size={16} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                    <input
-                        type="text"
-                        placeholder="Busca por Proveedor, OC ó Pedido relacionado"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        style={{
-                            width: '100%',
-                            padding: '0.6rem 1rem 0.6rem 2.8rem',
-                            borderRadius: '10px',
-                            border: '1px solid #e2e8f0',
-                            outline: 'none',
-                            fontSize: '0.9rem'
-                        }}
-                    />
-                </div>
-            </div>
-
-            {/* Metrics Dashboard */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '2.5rem' }}>
-                {/* 1. Volumen de Compras */}
-                <div style={{ background: 'linear-gradient(135deg, #1A3636 0%, #2D4F4F 100%)', padding: '1rem', borderRadius: '16px', color: '#fff', boxShadow: '0 8px 16px rgba(26, 54, 54, 0.15)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                    <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', marginBottom: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <TrendingUp size={14} /> Volumen de Compras
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+                        <div style={{ background: 'rgba(255,255,255,0.15)', padding: '0.6rem', borderRadius: '15px' }}><Package size={24} /></div>
+                        <span style={{ fontSize: '0.9rem', fontWeight: '900', opacity: 0.8, textTransform: 'uppercase', letterSpacing: '2px' }}>Volumen Procurement</span>
                     </div>
-                    <div style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.3rem' }}>
-                        ${purchaseStats.total.toLocaleString()}
+                    <div style={{ fontSize: '4.5rem', fontWeight: '900', letterSpacing: '-3px', lineHeight: 1 }}>
+                        <span style={{ fontSize: '2.5rem', opacity: 0.6, marginRight: '8px', verticalAlign: 'middle' }}>$</span>
+                        {purchaseStats.total.toLocaleString()}
                     </div>
-                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.6)' }}>
-                        {purchaseStats.count} Órdenes creadas
-                    </div>
-                </div>
-
-                {/* 2. Estado Tesorería */}
-                <div style={{ background: '#fff', padding: '1rem', borderRadius: '16px', border: '1px solid #f1f5f9', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
-                    <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', marginBottom: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <DollarSign size={14} color="#0f172a" /> Estado Tesorería
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f0fdf4', padding: '0.5rem 0.8rem', borderRadius: '10px' }}>
-                            <div>
-                                <div style={{ fontSize: '0.65rem', color: '#166534', fontWeight: 'bold' }}>PAGADO ({treasuryStats.paidCount})</div>
-                                <div style={{ fontSize: '1rem', fontWeight: '800', color: '#14532d' }}>${treasuryStats.paidTotal.toLocaleString()}</div>
-                            </div>
-                            <CheckCircle size={16} color="#16a34a" />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '2.2rem' }}>
+                        <div style={{ background: 'rgba(255,255,255,0.1)', padding: '0.8rem 1.8rem', borderRadius: '20px', fontSize: '1.1rem', fontWeight: '900', border: '1px solid rgba(255,255,255,0.1)' }}>
+                            {purchaseStats.count} <span style={{ fontSize: '0.8rem', opacity: 0.7 }}>ÓRDENES</span>
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff7ed', padding: '0.5rem 0.8rem', borderRadius: '10px' }}>
-                            <div>
-                                <div style={{ fontSize: '0.65rem', color: '#9a3412', fontWeight: 'bold' }}>NO PAGADO ({treasuryStats.unpaidCount})</div>
-                                <div style={{ fontSize: '1rem', fontWeight: '800', color: '#7c2d12' }}>${treasuryStats.unpaidTotal.toLocaleString()}</div>
-                            </div>
-                            <AlertCircle size={16} color="#ea580c" />
-                        </div>
+                        <span style={{ fontSize: '0.75rem', fontWeight: '900', opacity: 0.5, textTransform: 'uppercase', letterSpacing: '1px' }}>En proceso activo</span>
                     </div>
                 </div>
 
-                {/* 3. Ingreso a Inventario */}
-                <div style={{ background: '#fff', padding: '1rem', borderRadius: '16px', border: '1px solid #f1f5f9', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
-                    <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', marginBottom: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <Package size={14} color="#0f172a" /> Ingreso a Inventario
+                {/* Treasury Status - Glass Effect */}
+                <div style={{ 
+                    background: glassWhite,
+                    backdropFilter: 'blur(10px)',
+                    padding: '3rem', 
+                    borderRadius: '45px', 
+                    border: '1px solid rgba(255, 255, 255, 0.5)',
+                    boxShadow: '0 20px 50px rgba(0,0,0,0.03)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    animation: 'fadeUp 0.7s ease-out'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2.5rem' }}>
+                        <div style={{ width: '56px', height: '56px', borderRadius: '20px', background: `${institutionOcre}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: institutionOcre }}>
+                            <DollarSign size={26} />
+                        </div>
+                        <span style={{ fontSize: '0.85rem', fontWeight: '900', color: deepTeal, textTransform: 'uppercase', letterSpacing: '1px' }}>Estado Tesorería (OCs)</span>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '0.5rem 0.8rem', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-                            <div>
-                                <div style={{ fontSize: '0.65rem', color: '#475569', fontWeight: 'bold' }}>INGRESADO ({inventoryKPIs.receivedCount})</div>
-                                <div style={{ fontSize: '1rem', fontWeight: '800', color: '#1e293b' }}>${inventoryKPIs.receivedTotal.toLocaleString()}</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.2rem' }}>
+                        {[
+                            { label: 'Pagado', val: treasuryStats.paidTotal, count: treasuryStats.paidCount, color: '#10b981' },
+                            { label: 'Pendiente', val: treasuryStats.unpaidTotal, count: treasuryStats.unpaidCount, color: premiumSalmon }
+                        ].map(item => (
+                            <div key={item.label} style={{ background: '#fff', padding: '1.2rem 1.8rem', borderRadius: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #f1f5f9', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <span style={{ fontSize: '0.75rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase' }}>{item.label}</span>
+                                    <span style={{ fontSize: '0.65rem', fontWeight: '800', color: '#cbd5e1' }}>{item.count} DOCUMENTOS</span>
+                                </div>
+                                <span style={{ fontSize: '1.6rem', fontWeight: '900', color: item.color }}>${item.val.toLocaleString()}</span>
                             </div>
-                            <Truck size={16} color="#64748b" />
+                        ))}
+                    </div>
+                </div>
+
+                {/* Logistics Health - High Performance */}
+                <div style={{ 
+                    background: glassWhite,
+                    backdropFilter: 'blur(10px)',
+                    padding: '3rem', 
+                    borderRadius: '45px', 
+                    border: '1px solid rgba(255, 255, 255, 0.5)',
+                    boxShadow: '0 20px 50px rgba(0,0,0,0.03)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    animation: 'fadeUp 0.8s ease-out'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+                         <div style={{ width: '56px', height: '56px', borderRadius: '20px', background: 'rgba(2, 54, 54, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: deepTeal }}>
+                            <Truck size={26} />
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fffbeb', padding: '0.5rem 0.8rem', borderRadius: '10px', border: '1px solid #fef3c7' }}>
-                            <div>
-                                <div style={{ fontSize: '0.65rem', color: '#92400e', fontWeight: 'bold' }}>PENDIENTE ({inventoryKPIs.pendingCount})</div>
-                                <div style={{ fontSize: '1rem', fontWeight: '800', color: '#78350f' }}>${inventoryKPIs.pendingTotal.toLocaleString()}</div>
-                            </div>
-                            <Calendar size={16} color="#d97706" />
-                        </div>
+                        <span style={{ fontSize: '0.85rem', fontWeight: '900', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px' }}>Ingreso Lead-Time</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.8rem' }}>
+                        <div style={{ fontSize: '4.5rem', fontWeight: '900', color: deepTeal, lineHeight: 1 }}>92<span style={{fontSize: '2rem', opacity: 0.5}}>%</span></div>
+                    </div>
+                    <div style={{ marginTop: '2.5rem', display: 'flex', gap: '1.5rem', background: '#f8fafc', padding: '1.2rem 1.8rem', borderRadius: '22px', width: 'fit-content' }}>
+                        <div style={{ fontSize: '0.8rem', fontWeight: '900', color: '#64748b' }}>RECIBIDO: <span style={{ color: '#10b981' }}>{inventoryKPIs.receivedCount}</span></div>
+                        <div style={{ height: '14px', width: '1px', background: '#cbd5e1' }} />
+                        <div style={{ fontSize: '0.8rem', fontWeight: '900', color: '#64748b' }}>TRANSIT: <span style={{ color: institutionOcre }}>{inventoryKPIs.pendingCount}</span></div>
                     </div>
                 </div>
             </div>
 
-            {/* Selection of Active Orders from Pedidos Module */}
-            <section style={{ marginBottom: '3rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '1.2rem' }}>
-                    <FileText size={20} color="var(--color-primary)" />
-                    <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#334155' }}>Pedidos en Cola para Abastecimiento</h3>
-                </div>
+            {/* Action Bar & Filter Section - Premium Glass Design */}
+            <div style={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                gap: '2rem', 
+                marginBottom: '4rem',
+                background: glassWhite,
+                backdropFilter: 'blur(10px)',
+                padding: '2.5rem 3rem',
+                borderRadius: '45px',
+                border: '1px solid rgba(255, 255, 255, 0.5)',
+                boxShadow: '0 20px 50px rgba(0,0,0,0.03)',
+                animation: 'fadeUp 0.6s ease-out'
+            }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: '1rem' }}>
+                        <div style={{ display: 'flex', background: 'rgba(2, 83, 87, 0.05)', padding: '6px', borderRadius: '22px', border: '1px solid rgba(2, 83, 87, 0.08)' }}>
+                            {['week', 'month', 'custom'].map(type => (
+                                <button
+                                    key={type}
+                                    onClick={() => setFilterType(type)}
+                                    style={{
+                                        padding: '1.1rem 2.2rem', 
+                                        borderRadius: '18px', 
+                                        border: 'none',
+                                        fontSize: '0.85rem', 
+                                        fontWeight: '900',
+                                        cursor: 'pointer',
+                                        background: filterType === type ? deepTeal : 'transparent',
+                                        color: filterType === type ? '#fff' : '#64748b',
+                                        transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '1.2px',
+                                        boxShadow: filterType === type ? '0 12px 25px rgba(2, 83, 87, 0.25)' : 'none'
+                                    }}
+                                >{type === 'week' ? 'Semana' : type === 'month' ? 'Mes' : 'Personalizado'}</button>
+                            ))}
+                        </div>
+        
+                        {filterType === 'custom' && (
+                            <div style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '1.2rem', 
+                                background: '#fff', 
+                                padding: '0 1.8rem', 
+                                height: '62px',
+                                borderRadius: '22px', 
+                                border: '1px solid #f1f5f9',
+                                animation: 'slideInRight 0.4s ease-out',
+                                boxShadow: '0 4px 15px rgba(0,0,0,0.02)'
+                            }}>
+                                <input
+                                    type="date"
+                                    value={customRange.from}
+                                    onChange={(e) => setCustomRange({ ...customRange, from: e.target.value })}
+                                    style={{ border: 'none', background: 'transparent', fontSize: '0.95rem', fontWeight: '800', color: deepTeal, outline: 'none' }}
+                                />
+                                <ArrowRight size={18} color="#94a3b8" />
+                                <input
+                                    type="date"
+                                    value={customRange.to}
+                                    onChange={(e) => setCustomRange({ ...customRange, to: e.target.value })}
+                                    style={{ border: 'none', background: 'transparent', fontSize: '0.95rem', fontWeight: '800', color: deepTeal, outline: 'none' }}
+                                />
+                            </div>
+                        )}
+                    </div>
 
-                <div style={{ display: 'flex', gap: '1rem', overflowX: 'auto', padding: '0.5rem 0' }}>
+                    <div style={{ flex: 1, position: 'relative', minWidth: '400px' }}>
+                        <Search size={24} style={{ position: 'absolute', left: '1.8rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                        <input
+                            type="text"
+                            placeholder="Busca por Proveedor, OC o Pedido..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            style={{
+                                width: '100%',
+                                padding: '1.5rem 1.5rem 1.5rem 5rem',
+                                borderRadius: '28px',
+                                border: '1px solid #f1f5f9',
+                                outline: 'none',
+                                fontSize: '1.1rem',
+                                fontWeight: '600',
+                                background: '#fff',
+                                color: '#1e293b',
+                                transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                                boxShadow: '0 4px 25px rgba(0,0,0,0.01)'
+                            }}
+                            onFocus={(e) => { e.target.style.borderColor = deepTeal; e.target.style.boxShadow = `0 12px 40px ${deepTeal}10`; }}
+                            onBlur={(e) => { e.target.style.borderColor = '#f1f5f9'; e.target.style.boxShadow = 'none'; }}
+                        />
+                    </div>
+                </div>
+            </div>
+
+            {/* Selection of Active Orders - Premium Horizontal Scroll */}
+            <section style={{ marginBottom: '5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '2.5rem' }}>
+                    <div style={{ width: '64px', height: '64px', borderRadius: '22px', background: `${deepTeal}10`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: deepTeal }}>
+                        <FileText size={32} />
+                    </div>
+                    <div>
+                        <h3 style={{ margin: 0, fontSize: '1.6rem', color: '#1e293b', fontWeight: '900', letterSpacing: '-0.5px' }}>Abastecimiento JIT en Cola</h3>
+                        <p style={{ margin: 0, fontSize: '0.9rem', color: '#64748b', fontWeight: '700' }}>Selecciona una orden para ejecutar el análisis de explosión y requerimientos.</p>
+                    </div>
+                </div>
+ 
+                <div style={{ 
+                    display: 'flex', 
+                    gap: '2rem', 
+                    overflowX: 'auto', 
+                    padding: '1rem 0.5rem 2rem',
+                    scrollbarWidth: 'none',
+                    msOverflowStyle: 'none'
+                }}>
                     {ordersInPurchaseChannel.length > 0 ? ordersInPurchaseChannel.map(order => (
                         <div
                             key={order.id}
@@ -654,213 +720,341 @@ const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurc
                                 setSelectedOrderId(order.id);
                             }}
                             style={{
-                                minWidth: '280px',
-                                padding: '1.2rem',
-                                background: selectedOrderId === order.id ? '#1A3636' : '#fff',
-                                color: selectedOrderId === order.id ? '#fff' : '#334155',
-                                borderRadius: '16px',
-                                border: selectedOrderId === order.id ? 'none' : '1px solid #e2e8f0',
+                                minWidth: '360px',
+                                padding: '2.5rem',
+                                background: selectedOrderId === order.id ? deepTeal : '#fff',
+                                color: selectedOrderId === order.id ? '#fff' : '#1e293b',
+                                borderRadius: '40px',
+                                border: selectedOrderId === order.id ? 'none' : '1px solid #f1f5f9',
                                 cursor: 'pointer',
-                                transition: 'all 0.2s',
-                                boxShadow: selectedOrderId === order.id ? '0 10px 20px rgba(26, 54, 54, 0.15)' : '0 2px 4px rgba(0,0,0,0.02)'
+                                transition: 'all 0.5s cubic-bezier(0.16, 1, 0.3, 1)',
+                                boxShadow: selectedOrderId === order.id ? `0 25px 50px ${deepTeal}40` : '0 10px 30px rgba(0,0,0,0.02)',
+                                position: 'relative',
+                                overflow: 'hidden'
+                            }}
+                            onMouseEnter={(e) => {
+                                if (selectedOrderId !== order.id) {
+                                    e.currentTarget.style.transform = 'translateY(-8px)';
+                                    e.currentTarget.style.borderColor = deepTeal;
+                                    e.currentTarget.style.boxShadow = '0 20px 40px rgba(0,0,0,0.05)';
+                                }
+                            }}
+                            onMouseLeave={(e) => {
+                                if (selectedOrderId !== order.id) {
+                                    e.currentTarget.style.transform = 'translateY(0)';
+                                    e.currentTarget.style.borderColor = '#f1f5f9';
+                                    e.currentTarget.style.boxShadow = '0 10px 30px rgba(0,0,0,0.02)';
+                                }
                             }}
                         >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.8rem' }}>
-                                <span style={{ fontWeight: '800', fontSize: '0.9rem' }}>{order.id}</span>
-                                <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>{order.date}</span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem', alignItems: 'center' }}>
+                                <span style={{ fontWeight: '900', fontSize: '1rem', letterSpacing: '1px', opacity: selectedOrderId === order.id ? 0.8 : 0.4 }}>{order.id}</span>
+                                <div style={{ 
+                                    padding: '6px 14px', 
+                                    borderRadius: '50px', 
+                                    background: selectedOrderId === order.id ? 'rgba(255,255,255,0.15)' : '#f8fafc',
+                                    fontSize: '0.75rem',
+                                    fontWeight: '900',
+                                    color: selectedOrderId === order.id ? '#fff' : '#64748b',
+                                    textTransform: 'uppercase'
+                                }}>{order.date}</div>
                             </div>
-                            <div style={{ fontWeight: '600', fontSize: '1rem', marginBottom: '0.4rem' }}>{order.client}</div>
-                            <div style={{ fontSize: '0.8rem', opacity: 0.8 }}>{order.items.length} productos terminados</div>
+                            <div style={{ fontWeight: '900', fontSize: '1.4rem', marginBottom: '0.8rem', letterSpacing: '-0.5px' }}>{order.client}</div>
+                            <div style={{ fontSize: '0.9rem', opacity: 0.8, fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Package size={18} /> {order.items.length} SKUs EN COLA
+                            </div>
+                            
                             {selectedOrderId === order.id && (
-                                <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#4ade80' }} />
-                                    EXPLOSIONANDO REQUERIMIENTOS...
+                                <div style={{ marginTop: '2rem', display: 'flex', alignItems: 'center', gap: '0.8rem', fontSize: '0.8rem', fontWeight: '900', color: '#4ade80' }}>
+                                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#4ade80', boxShadow: '0 0 15px #4ade80' }} />
+                                    MODELO JIT CALIBRADO
                                 </div>
                             )}
                         </div>
                     )) : (
-                        <div style={{ padding: '2rem', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #cbd5e1', color: '#94a3b8', width: '100%', textAlign: 'center' }}>
-                            No hay pedidos pendientes por abastecer. Envía pedidos desde el módulo de "Pedidos".
+                        <div style={{ padding: '5rem', background: glassWhite, borderRadius: '40px', border: '2px dashed rgba(0,0,0,0.05)', color: '#94a3b8', width: '100%', textAlign: 'center', fontWeight: '900', fontSize: '1.2rem', textTransform: 'uppercase', letterSpacing: '2px' }}>
+                            Pipeline de Abastecimiento Limpio
                         </div>
                     )}
                 </div>
             </section>
-
-            {/* Requirement Explosion & Supplier Assignment */}
+ 
+            {/* Requirement Explosion - JIT Analysis Table */}
             {selectedOrderId && (
                 <section style={{
-                    background: '#fff',
-                    borderRadius: '24px',
-                    border: '1px solid #e2e8f0',
-                    padding: '2rem',
-                    boxShadow: '0 4px 25px rgba(0,0,0,0.05)',
-                    marginBottom: '3rem'
+                    background: glassWhite,
+                    backdropFilter: 'blur(10px)',
+                    borderRadius: '45px',
+                    border: '1px solid rgba(255, 255, 255, 0.5)',
+                    padding: '3.5rem',
+                    boxShadow: '0 20px 50px rgba(0,0,0,0.03)',
+                    marginBottom: '5rem',
+                    animation: 'fadeUp 0.6s ease-out'
                 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3.5rem', gap: '2rem' }}>
                         <div>
-                            <h3 style={{ margin: 0, fontSize: '1.3rem', color: 'var(--color-primary)' }}>Análisis de Materiales JIT - {selectedOrderId}</h3>
-                            <p style={{ margin: '0.3rem 0 0', fontSize: '0.85rem', color: '#64748b' }}>Explosión de BOM: Unidades x Receta - Stock Disponible = Cantidad a Comprar.</p>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', color: deepTeal, marginBottom: '0.6rem' }}>
+                                <TrendingUp size={28} />
+                                <h3 style={{ margin: 0, fontSize: '1.8rem', fontWeight: '900', letterSpacing: '-0.8px' }}>Ingeniería de Materiales JIT - {selectedOrderId}</h3>
+                            </div>
+                            <p style={{ margin: 0, fontSize: '0.95rem', color: '#64748b', fontWeight: '700' }}>Cálculo de precisión milimétrica basado en stock real, amortiguadores de seguridad y demanda bruta.</p>
                         </div>
                         <button
                             onClick={handleGenerateOC}
                             style={{
-                                background: 'var(--color-primary)',
+                                background: deepTeal,
                                 color: '#fff',
                                 border: 'none',
-                                borderRadius: '10px',
-                                padding: '0.8rem 1.8rem',
-                                fontWeight: 'bold',
+                                borderRadius: '22px',
+                                padding: '1.2rem 2.8rem',
+                                fontWeight: '900',
                                 cursor: 'pointer',
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: '0.6rem'
+                                gap: '1rem',
+                                fontSize: '1rem',
+                                textTransform: 'uppercase',
+                                letterSpacing: '1.5px',
+                                boxShadow: `0 15px 35px ${deepTeal}30`,
+                                transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
                             }}
+                            onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.05) translateY(-5px)'; e.currentTarget.style.boxShadow = `0 25px 50px ${deepTeal}40`; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1) translateY(0)'; e.currentTarget.style.boxShadow = `0 15px 35px ${deepTeal}30`; }}
                         >
-                            <Truck size={18} /> Generar Órdenes de Compra
+                            <ShoppingCart size={22} /> Generar Órdenes de Compra
                         </button>
                     </div>
-
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead>
-                            <tr style={{ borderBottom: '2px solid #f1f5f9' }}>
-                                <th style={{ padding: '1rem', textAlign: 'left', fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase' }}>Materia Prima (MP)</th>
-                                <th style={{ padding: '1rem', textAlign: 'right', fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase' }}>MP Requerida</th>
-                                <th style={{ padding: '1rem', textAlign: 'right', fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase' }}>INV. Disponible</th>
-                                <th style={{ padding: '1rem', textAlign: 'right', fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase' }}>Cant. a Comprar</th>
-                                <th style={{ padding: '1rem', textAlign: 'center', fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase' }}>Proveedor Sugerido</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {requirementExplosion.map(mp => (
-                                <tr key={mp.id} style={{ borderBottom: '1px solid #f8fafc' }}>
-                                    <td style={{ padding: '1.2rem 1rem' }}>
-                                        <div style={{ fontWeight: '700', color: mp.isMissing ? '#e11d48' : '#334155' }}>{mp.name}</div>
-                                        {mp.isMissing ? (
-                                            <div style={{ fontSize: '0.65rem', color: '#e11d48', fontWeight: 'bold', background: '#fff1f2', padding: '2px 6px', borderRadius: '4px', border: '1px solid #fecaca', display: 'inline-block', marginTop: '4px' }}>
-                                                No existe en Módulo de Datos Maestros de Productos, Crealo primero
-                                            </div>
-                                        ) : (
-                                            <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>ID: {mp.id}</div>
-                                        )}
-                                    </td>
-                                    <td style={{ padding: '1.2rem 1rem', textAlign: 'right', fontWeight: '600' }}>{mp.totalNeeded} {mp.unit}</td>
-                                    <td style={{ padding: '1.2rem 1rem', textAlign: 'right', color: '#64748b' }}>{mp.available} {mp.unit}</td>
-                                    <td style={{
-                                        padding: '1.2rem 1rem',
-                                        textAlign: 'right',
-                                        fontWeight: '800',
-                                        color: mp.toBuy > 0 ? (supplierAssignments[mp.id] ? '#d97706' : '#ef4444') : '#10b981'
-                                    }}>
-                                        {mp.toBuy} {mp.unit}
-                                    </td>
-                                    <td style={{ padding: '1.2rem 1rem', textAlign: 'center' }}>
-                                        {mp.toBuy > 0 ? (
-                                            <select
-                                                value={supplierAssignments[mp.id] || ''}
-                                                onChange={(e) => handleAssignSupplier(mp.id, e.target.value)}
-                                                style={{
-                                                    padding: '0.5rem',
-                                                    borderRadius: '8px',
-                                                    border: '1px solid #e2e8f0',
-                                                    fontSize: '0.85rem',
-                                                    width: '180px',
-                                                    outline: 'none',
-                                                    borderLeft: supplierAssignments[mp.id] ? '4px solid #10b981' : '4px solid #ef4444'
-                                                }}
-                                            >
-                                                <option value="">Seleccionar Proveedor...</option>
-                                                {suppliers.map(s => (
-                                                    <option key={s.id} value={s.name}>{s.name}</option>
-                                                ))}
-                                            </select>
-                                        ) : (
-                                            <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 'bold' }}>STOCK SUFICIENTE</span>
-                                        )}
-                                    </td>
+ 
+                    <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 1rem' }}>
+                            <thead>
+                                <tr>
+                                    <th style={{ padding: '1rem 2rem', textAlign: 'left', fontSize: '0.8rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '900', letterSpacing: '1.5px' }}>Insumo Base (Raw Material)</th>
+                                    <th style={{ padding: '1rem 2rem', textAlign: 'right', fontSize: '0.8rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '900', letterSpacing: '1.5px' }}>Demanda Bruta</th>
+                                    <th style={{ padding: '1rem 2rem', textAlign: 'right', fontSize: '0.8rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '900', letterSpacing: '1.5px' }}>Stock Disponible</th>
+                                    <th style={{ padding: '1rem 2rem', textAlign: 'right', fontSize: '0.8rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '900', letterSpacing: '1.5px' }}>Neto a Comprar</th>
+                                    <th style={{ padding: '1rem 2rem', textAlign: 'center', fontSize: '0.8rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '900', letterSpacing: '1.5px' }}>Asignación Supplier</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {requirementExplosion.map(mp => (
+                                    <tr key={mp.id} style={{ background: '#fff', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.01)' }}>
+                                        <td style={{ padding: '1.8rem 2rem', borderRadius: '24px 0 0 24px', border: '1px solid #f1f5f9', borderRight: 'none' }}>
+                                            <div style={{ fontWeight: '900', color: mp.isMissing ? premiumSalmon : '#1e293b', fontSize: '1.1rem', letterSpacing: '-0.3px' }}>{mp.name}</div>
+                                            {mp.isMissing ? (
+                                                <div style={{ fontSize: '0.7rem', color: premiumSalmon, fontWeight: '900', background: `${premiumSalmon}15`, padding: '4px 12px', borderRadius: '8px', display: 'inline-block', marginTop: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                                    SKU NO MAESTRO
+                                                </div>
+                                            ) : (
+                                                <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '700', marginTop: '6px' }}>SERIAL REF: {mp.id}</div>
+                                            )}
+                                        </td>
+                                        <td style={{ padding: '1.8rem 2rem', textAlign: 'right', fontWeight: '900', color: '#1e293b', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
+                                            <span style={{ fontSize: '1.2rem' }}>{mp.totalNeeded}</span> <span style={{ fontSize: '0.8rem', color: '#b4b4b4' }}>{mp.unit}</span>
+                                        </td>
+                                        <td style={{ padding: '1.8rem 2rem', textAlign: 'right', fontWeight: '800', color: '#64748b', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
+                                            <span style={{ fontSize: '1.1rem' }}>{mp.available}</span> <span style={{ fontSize: '0.75rem', color: '#cbd5e1' }}>{mp.unit}</span>
+                                        </td>
+                                        <td style={{
+                                            padding: '1.8rem 2rem',
+                                            textAlign: 'right',
+                                            fontWeight: '900',
+                                            color: mp.toBuy > 0 ? (supplierAssignments[mp.id] ? institutionOcre : premiumSalmon) : '#10b981',
+                                            fontSize: mp.toBuy > 0 ? '1.4rem' : '1rem',
+                                            borderTop: '1px solid #f1f5f9', 
+                                            borderBottom: '1px solid #f1f5f9'
+                                        }}>
+                                            {mp.toBuy > 0 ? mp.toBuy : 'OPTIMAL'} {mp.toBuy > 0 && <span style={{ fontSize: '0.8rem', opacity: 0.6 }}>{mp.unit}</span>}
+                                        </td>
+                                        <td style={{ padding: '1.8rem 2rem', textAlign: 'center', borderRadius: '0 24px 24px 0', border: '1px solid #f1f5f9', borderLeft: 'none' }}>
+                                            {mp.toBuy > 0 ? (
+                                                <div style={{ position: 'relative', width: '240px', margin: '0 auto' }}>
+                                                    <select
+                                                        value={supplierAssignments[mp.id] || ''}
+                                                        onChange={(e) => handleAssignSupplier(mp.id, e.target.value)}
+                                                        style={{
+                                                            width: '100%',
+                                                            padding: '1rem 1.2rem',
+                                                            borderRadius: '16px',
+                                                            border: '2px solid transparent',
+                                                            background: supplierAssignments[mp.id] ? `${deepTeal}05` : `${premiumSalmon}05`,
+                                                            fontSize: '0.85rem',
+                                                            fontWeight: '900',
+                                                            color: '#1e293b',
+                                                            outline: 'none',
+                                                            cursor: 'pointer',
+                                                            transition: 'all 0.3s',
+                                                            appearance: 'none',
+                                                            borderLeft: `5px solid ${supplierAssignments[mp.id] ? '#10b981' : premiumSalmon}`
+                                                        }}
+                                                    >
+                                                        <option value="">Seleccionar Partner...</option>
+                                                        {suppliers.map(s => (
+                                                            <option key={s.id} value={s.name}>{s.name}</option>
+                                                        ))}
+                                                    </select>
+                                                    <ChevronDown size={18} style={{ position: 'absolute', right: '1.2rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', opacity: 0.4 }} />
+                                                </div>
+                                            ) : (
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem', color: '#10b981', fontWeight: '900', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                                    <div style={{ padding: '6px', borderRadius: '50%', background: '#10b98115' }}><Check size={14} /></div>
+                                                    Suficiencia Stock
+                                                </div>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 </section>
             )}
 
-            {/* List of Generated Purchase Orders (OC) */}
-            <section>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '1.5rem' }}>
-                    <ShoppingCart size={20} color="var(--color-primary)" />
-                    <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#334155' }}>Historial de Órdenes de Compra (OC)</h3>
+            {/* List of Generated Purchase Orders (OC) - Premium Table */}
+            <section style={{ marginBottom: '5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '2.5rem' }}>
+                    <div style={{ width: '64px', height: '64px', borderRadius: '22px', background: `${deepTeal}10`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: deepTeal }}>
+                        <ShoppingCart size={32} />
+                    </div>
+                    <div>
+                        <h3 style={{ margin: 0, fontSize: '1.6rem', color: '#1e293b', fontWeight: '900', letterSpacing: '-0.5px' }}>Supply Chain Command Center</h3>
+                        <p style={{ margin: 0, fontSize: '0.9rem', color: '#64748b', fontWeight: '700' }}>Monitoreo en tiempo real de adquisiciones, liquidaciones y tiempos de tránsito.</p>
+                    </div>
                 </div>
-
-                <div style={{ background: '#fff', borderRadius: '20px', border: '1px solid #f1f5f9', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
+ 
+                <div style={{ 
+                    background: glassWhite,
+                    backdropFilter: 'blur(10px)',
+                    borderRadius: '45px', 
+                    border: '1px solid rgba(255, 255, 255, 0.5)', 
+                    overflow: 'hidden', 
+                    boxShadow: '0 20px 50px rgba(0,0,0,0.03)' 
+                }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead style={{ background: '#f8fafc' }}>
-                            <tr>
-                                <th style={{ padding: '1.2rem' }}>OC No.</th>
-                                <th style={{ padding: '1.2rem' }}>Proveedor</th>
-                                <th style={{ padding: '1.2rem' }}>Ref. Pedido</th>
-                                <th style={{ padding: '1.2rem' }}>Fecha</th>
-                                <th style={{ padding: '1.2rem' }}>Valor Total</th>
-                                <th style={{ padding: '1.2rem' }}>Pagar</th>
-                                <th style={{ padding: '1.2rem', textAlign: 'center', width: '100px' }}>Opciones</th>
+                        <thead>
+                            <tr style={{ background: 'rgba(2, 83, 87, 0.03)', borderBottom: '1px solid #f1f5f9' }}>
+                                <th style={{ padding: '2rem 1.5rem', textAlign: 'left', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Master Ref</th>
+                                <th style={{ padding: '2rem 1.5rem', textAlign: 'left', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Partner Supplier</th>
+                                <th style={{ padding: '2rem 1.5rem', textAlign: 'left', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Sales Ref Hub</th>
+                                <th style={{ padding: '2rem 1.5rem', textAlign: 'left', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Timeline</th>
+                                <th style={{ padding: '2rem 1.5rem', textAlign: 'right', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Gross Value</th>
+                                <th style={{ padding: '2rem 1.5rem', textAlign: 'center', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Status</th>
+                                <th style={{ padding: '2rem 1.5rem', textAlign: 'center', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
                             {filteredPurchaseOrders.length > 0 ? filteredPurchaseOrders.map(oc => (
                                 <tr
                                     key={oc.id}
-                                    style={{ borderBottom: '1px solid #f8fafc', cursor: 'pointer', transition: 'background 0.2s' }}
-                                    className="table-row-hover"
                                     onClick={() => setViewingOC(oc)}
+                                    style={{ borderBottom: '1px solid #f8fafc', cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}
+                                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(2, 83, 87, 0.02)'; e.currentTarget.style.transform = 'scale(0.998)'; }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.transform = 'scale(1)'; }}
                                 >
-                                    <td style={{ padding: '1.2rem', textAlign: 'center', fontWeight: '800', color: 'var(--color-primary)' }}>{oc.id}</td>
-                                    <td style={{ padding: '1.2rem', textAlign: 'center', fontWeight: '600' }}>{oc.providerName || oc.supplier}</td>
-                                    <td style={{ padding: '1.2rem', textAlign: 'center' }}>
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', justifyContent: 'center' }}>
+                                    <td style={{ padding: '2rem 1.5rem' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: oc.status === 'Recibida' ? '#10b981' : institutionOcre }} />
+                                            <span style={{ fontWeight: '900', color: deepTeal, fontSize: '1rem', letterSpacing: '-0.2px' }}>{oc.id}</span>
+                                        </div>
+                                    </td>
+                                    <td style={{ padding: '2rem 1.5rem', fontWeight: '800', color: '#1e293b', fontSize: '0.95rem' }}>{oc.providerName || oc.supplier}</td>
+                                    <td style={{ padding: '2rem 1.5rem' }}>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                                             {(Array.isArray(oc.relatedOrders) ? oc.relatedOrders : [oc.orderRef || 'N/A']).map(ref => (
-                                                <div key={ref} style={{ fontSize: '0.75rem', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>{ref}</div>
+                                                <div key={ref} style={{ fontSize: '0.7rem', background: '#f1f5f9', color: '#64748b', padding: '4px 10px', borderRadius: '8px', fontWeight: '900', border: '1px solid #e2e8f0' }}>{ref}</div>
                                             ))}
                                         </div>
                                     </td>
-                                    <td style={{ padding: '1.2rem', textAlign: 'center', fontSize: '0.85rem' }}>{oc.date}</td>
-                                    <td style={{ padding: '1.2rem', textAlign: 'center', fontWeight: 'bold' }}>${(oc.total || 0).toLocaleString()}</td>
-                                    <td style={{ padding: '1.2rem', textAlign: 'center' }}>
+                                    <td style={{ padding: '2rem 1.5rem', fontSize: '0.9rem', color: '#64748b', fontWeight: '700' }}>{oc.date}</td>
+                                    <td style={{ padding: '2rem 1.5rem', textAlign: 'right' }}>
+                                        <div style={{ fontWeight: '900', color: '#1e293b', fontSize: '1.2rem', letterSpacing: '-0.5px' }}>
+                                            <span style={{ fontSize: '0.8rem', opacity: 0.4, marginRight: '4px' }}>$</span>
+                                            {(oc.total || 0).toLocaleString()}
+                                        </div>
+                                    </td>
+                                    <td style={{ padding: '2rem 1.5rem', textAlign: 'center' }}>
                                         {oc.paymentStatus !== 'Pagado' ? (
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); setPaymentModalOC(oc); }}
-                                                style={{ background: '#ea580c', color: '#fff', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', margin: '0 auto', boxShadow: '0 4px 6px -1px rgba(234, 88, 12, 0.2)' }}
+                                                style={{ 
+                                                    background: `${premiumSalmon}15`, 
+                                                    color: premiumSalmon, 
+                                                    border: `1px solid ${premiumSalmon}30`, 
+                                                    borderRadius: '12px', 
+                                                    padding: '0.8rem 1.5rem', 
+                                                    fontSize: '0.75rem', 
+                                                    fontWeight: '900', 
+                                                    cursor: 'pointer', 
+                                                    display: 'flex', 
+                                                    alignItems: 'center', 
+                                                    gap: '0.6rem',
+                                                    textTransform: 'uppercase',
+                                                    letterSpacing: '1px',
+                                                    transition: 'all 0.3s'
+                                                }}
+                                                onMouseEnter={(e) => { e.currentTarget.style.background = premiumSalmon; e.currentTarget.style.color = '#fff'; }}
+                                                onMouseLeave={(e) => { e.currentTarget.style.background = `${premiumSalmon}15`; e.currentTarget.style.color = premiumSalmon; }}
                                             >
-                                                <DollarSign size={14} /> Pagar OC
+                                                <DollarSign size={16} /> Pagar OC
                                             </button>
                                         ) : (
-                                            <div style={{ background: '#f0fdf4', color: '#16a34a', padding: '4px 10px', borderRadius: '20px', fontSize: '0.7rem', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                                <CheckCircle size={14} /> PAGADO
+                                            <div style={{ background: '#10b98115', color: '#10b981', padding: '0.8rem 1.5rem', borderRadius: '50px', fontSize: '0.75rem', fontWeight: '900', display: 'inline-flex', alignItems: 'center', gap: '8px', textTransform: 'uppercase', letterSpacing: '1px', border: '1px solid #10b98130' }}>
+                                                <CheckCircle size={16} /> LIQUIDADA
                                             </div>
                                         )}
                                     </td>
-                                    <td style={{ padding: '1.2rem', textAlign: 'center' }}>
+                                    <td style={{ padding: '2rem 1.5rem' }}>
                                         <div style={{ display: 'flex', gap: '0.8rem', justifyContent: 'center', alignItems: 'center' }}>
                                             {oc.status === 'Enviada' && (
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); handleReceiveOC(oc.id); }}
-                                                    style={{ background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', padding: '0.4rem 0.6rem', fontSize: '0.7rem', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                                                    style={{ 
+                                                        background: deepTeal, 
+                                                        color: '#fff', 
+                                                        border: 'none', 
+                                                        borderRadius: '14px', 
+                                                        padding: '0.8rem', 
+                                                        cursor: 'pointer', 
+                                                        display: 'flex', 
+                                                        alignItems: 'center', 
+                                                        boxShadow: `0 8px 20px ${deepTeal}30`,
+                                                        transition: 'all 0.3s'
+                                                    }}
+                                                    onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1) rotate(5deg)'}
+                                                    onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1) rotate(0)'}
                                                     title="Recibir Inventario"
                                                 >
-                                                    <Package size={14} />
+                                                    <Package size={20} />
                                                 </button>
                                             )}
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); handleDownloadOCPDF(oc); }}
-                                                style={{ background: '#f8fafc', border: '1px solid #e2e8f0', color: '#64748b', borderRadius: '8px', padding: '0.4rem', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                                                style={{ 
+                                                    background: '#fff', 
+                                                    border: '1px solid #f1f5f9', 
+                                                    color: '#64748b', 
+                                                    borderRadius: '14px', 
+                                                    padding: '0.8rem', 
+                                                    cursor: 'pointer', 
+                                                    display: 'flex', 
+                                                    alignItems: 'center',
+                                                    transition: 'all 0.3s',
+                                                    boxShadow: '0 4px 15px rgba(0,0,0,0.02)'
+                                                }}
+                                                onMouseEnter={(e) => { e.currentTarget.style.borderColor = deepTeal; e.currentTarget.style.color = deepTeal; e.currentTarget.style.background = `${deepTeal}05`; }}
+                                                onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#f1f5f9'; e.currentTarget.style.color = '#64748b'; e.currentTarget.style.background = '#fff'; }}
                                                 title="Descargar PDF"
                                             >
-                                                <Download size={14} />
+                                                <Download size={20} />
                                             </button>
                                         </div>
                                     </td>
                                 </tr>
                             )) : (
                                 <tr>
-                                    <td colSpan="7" style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>No hay órdenes de compra generadas aún.</td>
+                                    <td colSpan="7" style={{ padding: '6rem', textAlign: 'center', color: '#94a3b8', fontWeight: '900', fontSize: '1.2rem', textTransform: 'uppercase', letterSpacing: '2px' }}>
+                                        No se encontraron registros de compra.
+                                    </td>
                                 </tr>
                             )}
                         </tbody>
@@ -868,95 +1062,105 @@ const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurc
                 </div>
             </section>
 
-            {/* OC Detail Modal */}
+            {/* OC Detail Modal - Premium Style */}
             {viewingOC && (
                 <div style={{
                     position: 'fixed',
                     top: 0, left: 0, right: 0, bottom: 0,
-                    background: 'rgba(15, 23, 42, 0.6)',
-                    backdropFilter: 'blur(4px)',
+                    background: 'rgba(15, 23, 42, 0.4)',
+                    backdropFilter: 'blur(12px)',
                     zIndex: 1000,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    padding: '2rem'
+                    padding: '2rem',
+                    animation: 'fadeIn 0.3s'
                 }}>
                     <div style={{
                         background: '#fff',
                         width: '100%',
-                        maxWidth: '800px',
+                        maxWidth: '900px',
                         maxHeight: '90vh',
-                        borderRadius: '24px',
-                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+                        borderRadius: '32px',
+                        boxShadow: '0 30px 60px rgba(0,0,0,0.2)',
                         display: 'flex',
                         flexDirection: 'column',
-                        overflow: 'hidden'
+                        overflow: 'hidden',
+                        border: '1px solid rgba(255,255,255,0.2)'
                     }}>
                         {/* Modal Header */}
                         <div style={{
-                            padding: '1.5rem 2rem',
-                            borderBottom: '1px solid #e2e8f0',
+                            padding: '2rem 2.5rem',
+                            borderBottom: '1px solid #f1f5f9',
                             display: 'flex',
                             justifyContent: 'space-between',
                             alignItems: 'center',
-                            background: '#f8fafc'
+                            background: 'linear-gradient(to right, #f8fafc, #fff)'
                         }}>
                             <div>
-                                <h2 style={{ margin: 0, fontSize: '1.5rem', color: 'var(--color-primary)' }}>Orden de Compra</h2>
-                                <p style={{ margin: '0.2rem 0 0', fontSize: '0.85rem', color: '#64748b' }}>Documento Interno - {viewingOC.id}</p>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', color: '#025357', marginBottom: '0.4rem' }}>
+                                    <FileText size={24} />
+                                    <h2 style={{ margin: 0, fontSize: '1.6rem', fontWeight: '900', letterSpacing: '-0.5px' }}>Orden de Compra</h2>
+                                </div>
+                                <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: '700' }}>REGISTRO OFICIAL - {viewingOC.id}</p>
                             </div>
                             <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                                 <button
                                     onClick={() => handleDownloadOCPDF(viewingOC)}
                                     style={{
-                                        display: 'flex', alignItems: 'center', gap: '0.5rem',
-                                        background: 'var(--color-primary)', color: '#fff',
-                                        border: 'none', padding: '0.6rem 1.2rem', borderRadius: '8px',
-                                        fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s'
+                                        display: 'flex', alignItems: 'center', gap: '0.6rem',
+                                        background: '#025357', color: '#fff',
+                                        border: 'none', padding: '0.8rem 1.5rem', borderRadius: '12px',
+                                        fontWeight: '900', cursor: 'pointer', transition: 'all 0.2s',
+                                        fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px'
                                     }}
                                 >
-                                    <Download size={16} /> Descargar PDF
+                                    <Download size={18} /> Exportar PDF
                                 </button>
                                 <button
                                     onClick={() => setViewingOC(null)}
-                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}
+                                    style={{ 
+                                        width: '40px', height: '40px', borderRadius: '50%',
+                                        background: '#f1f5f9', border: 'none', cursor: 'pointer', 
+                                        color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' 
+                                    }}
                                 >
-                                    <X size={24} />
+                                    <X size={20} />
                                 </button>
                             </div>
                         </div>
 
                         {/* Modal Body */}
-                        <div style={{ padding: '2rem', overflowY: 'auto' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
-                                <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '12px' }}>
-                                    <h4 style={{ margin: '0 0 1rem', color: '#1A3636', fontSize: '0.85rem', textTransform: 'uppercase' }}>Comprador / Facturar a:</h4>
-                                    <div style={{ fontWeight: '700', fontSize: '1.1rem', color: '#334155', marginBottom: '0.2rem' }}>Zeticas S.A.S.</div>
-                                    <div style={{ color: '#64748b', fontSize: '0.9rem', lineHeight: '1.5' }}>
+                        <div style={{ padding: '2.5rem', overflowY: 'auto' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2.5rem' }}>
+                                <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
+                                    <h4 style={{ margin: '0 0 1rem', color: '#94a3b8', fontSize: '0.7rem', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Comprador / Facturar a:</h4>
+                                    <div style={{ fontWeight: '900', fontSize: '1.1rem', color: '#1e293b', marginBottom: '0.4rem' }}>Zeticas S.A.S.</div>
+                                    <div style={{ color: '#64748b', fontSize: '0.85rem', lineHeight: '1.6', fontWeight: '600' }}>
                                         NIT: 901.234.567-8<br />
-                                        Bogotá, Colombia<br />
-                                        Ref. Pedidos: {Array.isArray(viewingOC.relatedOrders) ? viewingOC.relatedOrders.join(', ') : (viewingOC.orderRef || 'N/A')}
+                                        Sede Principal: Bogotá, Colombia<br />
+                                        Ref. Ventas Relacionadas: <span style={{ color: '#025357' }}>{Array.isArray(viewingOC.relatedOrders) ? viewingOC.relatedOrders.join(', ') : (viewingOC.orderRef || 'N/A')}</span>
                                     </div>
                                 </div>
-                                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '1.5rem', borderRadius: '12px' }}>
-                                    <h4 style={{ margin: '0 0 1rem', color: '#166534', fontSize: '0.85rem', textTransform: 'uppercase' }}>Datos del Proveedor:</h4>
-                                    <div style={{ fontWeight: '700', fontSize: '1.1rem', color: '#15803d', marginBottom: '0.2rem' }}>{viewingOC.providerName || viewingOC.supplier}</div>
-                                    <div style={{ color: '#166534', fontSize: '0.9rem', lineHeight: '1.5' }}>
+                                <div style={{ background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.1)', padding: '1.5rem', borderRadius: '20px' }}>
+                                    <h4 style={{ margin: '0 0 1rem', color: '#10b981', fontSize: '0.7rem', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Datos del Proveedor:</h4>
+                                    <div style={{ fontWeight: '900', fontSize: '1.1rem', color: '#1e293b', marginBottom: '0.4rem' }}>{viewingOC.providerName || viewingOC.supplier}</div>
+                                    <div style={{ color: '#1e293b', fontSize: '0.85rem', lineHeight: '1.6', fontWeight: '600', opacity: 0.8 }}>
                                         NIT: {providers.find(s => s.name === (viewingOC.providerName || viewingOC.supplier))?.nit || '901.000.123-x'}<br />
-                                        Tiempo de entrega: {providers.find(s => s.name === (viewingOC.providerName || viewingOC.supplier))?.lead_time || '2-3 días'}<br />
-                                        Fecha OC: {viewingOC.date}
+                                        Logística: {providers.find(s => s.name === (viewingOC.providerName || viewingOC.supplier))?.lead_time || '2-3 días'} entrega<br />
+                                        Emisión Documento: {viewingOC.date}
                                     </div>
                                 </div>
                             </div>
 
-                            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '2rem' }}>
+                            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 0.5rem', marginBottom: '2.5rem' }}>
                                 <thead>
-                                    <tr style={{ background: 'var(--color-primary)', color: '#fff' }}>
-                                        <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600', fontSize: '0.85rem', borderRadius: '8px 0 0 0' }}>Ref/Insumo</th>
-                                        <th style={{ padding: '1rem', textAlign: 'center', fontWeight: '600', fontSize: '0.85rem' }}>Cantidad</th>
-                                        <th style={{ padding: '1rem', textAlign: 'right', fontWeight: '600', fontSize: '0.85rem' }}>V. Unitario</th>
-                                        <th style={{ padding: '1rem', textAlign: 'right', fontWeight: '600', fontSize: '0.85rem' }}>IVA</th>
-                                        <th style={{ padding: '1rem', textAlign: 'right', fontWeight: '600', fontSize: '0.85rem', borderRadius: '0 8px 0 0' }}>V. Total</th>
+                                    <tr>
+                                        <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '900', fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase' }}>Insumo Materia Prima</th>
+                                        <th style={{ padding: '1rem', textAlign: 'center', fontWeight: '900', fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase' }}>Unidades</th>
+                                        <th style={{ padding: '1rem', textAlign: 'right', fontWeight: '900', fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase' }}>Costo Unit.</th>
+                                        <th style={{ padding: '1rem', textAlign: 'right', fontWeight: '900', fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase' }}>IVA</th>
+                                        <th style={{ padding: '1rem', textAlign: 'right', fontWeight: '900', fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase' }}>Subtotal</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -965,15 +1169,19 @@ const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurc
                                         const unitValue = item.purchasePrice || item.price || item.unit_cost || 0;
                                         const total = unitValue * qtyValue;
                                         return (
-                                            <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                                                <td style={{ padding: '1rem' }}>
-                                                    <div style={{ fontWeight: '600', color: '#334155' }}>{item.name}</div>
-                                                    <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>ID: {item.id}</div>
+                                            <tr key={idx} style={{ background: '#f8fafc' }}>
+                                                <td style={{ padding: '1.2rem 1rem', borderRadius: '12px 0 0 12px' }}>
+                                                    <div style={{ fontWeight: '900', color: '#1e293b' }}>{item.name}</div>
+                                                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '700' }}>ID: {item.id}</div>
                                                 </td>
-                                                <td style={{ padding: '1rem', textAlign: 'center', fontWeight: '600' }}>{qtyValue} {item.unit || ''}</td>
-                                                <td style={{ padding: '1rem', textAlign: 'right', color: '#64748b' }}>${Math.round(unitValue).toLocaleString()}</td>
-                                                <td style={{ padding: '1rem', textAlign: 'right', color: '#64748b' }}>19%</td>
-                                                <td style={{ padding: '1rem', textAlign: 'right', fontWeight: '700', color: '#0f172a' }}>${Math.round(total).toLocaleString()}</td>
+                                                <td style={{ padding: '1.2rem 1rem', textAlign: 'center', fontWeight: '900', color: '#1e293b' }}>
+                                                    {qtyValue} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{item.unit || ''}</span>
+                                                </td>
+                                                <td style={{ padding: '1.2rem 1rem', textAlign: 'right', color: '#64748b', fontWeight: '700' }}>${Math.round(unitValue).toLocaleString()}</td>
+                                                <td style={{ padding: '1.2rem 1rem', textAlign: 'right', color: '#94a3b8', fontWeight: '700' }}>19%</td>
+                                                <td style={{ padding: '1.2rem 1rem', textAlign: 'right', fontWeight: '900', color: '#1e293b', borderRadius: '0 12px 12px 0' }}>
+                                                    ${Math.round(total).toLocaleString()}
+                                                </td>
                                             </tr>
                                         );
                                     })}
@@ -981,7 +1189,7 @@ const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurc
                             </table>
 
                             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                                <div style={{ width: '300px', background: '#f8fafc', padding: '1.5rem', borderRadius: '12px' }}>
+                                <div style={{ width: '320px', background: '#f8fafc', padding: '2rem', borderRadius: '24px', border: '1px solid #f1f5f9' }}>
                                     {(() => {
                                         let sub = 0;
                                         let iva = 0;
@@ -994,17 +1202,20 @@ const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurc
                                         });
                                         return (
                                             <>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', color: '#64748b' }}>
-                                                    <span>Subtotal:</span>
-                                                    <span>${Math.round(sub).toLocaleString()}</span>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.8rem' }}>
+                                                    <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#64748b' }}>SUBTOTAL NETO</span>
+                                                    <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#1e293b' }}>${Math.round(sub).toLocaleString()}</span>
                                                 </div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', color: '#64748b' }}>
-                                                    <span>Impuestos (19%):</span>
-                                                    <span>${Math.round(iva).toLocaleString()}</span>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.2rem' }}>
+                                                    <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#64748b' }}>IVA (19%)</span>
+                                                    <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#1e293b' }}>${Math.round(iva).toLocaleString()}</span>
                                                 </div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '1rem', borderTop: '2px solid #e2e8f0', fontWeight: '800', fontSize: '1.2rem', color: 'var(--color-primary)' }}>
-                                                    <span>TOTAL OC:</span>
-                                                    <span>${Math.round(sub + iva).toLocaleString()}</span>
+                                                <div style={{ height: '1px', background: '#e2e8f0', margin: '1rem 0' }} />
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#025357' }}>TOTAL ORDEN</span>
+                                                    <span style={{ fontSize: '1.5rem', fontWeight: '900', color: '#025357', letterSpacing: '-0.5px' }}>
+                                                        ${Math.round(sub + iva).toLocaleString()}
+                                                    </span>
                                                 </div>
                                             </>
                                         );
@@ -1015,35 +1226,72 @@ const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurc
                     </div>
                 </div>
             )}
-            {/* Payment Modal */}
+
+            {/* Payment Modal - Premium Style */}
             {paymentModalOC && (
                 <div style={{
                     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                    background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100
+                    background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(8px)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100,
+                    padding: '1.5rem', animation: 'fadeIn 0.3s'
                 }}>
-                    <div style={{ background: '#fff', padding: '2rem', borderRadius: '16px', width: '400px', boxShadow: '0 25px 50px rgba(0,0,0,0.2)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                            <h3 style={{ margin: 0, color: 'var(--color-primary)' }}>Registrar Pago OC</h3>
-                            <button onClick={() => setPaymentModalOC(null)} style={{ border: 'none', background: 'none', cursor: 'pointer' }}><X size={20} /></button>
+                    <div style={{ 
+                        background: '#fff', 
+                        padding: '2.5rem', 
+                        borderRadius: '32px', 
+                        width: '450px', 
+                        boxShadow: '0 30px 60px rgba(0,0,0,0.2)',
+                        position: 'relative',
+                        border: '1px solid rgba(255,255,255,0.2)'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', color: '#D4785A' }}>
+                                <DollarSign size={24} />
+                                <h3 style={{ margin: 0, fontSize: '1.4rem', fontWeight: '900', letterSpacing: '-0.5px' }}>Registrar Pago OC</h3>
+                            </div>
+                            <button onClick={() => setPaymentModalOC(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={24} /></button>
                         </div>
 
-                        <div style={{ marginBottom: '1.5rem' }}>
-                            <div style={{ fontSize: '0.9rem', color: '#64748b', marginBottom: '0.4rem' }}>Orden de Compra:</div>
-                            <div style={{ fontWeight: 'bold' }}>{paymentModalOC.id}</div>
-                            <div style={{ fontSize: '0.9rem', color: '#64748b', marginTop: '0.8rem', marginBottom: '0.4rem' }}>Valor a Pagar:</div>
-                            <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#e11d48' }}>${(paymentModalOC.total || 0).toLocaleString()}</div>
+                        <div style={{ background: '#fff7ed', padding: '1.5rem', borderRadius: '20px', marginBottom: '2rem', border: '1px solid #ffedd5' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.8rem' }}>
+                                <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#c2410c' }}>ORDEN DE COMPRA</span>
+                                <span style={{ fontSize: '0.8rem', fontWeight: '900', color: '#1e293b' }}>{paymentModalOC.id}</span>
+                            </div>
+                            <div style={{ height: '1px', background: '#ffedd5', margin: '1rem 0' }} />
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '0.9rem', fontWeight: '700', color: '#c2410c' }}>VALOR A LIQUIDAR</span>
+                                <span style={{ fontSize: '1.6rem', fontWeight: '900', color: '#c2410c', letterSpacing: '-0.5px' }}>
+                                    ${(paymentModalOC.total || 0).toLocaleString()}
+                                </span>
+                            </div>
                         </div>
 
-                        <div style={{ marginBottom: '1.5rem' }}>
-                            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '0.5rem', color: '#334155' }}>Seleccionar Banco / Caja:</label>
+                        <div style={{ marginBottom: '2rem' }}>
+                            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '900', color: '#64748b', marginBottom: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                Origen de los Fondos (Banco)
+                            </label>
                             <select
                                 value={paymentBankId}
                                 onChange={(e) => setPaymentBankId(e.target.value)}
-                                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none' }}
+                                style={{ 
+                                    width: '100%', 
+                                    padding: '1rem', 
+                                    borderRadius: '16px', 
+                                    border: '1px solid #f1f5f9', 
+                                    background: '#f8fafc',
+                                    fontSize: '0.9rem',
+                                    fontWeight: '700',
+                                    color: '#1e293b',
+                                    outline: 'none',
+                                    transition: 'all 0.2s',
+                                    cursor: 'pointer'
+                                }}
+                                onFocus={(e) => { e.target.style.background = '#fff'; e.target.style.borderColor = '#025357'; }}
+                                onBlur={(e) => { e.target.style.background = '#f8fafc'; e.target.style.borderColor = '#f1f5f9'; }}
                             >
-                                <option value="">Seleccione un banco...</option>
+                                <option value="">Seleccione una cuenta...</option>
                                 {banks.map(bank => (
-                                    <option key={bank.id} value={bank.id}>{bank.name} - Saldo: ${(bank.balance || 0).toLocaleString()}</option>
+                                    <option key={bank.id} value={bank.id}>{bank.name} (${(bank.balance || 0).toLocaleString()})</option>
                                 ))}
                             </select>
                         </div>
@@ -1051,15 +1299,41 @@ const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurc
                         <div style={{ display: 'flex', gap: '1rem' }}>
                             <button
                                 onClick={() => setPaymentModalOC(null)}
-                                style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff', cursor: 'pointer' }}
+                                style={{ 
+                                    flex: 1, 
+                                    padding: '1rem', 
+                                    borderRadius: '16px', 
+                                    border: '1px solid #f1f5f9', 
+                                    background: '#fff', 
+                                    color: '#64748b',
+                                    fontWeight: '900', 
+                                    cursor: 'pointer',
+                                    fontSize: '0.85rem',
+                                    transition: 'all 0.2s'
+                                }}
+                                onMouseEnter={(e) => e.target.style.background = '#f8fafc'}
                             >
-                                Cancelar
+                                DESCARTAR
                             </button>
                             <button
                                 onClick={handlePaymentOC}
-                                style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: 'none', background: 'var(--color-primary)', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}
+                                style={{ 
+                                    flex: 1, 
+                                    padding: '1rem', 
+                                    borderRadius: '16px', 
+                                    border: 'none', 
+                                    background: '#025357', 
+                                    color: '#fff', 
+                                    fontWeight: '900', 
+                                    cursor: 'pointer',
+                                    fontSize: '0.85rem',
+                                    boxShadow: '0 10px 20px rgba(2, 83, 87, 0.2)',
+                                    transition: 'all 0.2s'
+                                }}
+                                onMouseEnter={(e) => { e.target.style.transform = 'scale(1.02)'; e.target.style.boxShadow = '0 15px 30px rgba(2, 83, 87, 0.3)'; }}
+                                onMouseLeave={(e) => { e.target.style.transform = 'scale(1)'; e.target.style.boxShadow = '0 10px 20px rgba(2, 83, 87, 0.2)'; }}
                             >
-                                Confirmar Pago
+                                CONFIRMAR PAGO
                             </button>
                         </div>
                     </div>

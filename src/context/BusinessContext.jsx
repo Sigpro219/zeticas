@@ -426,6 +426,7 @@ export const BusinessProvider = ({ children }) => {
         orders,
         expenses,
         purchaseOrders,
+        setPurchaseOrders,
         banks,
         taxSettings,
         clients,
