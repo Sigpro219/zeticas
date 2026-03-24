@@ -1,11 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { X, Send, User, Bot, ExternalLink, MessageCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 const WHATSAPP_NUMBER = '573138865666'; // Official Zeticas number
 
 const Chatbot = () => {
+    const location = useLocation();
+    const isGestion = location.pathname.includes('/gestion');
     const [isOpen, setIsOpen] = useState(false);
+
     const [step, setStep] = useState('CHOICE'); // Choice / B2B_FLOW / FAST_HELP
     const [subStep, setSubStep] = useState(0);
     const [inputValue, setInputValue] = useState('');
@@ -35,10 +39,12 @@ const Chatbot = () => {
     };
 
     useEffect(() => {
-        if (chatEndRef.current) {
+        if (chatEndRef.current && isOpen) {
             chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
         }
     }, [messages, isOpen]);
+
+    if (isGestion) return null;
 
     const addMessage = (text, sender) => {
         setMessages(prev => [...prev, { text, sender }]);

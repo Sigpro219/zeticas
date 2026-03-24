@@ -1053,30 +1053,36 @@ const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurc
 
             {/* OC Detail Modal - Premium Style */}
             {viewingOC && (
-                <div style={{
-                    position: 'fixed',
-                    top: 0, left: 0, right: 0, bottom: 0,
-                    background: 'rgba(15, 23, 42, 0.4)',
-                    backdropFilter: 'blur(12px)',
-                    zIndex: 1000,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: '2rem',
-                    animation: 'fadeIn 0.3s'
-                }}>
-                    <div style={{
-                        background: '#fff',
-                        width: '100%',
-                        maxWidth: '900px',
-                        maxHeight: '90vh',
-                        borderRadius: '32px',
-                        boxShadow: '0 30px 60px rgba(0,0,0,0.2)',
+                <div 
+                    onClick={() => setViewingOC(null)}
+                    style={{
+                        position: 'fixed',
+                        top: 0, left: 0, right: 0, bottom: 0,
+                        background: 'rgba(15, 23, 42, 0.4)',
+                        backdropFilter: 'blur(12px)',
+                        zIndex: 1000,
                         display: 'flex',
-                        flexDirection: 'column',
-                        overflow: 'hidden',
-                        border: '1px solid rgba(255,255,255,0.2)'
-                    }}>
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '2rem',
+                        animation: 'fadeIn 0.3s'
+                    }}
+                >
+                    <div 
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                            background: '#fff',
+                            width: '100%',
+                            maxWidth: '900px',
+                            maxHeight: '90vh',
+                            borderRadius: '32px',
+                            boxShadow: '0 30px 60px rgba(0,0,0,0.2)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            overflow: 'hidden',
+                            border: '1px solid rgba(255,255,255,0.2)'
+                        }}
+                    >
                         {/* Modal Header */}
                         <div style={{
                             padding: '2rem 2.5rem',
@@ -1110,11 +1116,14 @@ const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurc
                                     onClick={() => setViewingOC(null)}
                                     style={{ 
                                         width: '40px', height: '40px', borderRadius: '50%',
-                                        background: '#f1f5f9', border: 'none', cursor: 'pointer', 
-                                        color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' 
+                                        background: '#fee2e2', border: 'none', cursor: 'pointer', 
+                                        color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        transition: 'all 0.2s'
                                     }}
+                                    onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+                                    onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
                                 >
-                                    <X size={20} />
+                                    <X size={20} weight="bold" />
                                 </button>
                             </div>
                         </div>
@@ -1210,6 +1219,29 @@ const Purchases = ({ orders, setOrders, items, setItems, purchaseOrders, setPurc
                                         );
                                     })()}
                                 </div>
+                            </div>
+
+                            <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'center', paddingBottom: '2.5rem' }}>
+                                <button
+                                    onClick={() => setViewingOC(null)}
+                                    style={{
+                                        padding: '1rem 3rem',
+                                        background: '#f1f5f9',
+                                        color: '#64748b',
+                                        border: 'none',
+                                        borderRadius: '16px',
+                                        fontWeight: '900',
+                                        fontSize: '0.9rem',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '1px'
+                                    }}
+                                    onMouseEnter={(e) => { e.currentTarget.style.background = '#e2e8f0'; e.currentTarget.style.color = '#1e293b'; }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.color = '#64748b'; }}
+                                >
+                                    Listo, Cerrar Vista
+                                </button>
                             </div>
                         </div>
                     </div>
