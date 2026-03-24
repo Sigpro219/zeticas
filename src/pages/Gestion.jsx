@@ -134,7 +134,7 @@ const Gestion = () => {
     return (
         <div style={{ 
             display: 'flex', 
-            height: 'calc(100vh - 125px)', // Precisely subtract the header height (UtilityBar 40px + Navbar 85px)
+            height: 'calc(100vh - 85px)', // Navbar only 
             background: '#f1f5f9',
             overflow: 'hidden' // Contain children
         }}>

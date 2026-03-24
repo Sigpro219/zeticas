@@ -375,9 +375,9 @@ export default function Layout({ children }) {
         <div className="layout">
             <header style={{ position: 'fixed', top: 0, width: '100%', zIndex: 1200 }}>
                 {!isGestion && <UtilityBar isMobile={isMobile} isConsulting={isConsulting} />}
-                {!isGestion && <Navbar isMobile={isMobile} isConsulting={isConsulting} />}
+                <Navbar isMobile={isMobile} isConsulting={isConsulting} />
             </header>
-            <main style={{ paddingTop: isGestion ? '0' : (isMobile ? '110px' : '125px') }}>
+            <main style={{ paddingTop: isGestion ? (isMobile ? '70px' : '85px') : (isMobile ? '110px' : '125px') }}>
                 {children}
             </main>
             {!isGestion && <Footer isMobile={isMobile} isConsulting={isConsulting} />}
