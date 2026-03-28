@@ -44,7 +44,11 @@ const ShippingAdmin = () => {
         threshold_free: 120000,
         weight_per_sku: 0.400,
         origin_city: 'Guasca',
-        bold_mode: 'sandbox'
+        bold_mode: 'sandbox',
+        bold_sandbox_identity: '',
+        bold_sandbox_secret: '',
+        bold_prod_identity: '',
+        bold_prod_secret: ''
     });
 
     const [showKeys, setShowKeys] = useState({
@@ -63,8 +67,11 @@ const ShippingAdmin = () => {
                 threshold_free: Number(siteContent.web_shipping.threshold_free) || 120000,
                 weight_per_sku: Number(siteContent.web_shipping.weight_per_sku) || 0.400,
                 origin_city: siteContent.web_shipping.origin_city || 'Guasca',
-                bold_prod_secret: siteContent.web_shipping.bold_prod_secret || '',
-                bold_mode: siteContent.web_shipping.bold_mode || 'sandbox'
+                bold_mode: siteContent.web_shipping.bold_mode || 'sandbox',
+                bold_sandbox_identity: siteContent.web_shipping.bold_sandbox_identity || '',
+                bold_sandbox_secret: siteContent.web_shipping.bold_sandbox_secret || '',
+                bold_prod_identity: siteContent.web_shipping.bold_prod_identity || '',
+                bold_prod_secret: siteContent.web_shipping.bold_prod_secret || ''
             });
         }
     }, [siteContent.web_shipping]);

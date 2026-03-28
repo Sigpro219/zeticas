@@ -29,7 +29,7 @@ const ConsultingSection = () => {
                         {content.title || 'Asesoría con Propósito'}
                     </h2>
                     <p style={{ color: '#666', marginBottom: '2rem', fontSize: isMobile ? '1rem' : '1.1rem' }}>
-                        {content.description || 'No solo vendemos productos; impulsamos el crecimiento de la región. Ofrecemos consultoría especializada en sostenibilidad para empresas y apoyo técnico a productores locales de la Sabana de Bogotá.'}
+                        {content.description || 'No solo vendemos productos; impulsamos el crecimiento de la región. Ofrecemos consultoría especializada en sostenibilidad para empresas y acompañamiento integral a comunidades rurales a nivel nacional.'}
                     </p>
                     <ul style={{ 
                         listStyle: 'none', 
