@@ -603,16 +603,50 @@ export const BusinessProvider = ({ children }) => {
         }
     }, [banks]);
 
+    const consumeMaterials = useCallback(async (materials) => {
+        try {
+            for (const mat of materials) {
+                // materials expected: { id, qtyToConsume }
+                const docRef = doc(db, 'products', mat.id);
+                await updateDoc(docRef, {
+                    initial: increment(-Math.abs(mat.qtyToConsume))
+                });
+            }
+            return { success: true };
+        } catch (err) {
+            console.error("Error consuming materials:", err);
+            return { success: false, error: err.message };
+        }
+    }, []);
+
+    const loadFinishedGoods = useCallback(async (sku, quantity) => {
+        try {
+            const q = query(collection(db, 'products'), where('name', '==', sku));
+            const snapshot = await getDocs(q);
+            if (!snapshot.empty) {
+                const docSnap = snapshot.docs[0];
+                await updateDoc(docSnap.ref, {
+                    initial: increment(quantity)
+                });
+                return { success: true };
+            }
+            throw new Error("Producto no encontrado en inventario");
+        } catch (err) {
+            console.error("Error loading finished goods:", err);
+            return { success: false, error: err.message };
+        }
+    }, []);
+
     const value = useMemo(() => ({
         loading, items, recipes, providers, orders, expenses, purchaseOrders, banks, taxSettings, clients, siteContent, lastUpdate, productionOrders, users,
         refreshData, addClient, addOrder, deleteOrders, updateSiteContent, recalculatePTCosts, updateBankBalance, updateClient, deleteClient,
         addItem, updateItem, deleteItem, addSupplier, updateSupplier, deleteSupplier, updateOrder, addPurchase, addRecipe, deleteRecipeByProduct, saveOdp, addExpense, updateExpense, deleteExpense, addBank, updateBank, deleteBank, receivePurchase, payPurchase, leads, updateLead, addLead, deleteLead,
-        addUser, updateUser, deleteUser
+        addUser, updateUser, deleteUser, consumeMaterials, loadFinishedGoods
     }), [
         loading, items, recipes, providers, orders, expenses, purchaseOrders, banks, taxSettings, clients, siteContent, lastUpdate, productionOrders, leads, users,
         addClient, addOrder, deleteOrders, updateSiteContent, recalculatePTCosts, updateBankBalance, updateClient, deleteClient,
         addItem, updateItem, deleteItem, addSupplier, updateSupplier, deleteSupplier, updateOrder, addPurchase, addRecipe, deleteRecipeByProduct, saveOdp, addExpense, updateExpense, deleteExpense, addBank, updateBank, deleteBank, receivePurchase, payPurchase, updateLead, addLead, deleteLead,
-        addUser, updateUser, deleteUser
+        addUser, updateUser, deleteUser, consumeMaterials, loadFinishedGoods
     ]);
 
     return (

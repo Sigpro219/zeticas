@@ -24,7 +24,7 @@ const Login = () => {
             navigate('/gestion');
         } catch (err) {
             console.error("Mock Login Error:", err);
-            alert('Credenciales incorrectas. (Modo Simulado: admin@zeticas.com / admin123)');
+            alert('Credenciales incorrectas. Por favor, verifica tu usuario y contraseña.');
         }
     };
 
