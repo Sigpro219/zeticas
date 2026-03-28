@@ -9,7 +9,7 @@ const lightSage = "#f8f9f5";
 
 const Login = () => {
     const navigate = useNavigate();
-    const { login } = useAuth();
+    const { login, loginWithGoogle } = useAuth();
 
     const [email, setEmail] = React.useState('');
     const [password, setPassword] = React.useState('');
@@ -17,14 +17,23 @@ const Login = () => {
     const [rememberMe, setRememberMe] = React.useState(true);
     const [isHovered, setIsHovered] = React.useState(false);
 
-    const handleLogin = (e) => {
+    const handleLogin = async (e) => {
         if (e) e.preventDefault();
-        // Admin credentials check
-        if (email === 'admin@zeticas.com' && password === 'admin123') {
-            login({ email, name: 'Administrador', role: 'admin' });
+        try {
+            await login(email, password);
             navigate('/gestion');
-        } else {
-            alert('Credenciales incorrectas. Prueba con admin@zeticas.com / admin123');
+        } catch (err) {
+            console.error("Mock Login Error:", err);
+            alert('Credenciales incorrectas. (Modo Simulado: admin@zeticas.com / admin123)');
+        }
+    };
+
+    const handleGoogleLogin = async () => {
+        try {
+            await loginWithGoogle();
+            navigate('/gestion');
+        } catch (err) {
+            console.error("Mock Google Login Error:", err);
         }
     };
 
@@ -263,6 +272,30 @@ const Login = () => {
                             >
                                 <UserPlus size={18} />
                                 SOLICITAR ACCESO
+                            </button>
+                        </div>
+
+                        <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
+                            <button
+                                type="button"
+                                onClick={handleGoogleLogin}
+                                style={{
+                                    border: '1px solid #e2e8f0',
+                                    color: '#475569',
+                                    padding: '0.8rem 2.5rem',
+                                    borderRadius: '50px',
+                                    fontWeight: '700',
+                                    fontSize: '0.85rem',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.8rem',
+                                    background: '#fff',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.3s ease'
+                                }}
+                            >
+                                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/action/google.svg" alt="Google" style={{ width: '18px' }} />
+                                INGRESAR CON GOOGLE
                             </button>
                         </div>
                     </form>

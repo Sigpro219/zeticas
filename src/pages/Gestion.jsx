@@ -24,10 +24,12 @@ import {
     ShieldCheck,
     Zap,
     Database,
+    Globe,
     ChevronUp,
     ChevronDown,
     LogOut,
-    Menu
+    Menu,
+    Users
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -52,10 +54,12 @@ import Expenses from './Expenses';
 import Banks from './Banks';
 import CRM from './CRM';
 import CMSContents from './CMSContents';
+import ShippingAdmin from './ShippingAdmin';
+import UsersAdmin from './UsersAdmin';
 
 const allTabs = [
     'kanban', 'orders', 'purchases', 'shipping', 'cartera', 'expenses', 'reports', 
-    'production', 'inventory', 'recipes', 'costs', 'products', 'clients', 'suppliers', 'banks', 'crm', 'cms'
+    'production', 'inventory', 'recipes', 'costs', 'products', 'clients', 'suppliers', 'banks', 'crm', 'web_cms', 'web_shipping', 'users_admin'
 ];
 
 const Gestion = () => {
@@ -86,10 +90,15 @@ const Gestion = () => {
     const institutionOcre = "#D4785A";
     const premiumSalmon = "#E29783";
 
-    const isMasterDataTab = ['products', 'recipes', 'suppliers', 'clients', 'costs', 'banks', 'cms'].includes(activeTab);
+    const isMasterDataTab = ['products', 'recipes', 'suppliers', 'clients', 'costs', 'banks', 'web_cms', 'web_shipping', 'users_admin'].includes(activeTab);
     const [isMasterDataOpen, setIsMasterDataOpen] = useState(() => {
         const savedState = localStorage.getItem('zeticas_master_data_open');
         return savedState !== null ? JSON.parse(savedState) : isMasterDataTab;
+    });
+
+    const [isWebAdminOpen, setIsWebAdminOpen] = useState(() => {
+        const savedState = localStorage.getItem('zeticas_web_admin_open');
+        return savedState !== null ? JSON.parse(savedState) : ['web_cms', 'web_shipping'].includes(activeTab);
     });
 
     React.useEffect(() => {
@@ -101,9 +110,13 @@ const Gestion = () => {
     }, [tab, activeTab, navigate]);
 
     React.useEffect(() => {
-        if (['products', 'recipes', 'suppliers', 'clients', 'costs', 'banks', 'cms'].includes(activeTab)) {
+        if (['products', 'recipes', 'suppliers', 'clients', 'costs', 'banks', 'web_cms', 'web_shipping', 'users_admin'].includes(activeTab)) {
             setIsMasterDataOpen(true);
             localStorage.setItem('zeticas_master_data_open', 'true');
+        }
+        if (['web_cms', 'web_shipping', 'users_admin'].includes(activeTab)) {
+            setIsWebAdminOpen(true);
+            localStorage.setItem('zeticas_web_admin_open', 'true');
         }
     }, [activeTab]);
 
@@ -136,6 +149,12 @@ const Gestion = () => {
         { id: 'banks', label: 'Tesorería Bancos', icon: <Landmark size={18} /> },
         { id: 'recipes', label: 'Recetas (BOM)', icon: <ChefHat size={18} /> },
         { id: 'costs', label: 'Análisis de Costos', icon: <DollarSign size={18} /> },
+    ];
+
+    const webAdminTabs = [
+        { id: 'web_cms', label: 'Contenido Web', icon: <Layout size={18} /> },
+        { id: 'web_shipping', label: 'Config. de Envíos', icon: <Truck size={18} /> },
+        { id: 'users_admin', label: 'Gestión de Usuarios', icon: <Users size={18} /> },
     ];
 
     return (
@@ -365,6 +384,47 @@ const Gestion = () => {
                                     {tab.icon} {tab.label}
                                 </button>
                             ))}
+                            
+                            <button
+                                onClick={() => {
+                                    const newState = !isWebAdminOpen;
+                                    setIsWebAdminOpen(newState);
+                                    localStorage.setItem('zeticas_web_admin_open', JSON.stringify(newState));
+                                }}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    width: '100%',
+                                    padding: '0.8rem 1rem',
+                                    marginTop: '0.5rem',
+                                    border: 'none',
+                                    background: 'transparent',
+                                    color: deepTeal,
+                                    borderRadius: '12px',
+                                    cursor: 'pointer',
+                                    fontSize: '0.7rem',
+                                    fontWeight: '800',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '1px',
+                                    opacity: 0.8
+                                }}
+                            >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                    <Globe size={14} /> Administración Web
+                                </div>
+                                {isWebAdminOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                            </button>
+
+                            {isWebAdminOpen && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', paddingLeft: '0.5rem' }}>
+                                    {webAdminTabs.map(tab => (
+                                        <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', padding: '0.7rem 1rem', border: 'none', background: activeTab === tab.id ? 'rgba(214, 189, 152, 0.1)' : 'transparent', color: activeTab === tab.id ? institutionOcre : '#94a3b8', borderRadius: '12px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '700', transition: 'all 0.2s' }}>
+                                            {tab.icon} {tab.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
                 </nav>
@@ -463,7 +523,9 @@ const Gestion = () => {
                     {activeTab === 'shipping' && <Shipping orders={orders} setOrders={setOrders} items={items} setItems={setItems} />}
                     {activeTab === 'cartera' && <Cartera />}
                     {activeTab === 'banks' && <Banks />}
-                    {activeTab === 'cms' && <CMSContents />}
+                    {activeTab === 'web_cms' && <CMSContents />}
+                    {activeTab === 'web_shipping' && <ShippingAdmin />}
+                    {activeTab === 'users_admin' && <UsersAdmin />}
                 </div>
             </main>
 

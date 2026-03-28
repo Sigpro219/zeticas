@@ -1,22 +1,68 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { db } from '../lib/firebase';
+import { collection, query, orderBy, onSnapshot, doc, getDocs, updateDoc, deleteDoc, addDoc, where, increment } from 'firebase/firestore';
 import { products as masterProducts } from '../data/products';
+
+export const CAMPAIGN_PRESETS = {
+    'madre': {
+        id: 'madre',
+        name: 'Día de la Madre',
+        primaryColor: '#FDF8F6',
+        accentColor: '#D4785A',
+        title: 'Para quien nos dio el gusto por lo auténtico',
+        subtitle: 'Descubre nuestra selección artesanal diseñada para celebrar a mamá.',
+    },
+    'mujer': {
+        id: 'mujer',
+        name: 'Día de la Mujer',
+        primaryColor: '#F8F4FF',
+        accentColor: '#7C3AED',
+        title: 'Artesanía con Fuerza y Propósito',
+        subtitle: 'Honramos el talento y la dedicación de las mujeres en cada frasco.',
+    },
+    'amor': {
+        id: 'amor',
+        name: 'Amor y Amistad',
+        primaryColor: '#FFF1F2',
+        accentColor: '#E11D48',
+        title: 'El sabor de compartir',
+        subtitle: 'Regalos que combinan con el cariño de los nuestros.',
+    },
+    'navidad': {
+        id: 'navidad',
+        name: 'Navidad Zeticas',
+        primaryColor: '#F0FDF4',
+        accentColor: '#065F46',
+        title: 'Tradiciones que se comparten en la mesa',
+        subtitle: 'Regala el sabor de nuestra tierra esta navidad.',
+    },
+    'halloween': {
+        id: 'halloween',
+        name: 'Halloween / Otoño',
+        primaryColor: '#FFF7ED',
+        accentColor: '#C2410C',
+        title: 'Cosechas de Temporada',
+        subtitle: 'Sabores otoñales y especiados para noches acogedoras.',
+    }
+};
 
 const BusinessContext = createContext();
 
 export const BusinessProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
     const [items, setItems] = useState([]);
-
     const [recipes, setRecipes] = useState({});
     const [providers, setProviders] = useState([]);
-
     const [orders, setOrders] = useState([]);
-
     const [expenses, setExpenses] = useState([]);
-
     const [purchaseOrders, setPurchaseOrders] = useState([]);
+    const [productionOrders, setProductionOrders] = useState([]);
     const [banks, setBanks] = useState([]);
+    const [clients, setClients] = useState([]);
+    const [siteContent, setSiteContent] = useState({});
+    const [leads, setLeads] = useState([]);
+    const [users, setUsers] = useState([]);
+    const [lastUpdate, setLastUpdate] = useState(null);
 
     const [taxSettings, setTaxSettings] = useState({
         iva: 19,
@@ -25,459 +71,548 @@ export const BusinessProvider = ({ children }) => {
         renta: 35
     });
 
-    const [clients, setClients] = useState([]);
-    const [siteContent, setSiteContent] = useState({});
-    const [lastUpdate, setLastUpdate] = useState(null);
-
     const refreshData = useCallback(async () => {
-        try {
-            // 1. Fetch Products (Inventory)
-            const { data: prodData, error: prodError } = await supabase.from('products').select('*');
-            if (!prodError && prodData?.length > 0) {
-                const synchronizedItems = prodData.map(p => {
-                    let price = p.price || 0;
+        // Since we are using onSnapshot, refreshData might be redundant for some collections,
+        // but we'll keep it for bulk loads or initial state.
+    }, []);
 
-                    // Sincronización con Data Maestra
-                    if (price === 0 || price === null) {
-                        const normalizedDbName = p.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-                        const manualMappings = {
-                            'vinagreta': 'vinagretamigalaba',
-                            'antipastotuna': 'antipastoatunahumado',
-                            'hummusdegarbanzo': 'hummusdegarbanzo'
-                        };
-                        const targetName = manualMappings[normalizedDbName] || normalizedDbName;
-                        const masterMatch = masterProducts.find(mp =>
-                            mp.nombre.toLowerCase().replace(/[^a-z0-9]/g, '') === targetName
-                        );
-                        if (masterMatch) price = masterMatch.precio;
-                    }
+    useEffect(() => {
+        setLoading(true);
 
-                    return {
-                        id: p.id,
-                        name: p.name,
-                        type: p.type === 'PT' ? 'product' : 'material',
-                        initial: p.stock || 0,
-                        purchases: 0,
-                        sales: 0,
-                        safety: p.min_stock_level || 0,
-                        unit: p.unit_measure,
-                        group: p.category || 'Otros',
-                        avgCost: p.cost || 0,
-                        price: price,
-                        sku: p.sku
+        // Subscriptions to Firestore Collections
+        const unsubItems = onSnapshot(collection(db, 'products'), (snapshot) => {
+            const synchronizedItems = snapshot.docs.map(doc => {
+                const p = doc.data();
+                let price = Number(p.price) || 0;
+                const pName = p.name ? String(p.name) : '';
+                
+                if (price === 0 && pName) {
+                    const normalizedDbName = pName.toLowerCase().replace(/[^a-z0-9]/g, '');
+                    const manualMappings = {
+                        'vinagreta': 'vinagretamigalaba',
+                        'antipastotuna': 'antipastoatunahumado',
+                        'hummusdegarbanzo': 'hummusdegarbanzo'
                     };
-                });
-                setItems(synchronizedItems);
-            }
-
-            // 2. Fetch Clients (PRIORITY & Correct Sorting)
-            const { data: clientDataRes } = await supabase
-                .from('clients')
-                .select('*')
-                .order('created_at', { ascending: false });
-
-            if (clientDataRes) {
-                setClients(clientDataRes.map(c => ({
-                    id: c.id,
-                    name: c.name || '',
-                    nit: c.nit || '',
-                    idType: c.id_type || 'NIT',
-                    email: c.email || '',
-                    phone: c.phone || '',
-                    address: c.address || '',
-                    city: c.city || '',
-                    contactName: c.contact_name || '',
-                    type: c.type || 'Jurídica',
-                    subType: c.sub_type || (c.type === 'Natural' ? 'B2C' : 'B2B'),
-                    source: c.source || '',
-                    status: c.status || 'Active',
-                    balance: 0,
-                    createdAt: c.created_at || ''
-                })).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
-            }
-
-            // 3. Fetch Banks
-            const { data: bankData } = await supabase.from('banks').select('*');
-            if (bankData?.length > 0) setBanks(bankData);
-
-            // 4. Fetch Orders
-            const { data: ordData } = await supabase
-                .from('orders')
-                .select(`*, order_items(*, product:products(name, sku)), client:clients(name)`)
-                .order('created_at', { ascending: false });
-
-            if (ordData?.length > 0) {
-                const mappedOrders = ordData.map(o => ({
-                    id: o.order_number || o.id,
-                    dbId: o.id,
-                    client: o.client?.name || o.clients?.[0]?.name || o.clients?.name || 'Cliente Desconocido',
-                    amount: o.total_amount || 0,
-                    date: o.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
-                    realDate: o.created_at || '',
-                    status: o.status,
-                    source: o.source,
-                    invoiceNum: o.invoice_number,
-                    dispatchedAt: o.dispatched_at,
-                    bankId: o.payment_bank_id,
-                    items: (o.order_items || []).map(oi => ({
-                        id: oi.product_id,
-                        sku: oi.product?.sku || oi.products?.sku || oi.product_id,
-                        name: oi.product?.name || oi.products?.name || 'Producto',
-                        quantity: oi.quantity || 0,
-                        price: oi.unit_price || 0
-                    }))
-                }));
-
-                // Sorting: Finalized at bottom, Newest at top
-                const finalizedStatuses = ['Despachado', 'Entregado', 'Pagado', 'Cerrado'];
-                const sortedOrders = [...mappedOrders].sort((a, b) => {
-                    const aFinalized = finalizedStatuses.includes(a.status);
-                    const bFinalized = finalizedStatuses.includes(b.status);
-                    if (aFinalized && !bFinalized) return 1;
-                    if (!aFinalized && bFinalized) return -1;
-                    return new Date(b.realDate) - new Date(a.realDate);
-                });
-
-                setOrders(sortedOrders);
-            }
-
-            // 5. Recipes and Providers
-            const { data: recData } = await supabase.from('recipes').select('*, products!finished_good_id(name, sku), raw:products!raw_material_id(id, name, sku)');
-            if (recData) {
-                const groupedRecipes = {};
-                recData.forEach(r => {
-                    const fgName = r.products?.name;
-                    if (!fgName) return;
-                    if (!groupedRecipes[fgName]) groupedRecipes[fgName] = [];
-                    groupedRecipes[fgName].push({
-                        id: r.raw?.id, name: r.raw?.name, sku: r.raw?.sku, qty: r.quantity_required
-                    });
-                });
-                setRecipes(groupedRecipes);
-            }
-
-            const { data: provData } = await supabase.from('suppliers').select('*');
-            if (provData) {
-                setProviders(provData.map(p => ({
-                    id: p.id,
-                    name: p.name,
-                    nit: p.nit,
-                    group: p.category || 'General',
-                    phone: p.phone,
-                    email: p.email,
-                    address: p.address,
-                    city: p.city,
-                    contact_person: p.contact_person,
-                    associatedItems: p.associated_items || []
-                })));
-            }
-
-            // 6. Purchases
-            const { data: purData, error: purError } = await supabase
-                .from('purchases')
-                .select(`*, purchase_items(*, products(name, type)), suppliers(name)`);
-
-            if (!purError && purData?.length > 0) {
-                const mappedPurchases = purData.map(p => ({
-                    id: p.po_number || p.id,
-                    dbId: p.id,
-                    providerId: p.supplier_id,
-                    providerName: p.suppliers?.name || 'Proveedor',
-                    date: p.created_at?.split('T')[0],
-                    realDate: p.created_at || '',
-                    total: p.total_cost,
-                    status: p.status,
-                    paymentStatus: p.payment_status,
-                    relatedOrders: p.associated_orders ? p.associated_orders.split(', ') : [],
-                    items: p.purchase_items.map(pi => ({
-                        id: pi.raw_material_id,
-                        name: pi.products?.name || 'Material',
-                        type: pi.products?.type || 'MP',
-                        toBuy: pi.quantity,
-                        purchasePrice: pi.unit_cost
-                    }))
-                }));
-
-                // Sorting: Finalized at bottom, Newest at top
-                const purchaseFinalizedStatuses = ['Recibido', 'Pagado', 'Completado'];
-                const sortedPurchases = [...mappedPurchases].sort((a, b) => {
-                    const aFinalized = purchaseFinalizedStatuses.includes(a.status) || a.paymentStatus === 'Pagado';
-                    const bFinalized = purchaseFinalizedStatuses.includes(b.status) || b.paymentStatus === 'Pagado';
-                    if (aFinalized && !bFinalized) return 1;
-                    if (!aFinalized && bFinalized) return -1;
-                    return new Date(b.realDate) - new Date(a.realDate);
-                });
-
-                setPurchaseOrders(sortedPurchases);
-            }
-
-            // 7. Expenses
-            const { data: expData } = await supabase.from('expenses').select('*').order('expense_date', { ascending: false });
-            if (expData?.length > 0) {
-                setExpenses(expData.map(e => ({
-                    id: e.id, date: e.expense_date, category: e.category,
-                    description: e.description, amount: e.amount, bankId: e.bank_id
-                })));
-            }
- 
-            // 8. Fetch Site Content (CMS)
-            try {
-                const { data: contentData } = await supabase.from('site_content').select('*');
-                if (contentData) {
-                    const formattedContent = {};
-                    contentData.forEach(c => {
-                        if (!formattedContent[c.section]) formattedContent[c.section] = {};
-                        formattedContent[c.section][c.key] = c.content;
-                    });
-                    setSiteContent(formattedContent);
+                    const targetName = manualMappings[normalizedDbName] || normalizedDbName;
+                    const masterMatch = masterProducts.find(mp =>
+                        String(mp.nombre || '').toLowerCase().replace(/[^a-z0-9]/g, '') === targetName
+                    );
+                    if (masterMatch) price = Number(masterMatch.precio) || 0;
                 }
-            } catch (cmsErr) {
-                console.warn("Could not fetch site content. Table might not exist yet.");
-            }
- 
-            setLastUpdate(new Date().toLocaleString('es-CO', {
-                day: '2-digit', month: '2-digit', year: 'numeric',
-                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
-            }));
-
-        } catch (err) {
-            console.error("Critical error fetching from Supabase:", err);
-        } finally {
+                return {
+                    id: doc.id,
+                    ...p,
+                    name: pName,
+                    type: p.type === 'PT' ? 'product' : 'material',
+                    initial: Number(p.stock) || 0,
+                    safety: Number(p.min_stock_level) || 0,
+                    avgCost: Number(p.cost) || 0,
+                    price: price
+                };
+            });
+            setItems(synchronizedItems);
             setLoading(false);
-        }
+        }, (error) => console.error("Snapshot Products Error:", error));
+
+        const unsubClients = onSnapshot(query(collection(db, 'clients'), orderBy('created_at', 'desc')), (snapshot) => {
+            setClients(snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                createdAt: doc.data().created_at
+            })));
+        }, (error) => console.error("Snapshot Clients Error:", error));
+
+        const unsubOrders = onSnapshot(query(collection(db, 'orders'), orderBy('created_at', 'desc')), (snapshot) => {
+            setOrders(snapshot.docs.map(doc => {
+                const o = doc.data();
+                // Safe date parsing for Firestore Timestamps or ISO strings
+                const rawCreatedAt = o.created_at;
+                const isoDate = rawCreatedAt?.toDate ? rawCreatedAt.toDate().toISOString() : (typeof rawCreatedAt === 'string' ? rawCreatedAt : new Date().toISOString());
+                
+                return {
+                    id: o.order_number || doc.id,
+                    dbId: doc.id,
+                    ...o,
+                    amount: Number(o.total_amount || o.amount || 0),
+                    date: isoDate.split('T')[0],
+                    realDate: isoDate,
+                };
+            }));
+        }, (error) => console.error("Snapshot Orders Error:", error));
+
+        const unsubRecipes = onSnapshot(collection(db, 'recipes'), (snapshot) => {
+            const groupedRecipes = {};
+            snapshot.docs.forEach(doc => {
+                const r = doc.data();
+                const fgName = r.finished_good_name; 
+                if (!fgName) return;
+                if (!groupedRecipes[fgName]) groupedRecipes[fgName] = [];
+                groupedRecipes[fgName].push({
+                    id: r.raw_material_id, 
+                    name: r.raw_material_name, 
+                    sku: r.raw_material_sku, 
+                    qty: r.quantity_required,
+                    finished_good_id: r.finished_good_id
+                });
+            });
+            setRecipes(groupedRecipes);
+        }, (error) => console.error("Snapshot Recipes Error:", error));
+
+        const unsubSuppliers = onSnapshot(collection(db, 'suppliers'), (snapshot) => {
+            setProviders(snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            })));
+        }, (error) => console.error("Snapshot Suppliers Error:", error));
+
+        const unsubPurchases = onSnapshot(query(collection(db, 'purchase_orders'), orderBy('created_at', 'desc')), (snapshot) => {
+            setPurchaseOrders(snapshot.docs.map(doc => {
+                const p = doc.data();
+                const rawCreatedAt = p.created_at;
+                const isoDate = rawCreatedAt?.toDate ? rawCreatedAt.toDate().toISOString() : (typeof rawCreatedAt === 'string' ? rawCreatedAt : '');
+                return {
+                    id: p.id || doc.id,
+                    dbId: doc.id,
+                    providerName: p.provider_name || p.providerName || 'Proveedor',
+                    providerId: p.provider_id || p.providerId,
+                    date: p.order_date || p.date || isoDate.split('T')[0],
+                    total: Number(p.total_amount || p.total_cost || 0),
+                    status: p.status || 'Enviada',
+                    paymentStatus: p.payment_status || p.paymentStatus || 'Pendiente',
+                    relatedOrders: p.related_orders || (p.associated_orders ? p.associated_orders.split(', ') : []),
+                    items: p.items || [],
+                    realDate: isoDate
+                };
+            }));
+        }, (error) => console.error("Snapshot Purchases Error:", error));
+
+        const unsubExpenses = onSnapshot(query(collection(db, 'expenses'), orderBy('expense_date', 'desc')), (snapshot) => {
+            setExpenses(snapshot.docs.map(doc => ({
+                id: doc.id, ...doc.data()
+            })));
+        }, (error) => console.error("Snapshot Expenses Error:", error));
+
+        const unsubBanks = onSnapshot(collection(db, 'banks'), (snapshot) => {
+            setBanks(snapshot.docs.map(doc => ({
+                id: doc.id, ...doc.data()
+            })));
+        }, (error) => console.error("Snapshot Banks Error:", error));
+
+        const unsubCMS = onSnapshot(collection(db, 'site_content'), (snapshot) => {
+            const formattedContent = {};
+            snapshot.docs.forEach(doc => {
+                const c = doc.data();
+                if (!formattedContent[c.section]) formattedContent[c.section] = {};
+                formattedContent[c.section][c.key] = c.content;
+            });
+            setSiteContent(formattedContent);
+        }, (error) => console.error("Snapshot CMS Error:", error));
+
+        const unsubProd = onSnapshot(collection(db, 'production_orders'), (snapshot) => {
+            setProductionOrders(snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            })));
+        }, (error) => console.error("Snapshot Production Error:", error));
+
+        const unsubLeads = onSnapshot(query(collection(db, 'leads'), orderBy('created_at', 'desc')), (snapshot) => {
+            setLeads(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        }, (error) => console.error("Snapshot Leads Error:", error));
+
+        const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+            setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        }, (error) => console.error("Snapshot Users Error:", error));
+
+        setLastUpdate(new Date().toLocaleString('es-CO', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+        }));
+
+        return () => {
+            unsubItems();
+            unsubClients();
+            unsubOrders();
+            unsubRecipes();
+            unsubSuppliers();
+            unsubPurchases();
+            unsubExpenses();
+            unsubBanks();
+            unsubCMS();
+            unsubProd();
+            unsubLeads();
+            unsubUsers();
+        };
     }, []);
 
     const addClient = useCallback(async (clientData) => {
         try {
-            if (clientData.nit && clientData.nit.trim() !== '') {
-                const { data: existing } = await supabase
-                    .from('clients')
-                    .select('id, name')
-                    .eq('nit', clientData.nit.trim())
-                    .maybeSingle();
-
-                if (existing) {
-                    throw new Error(`Ya existe un cliente (${existing.name}) con este número de identificación: ${clientData.nit}`);
-                }
+            const q = query(collection(db, 'clients'), where('nit', '==', clientData.nit.trim()));
+            const existing = await getDocs(q);
+            if (!existing.empty) {
+                throw new Error(`Ya existe un cliente (${existing.docs[0].data().name}) con este NIT: ${clientData.nit}`);
             }
 
-            const { data, error } = await supabase.from('clients').insert([{
-                name: clientData.name,
-                nit: clientData.nit || '',
-                id_type: clientData.idType || 'NIT',
-                email: clientData.email || '',
-                phone: clientData.phone || '',
-                address: clientData.address || '',
-                city: clientData.city || '',
-                contact_name: clientData.contactName || '',
-                type: clientData.type || 'Jurídica',
-                sub_type: clientData.subType || 'B2B',
-                source: clientData.source || 'CRM',
-                status: 'Active'
-            }]).select().single();
-
-            if (error) throw error;
-            await refreshData();
-            return { success: true, data };
+            const docRef = await addDoc(collection(db, 'clients'), {
+                ...clientData,
+                status: 'Active',
+                created_at: new Date().toISOString()
+            });
+            return { success: true, id: docRef.id };
         } catch (err) {
             console.error("Error adding client:", err);
             return { success: false, error: err.message };
         }
-    }, [refreshData]);
-
-    useEffect(() => {
-        refreshData();
-
-        // Centralized Realtime Subscriptions
-        const channel = supabase.channel('business-realtime')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => {
-                refreshData();
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-                refreshData();
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'purchases' }, () => {
-                refreshData();
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
-                refreshData();
-            })
-            .subscribe((status, err) => {
-                if (status === 'SUBSCRIBED') {
-                    console.log('Realtime sync active.');
-                }
-                if (status === 'CHANNEL_ERROR') {
-                    console.warn('Realtime config/network error. Polling mode fallback active.', err);
-                }
-            });
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
-    }, [refreshData]);
-
-    const recalculatePTCosts = useCallback(async () => {
-        try {
-            const { data: products } = await supabase.from('products').select('id, name, cost, type');
-            if (!products) return;
-
-            const { data: recipesData } = await supabase.from('recipes').select('finished_good_id, raw_material_id, quantity_required');
-            if (!recipesData) return;
-
-            const costMap = {};
-            const pts = products.filter(p => p.type === 'PT');
-            products.forEach(p => {
-                costMap[p.id] = p.cost || 0;
-            });
-
-            const updates = [];
-            for (const pt of pts) {
-                const myIngredients = recipesData.filter(r => r.finished_good_id === pt.id);
-                if (myIngredients.length === 0) continue;
-
-                const totalCost = myIngredients.reduce((sum, ing) => {
-                    const ingredientCost = costMap[ing.raw_material_id] || 0;
-                    return sum + (ingredientCost * ing.quantity_required);
-                }, 0);
-
-                if (Math.round(totalCost) !== Math.round(pt.cost || 0)) {
-                    updates.push(supabase.from('products').update({ cost: Math.round(totalCost) }).eq('id', pt.id));
-                }
-            }
-
-            if (updates.length > 0) {
-                await Promise.all(updates);
-            }
-            await refreshData();
-        } catch (err) {
-            console.error("Error recalculating PT costs:", err);
-        }
-    }, [refreshData]);
-
-    const updateBankBalance = useCallback(async (bankId, amount, type, description = '', relatedId = '') => {
-        try {
-            const bank = banks.find(b => b.id === bankId);
-            if (!bank) throw new Error("Banco no encontrado");
-
-            const currentBalance = Number(bank.balance) || 0;
-            const newBalance = type === 'income' ? currentBalance + Number(amount) : currentBalance - Number(amount);
-
-            // 1. Update Banks Table
-            const { error: bankErr } = await supabase.from('banks').update({ balance: newBalance }).eq('id', bankId);
-            if (bankErr) throw bankErr;
-
-            // 2. Record Transaction for Audit / P&G
-            await supabase.from('bank_transactions').insert({
-                bank_id: bankId,
-                amount: Number(amount),
-                transaction_type: type.toUpperCase(),
-                description,
-                related_id: relatedId
-            });
-
-            await refreshData();
-            return { success: true, newBalance };
-        } catch (err) {
-            console.error("Error updating bank balance:", err);
-            return { success: false, error: err.message };
-        }
-    }, [banks, refreshData]);
+    }, []);
 
     const addOrder = useCallback(async (order) => {
         try {
-            const { data, error } = await supabase.from('orders').insert([{
-                order_number: order.id,
-                total_amount: order.amount,
-                status: order.status,
-                source: order.source,
-                client_id: order.clientId || null
-            }]).select().single();
-
-            if (error) throw error;
-
-            // Handle items insertion
-            if (order.items && order.items.length > 0) {
-                const itemsToInsert = order.items.map(item => ({
-                    order_id: data.id,
-                    product_id: item.id,
-                    quantity: item.quantity,
-                    unit_price: item.price,
-                    total_price: item.price * item.quantity
-                }));
-                const { error: itemError } = await supabase.from('order_items').insert(itemsToInsert);
-                if (itemError) console.error("Error inserting order items:", itemError);
-            }
-
-            await refreshData();
-            return { success: true, data };
+            const docRef = await addDoc(collection(db, 'orders'), {
+                ...order,
+                created_at: new Date().toISOString()
+            });
+            return { success: true, id: docRef.id };
         } catch (err) {
             console.error("Error adding order:", err);
             return { success: false, error: err.message };
         }
-    }, [refreshData]);
+    }, []);
+
+    const deleteClient = useCallback(async (clientId) => {
+        try {
+            await deleteDoc(doc(db, 'clients', clientId));
+            return { success: true };
+        } catch (err) {
+            console.error("Error deleting client:", err);
+            return { success: false, error: err.message };
+        }
+    }, []);
+
+    const updateClient = useCallback(async (clientId, payload) => {
+        try {
+            await updateDoc(doc(db, 'clients', clientId), payload);
+            return { success: true };
+        } catch (err) {
+            console.error("Error updating client:", err);
+            return { success: false, error: err.message };
+        }
+    }, []);
 
     const deleteOrders = useCallback(async (ids) => {
         try {
             const idArray = Array.isArray(ids) ? ids : [ids];
-            if (idArray.length === 0) return { success: true };
-
-            // 1. Delete items first (Cascade handling)
-            const { error: itemsErr } = await supabase.from('order_items').delete().in('order_id', idArray);
-            if (itemsErr) throw itemsErr;
-
-            // 2. Delete the orders
-            const { error: ordersErr } = await supabase.from('orders').delete().in('id', idArray);
-            if (ordersErr) throw ordersErr;
-
-            await refreshData();
+            const promises = idArray.map(id => deleteDoc(doc(db, 'orders', id)));
+            await Promise.all(promises);
             return { success: true };
         } catch (err) {
             console.error("Error deleting orders:", err);
             return { success: false, error: err.message };
         }
-    }, [refreshData]);
+    }, []);
 
     const updateSiteContent = useCallback(async (section, key, content) => {
         try {
-            const { error } = await supabase.from('site_content').upsert({ section, key, content }, { onConflict: 'section,key' });
-            if (error) throw error;
-            await refreshData();
+            const q = query(collection(db, 'site_content'), where('section', '==', section), where('key', '==', key));
+            const snapshot = await getDocs(q);
+            if (snapshot.empty) {
+                await addDoc(collection(db, 'site_content'), { section, key, content });
+            } else {
+                await updateDoc(doc(db, 'site_content', snapshot.docs[0].id), { content });
+            }
             return { success: true };
         } catch (err) {
             console.error("Error updating site content:", err);
             return { success: false, error: err.message };
         }
-    }, [refreshData]);
+    }, []);
+
+    const recalculatePTCosts = useCallback(async () => {
+        console.log("Recalculating PT costs based on BOM...");
+        const ptItems = items.filter(i => i.category === 'Producto Terminado');
+        const materials = items.filter(i => i.category === 'Materia Prima');
+        
+        const updates = ptItems.map(async (pt) => {
+            const ptRecipe = recipes[pt.id] || [];
+            if (ptRecipe.length === 0) return;
+
+            let totalCost = 0;
+            ptRecipe.forEach(ingredient => {
+                const material = materials.find(m => m.id === ingredient.raw_material_id);
+                if (material) {
+                    const materialCost = Number(material.price) || 0;
+                    totalCost += ingredient.quantity_required * materialCost;
+                }
+            });
+
+            if (totalCost > 0) {
+                try {
+                    const docRef = doc(db, 'products', pt.id);
+                    await updateDoc(docRef, {
+                        recipe_cost: totalCost,
+                        automated_cost: totalCost,
+                        last_cost_recalc: new Date().toISOString()
+                    });
+                } catch (err) {
+                    console.error(`Error updating cost for ${pt.name}:`, err);
+                }
+            }
+        });
+
+        await Promise.all(updates);
+        console.log("PT costs recalculation complete.");
+    }, [items, recipes]);
+
+    const addItem = useCallback(async (data) => {
+        try {
+            const docRef = await addDoc(collection(db, 'products'), { ...data, created_at: new Date().toISOString() });
+            return { success: true, id: docRef.id };
+        } catch (err) { return { success: false, error: err.message }; }
+    }, []);
+
+    const updateItem = useCallback(async (id, data) => {
+        try {
+            await updateDoc(doc(db, 'products', id), data);
+            return { success: true };
+        } catch (err) { return { success: false, error: err.message }; }
+    }, []);
+
+    const deleteItem = useCallback(async (id) => {
+        try {
+            await deleteDoc(doc(db, 'products', id));
+            return { success: true };
+        } catch (err) { return { success: false, error: err.message }; }
+    }, []);
+
+    const addSupplier = useCallback(async (data) => {
+        try {
+            const docRef = await addDoc(collection(db, 'suppliers'), { ...data, created_at: new Date().toISOString() });
+            return { success: true, id: docRef.id };
+        } catch (err) { return { success: false, error: err.message }; }
+    }, []);
+
+    const updateSupplier = useCallback(async (id, data) => {
+        try {
+            await updateDoc(doc(db, 'suppliers', id), data);
+            return { success: true };
+        } catch (err) { return { success: false, error: err.message }; }
+    }, []);
+
+    const deleteSupplier = useCallback(async (id) => {
+        try {
+            await deleteDoc(doc(db, 'suppliers', id));
+            return { success: true };
+        } catch (err) { return { success: false, error: err.message }; }
+    }, []);
+
+    const updateOrder = useCallback(async (id, data) => {
+        try {
+            await updateDoc(doc(db, 'orders', id), data);
+            return { success: true };
+        } catch (err) { return { success: false, error: err.message }; }
+    }, []);
+
+    const addPurchase = useCallback(async (data) => {
+        try {
+            const docRef = await addDoc(collection(db, 'purchase_orders'), { ...data, created_at: new Date().toISOString() });
+            return { success: true, id: docRef.id };
+        } catch (err) { return { success: false, error: err.message }; }
+    }, []);
+
+    const addExpense = useCallback(async (data) => {
+        try {
+            const docRef = await addDoc(collection(db, 'expenses'), { ...data, created_at: new Date().toISOString() });
+            return { success: true, id: docRef.id };
+        } catch (err) { return { success: false, error: err.message }; }
+    }, []);
+
+    const updateExpense = useCallback(async (id, data) => {
+        try {
+            await updateDoc(doc(db, 'expenses', id), { ...data, updated_at: new Date().toISOString() });
+            return { success: true };
+        } catch (err) { return { success: false, error: err.message }; }
+    }, []);
+
+    const deleteExpense = useCallback(async (id) => {
+        try {
+            await deleteDoc(doc(db, 'expenses', id));
+            return { success: true };
+        } catch (err) { return { success: false, error: err.message }; }
+    }, []);
+
+    const addBank = useCallback(async (data) => {
+        try {
+            const docRef = await addDoc(collection(db, 'banks'), { ...data, created_at: new Date().toISOString() });
+            return { success: true, id: docRef.id };
+        } catch (err) { return { success: false, error: err.message }; }
+    }, []);
+
+    const updateBank = useCallback(async (id, data) => {
+        try {
+            await updateDoc(doc(db, 'banks', id), { ...data, updated_at: new Date().toISOString() });
+            return { success: true };
+        } catch (err) { return { success: false, error: err.message }; }
+    }, []);
+
+    const deleteBank = useCallback(async (id) => {
+        try {
+            await deleteDoc(doc(db, 'banks', id));
+            return { success: true };
+        } catch (err) { return { success: false, error: err.message }; }
+    }, []);
+
+    const updateLead = useCallback(async (id, data) => {
+        try {
+            await updateDoc(doc(db, 'leads', id), { ...data, updated_at: new Date().toISOString() });
+            return { success: true };
+        } catch (err) { return { success: false, error: err.message }; }
+    }, []);
+
+    const receivePurchase = useCallback(async (poId, receivedItems, relatedOrders) => {
+        try {
+            // 1. Update items inventory and costs
+            for (const item of receivedItems) {
+                const q = query(collection(db, 'products'), where('id', '==', item.id));
+                const snapshot = await getDocs(q);
+                if (!snapshot.empty) {
+                    const docSnap = snapshot.docs[0];
+                    const currentData = docSnap.data();
+                    
+                    const currentStock = (currentData.stock || 0) + (currentData.purchases || 0) - (currentData.sales || 0);
+                    const currentTotalValue = currentStock * (currentData.cost || 0);
+                    const purchaseValue = item.toBuy * item.purchasePrice;
+
+                    const newTotalQty = currentStock + item.toBuy;
+                    const newAvgCost = newTotalQty > 0 ? (currentTotalValue + purchaseValue) / newTotalQty : (currentData.cost || 0);
+
+                    await updateDoc(docSnap.ref, {
+                        purchases: increment(item.toBuy),
+                        cost: Math.round(newAvgCost)
+                    });
+                }
+            }
+
+            // 2. Update OC status
+            await updateDoc(doc(db, 'purchase_orders', poId), { status: 'Recibida', updated_at: new Date().toISOString() });
+
+            // 3. Logic to check if all POs for related orders are received
+            if (relatedOrders && Array.isArray(relatedOrders)) {
+                for (const orderId of relatedOrders) {
+                    const qPo = query(collection(db, 'purchase_orders'), where('relatedOrders', 'array-contains', orderId));
+                    const poSnaps = await getDocs(qPo);
+                    const allReceived = poSnaps.docs.every(d => d.data().status === 'Recibida');
+                    if (allReceived) {
+                        await updateDoc(doc(db, 'orders', orderId), { status: 'En Producción' });
+                    }
+                }
+            }
+
+            return { success: true };
+        } catch (err) { return { success: false, error: err.message }; }
+    }, []);
+
+    const payPurchase = useCallback(async (poId, bankId) => {
+        try {
+            await updateDoc(doc(db, 'purchase_orders', poId), { 
+                paymentStatus: 'Pagado', 
+                bankId: bankId,
+                updated_at: new Date().toISOString() 
+            });
+            return { success: true };
+        } catch (err) { return { success: false, error: err.message }; }
+    }, []);
+
+    const saveOdp = useCallback(async (sku, payload) => {
+        try {
+            const q = query(collection(db, 'production_orders'), where('sku', '==', sku));
+            const snapshot = await getDocs(q);
+            if (!snapshot.empty) {
+                const docId = snapshot.docs[0].id;
+                await updateDoc(doc(db, 'production_orders', docId), { ...payload, updated_at: new Date().toISOString() });
+            } else {
+                await addDoc(collection(db, 'production_orders'), { ...payload, sku, created_at: new Date().toISOString() });
+            }
+            return { success: true };
+        } catch (err) { return { success: false, error: err.message }; }
+    }, []);
+
+    const addRecipe = useCallback(async (data) => {
+        try {
+            const docRef = await addDoc(collection(db, 'recipes'), { ...data, created_at: new Date().toISOString() });
+            return { success: true, id: docRef.id };
+        } catch (err) { return { success: false, error: err.message }; }
+    }, []);
+
+    const addLead = useCallback(async (data) => {
+        try {
+            const docRef = await addDoc(collection(db, 'leads'), { ...data, created_at: new Date().toISOString() });
+            return { success: true, id: docRef.id };
+        } catch (err) { return { success: false, error: err.message }; }
+    }, []);
+
+    const deleteLead = useCallback(async (id) => {
+        try {
+            await deleteDoc(doc(db, 'leads', id));
+            return { success: true };
+        } catch (err) { return { success: false, error: err.message }; }
+    }, []);
+
+    const addUser = useCallback(async (data) => {
+        try {
+            const docRef = await addDoc(collection(db, 'users'), { 
+                ...data, 
+                created_at: new Date().toISOString(),
+                status: data.status || 'Active'
+            });
+            return { success: true, id: docRef.id };
+        } catch (err) { return { success: false, error: err.message }; }
+    }, []);
+
+    const updateUser = useCallback(async (id, data) => {
+        try {
+            await updateDoc(doc(db, 'users', id), { ...data, updated_at: new Date().toISOString() });
+            return { success: true };
+        } catch (err) { return { success: false, error: err.message }; }
+    }, []);
+
+    const deleteUser = useCallback(async (id) => {
+        try {
+            await deleteDoc(doc(db, 'users', id));
+            return { success: true };
+        } catch (err) { return { success: false, error: err.message }; }
+    }, []);
+
+    const deleteRecipeByProduct = useCallback(async (productId) => {
+        try {
+            const q = query(collection(db, 'recipes'), where('finished_good_id', '==', productId));
+            const snapshot = await getDocs(q);
+            const promises = snapshot.docs.map(d => deleteDoc(doc(db, 'recipes', d.id)));
+            await Promise.all(promises);
+            return { success: true };
+        } catch (err) { return { success: false, error: err.message }; }
+    }, []);
+
+    const updateBankBalance = useCallback(async (bankId, amount, type) => {
+        try {
+            const bank = banks.find(b => b.id === bankId);
+            if (!bank) throw new Error("Banco no encontrado");
+            const newBalance = type === 'income' ? (bank.balance || 0) + amount : (bank.balance || 0) - amount;
+            await updateDoc(doc(db, 'banks', bankId), { balance: newBalance });
+            return { success: true };
+        } catch (err) {
+            console.error("Error updating bank balance:", err);
+            return { success: false, error: err.message };
+        }
+    }, [banks]);
 
     const value = useMemo(() => ({
-        loading,
-        items,
-        setItems,
-        recipes,
-        providers,
-        orders,
-        setOrders,
-        expenses,
-        setExpenses,
-        purchaseOrders,
-        setPurchaseOrders,
-        banks,
-        setBanks,
-        taxSettings,
-        setTaxSettings,
-        clients,
-        siteContent,
-        lastUpdate,
-        refreshData,
-        addClient,
-        addOrder,
-        deleteOrders,
-        updateSiteContent,
-        recalculatePTCosts,
-        updateBankBalance
+        loading, items, recipes, providers, orders, expenses, purchaseOrders, banks, taxSettings, clients, siteContent, lastUpdate, productionOrders, users,
+        refreshData, addClient, addOrder, deleteOrders, updateSiteContent, recalculatePTCosts, updateBankBalance, updateClient, deleteClient,
+        addItem, updateItem, deleteItem, addSupplier, updateSupplier, deleteSupplier, updateOrder, addPurchase, addRecipe, deleteRecipeByProduct, saveOdp, addExpense, updateExpense, deleteExpense, addBank, updateBank, deleteBank, receivePurchase, payPurchase, leads, updateLead, addLead, deleteLead,
+        addUser, updateUser, deleteUser
     }), [
-        loading, items, recipes, providers, orders, expenses, purchaseOrders, banks, taxSettings, clients, siteContent, lastUpdate,
-        refreshData, addClient, addOrder, deleteOrders, updateSiteContent, recalculatePTCosts, updateBankBalance
+        loading, items, recipes, providers, orders, expenses, purchaseOrders, banks, taxSettings, clients, siteContent, lastUpdate, productionOrders, leads, users,
+        addClient, addOrder, deleteOrders, updateSiteContent, recalculatePTCosts, updateBankBalance, updateClient, deleteClient,
+        addItem, updateItem, deleteItem, addSupplier, updateSupplier, deleteSupplier, updateOrder, addPurchase, addRecipe, deleteRecipeByProduct, saveOdp, addExpense, updateExpense, deleteExpense, addBank, updateBank, deleteBank, receivePurchase, payPurchase, updateLead, addLead, deleteLead,
+        addUser, updateUser, deleteUser
     ]);
 
     return (
@@ -487,10 +622,4 @@ export const BusinessProvider = ({ children }) => {
     );
 };
 
-export const useBusiness = () => {
-    const context = useContext(BusinessContext);
-    if (!context) {
-        throw new Error('useBusiness must be used within a BusinessProvider');
-    }
-    return context;
-};
+export const useBusiness = () => useContext(BusinessContext);

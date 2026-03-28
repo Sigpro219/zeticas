@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { supabase } from '../lib/supabase';
+import { useBusiness } from '../context/BusinessContext';
+// supabase import removed
 import {
     ShoppingCart,
     Calendar,
@@ -18,14 +19,17 @@ import {
     DollarSign,
     TrendingDown,
     Filter,
-    Search
+    Search,
+    FileText,
+    CheckCircle2,
+    X
 } from 'lucide-react';
-import { useBusiness } from '../context/BusinessContext';
 
 const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, providers }) => {
-    const { setOrders, banks, updateBankBalance, recalculatePTCosts } = useBusiness();
+    const { setOrders, banks, updateBankBalance, recalculatePTCosts, receivePurchase, payPurchase } = useBusiness();
     // Local State for BOM Explosion & OC Generation
     const [viewingOC, setViewingOC] = useState(null); // Modal state for OC
+    const [invEntryOC, setInvEntryOC] = useState(null);
     const [paymentModalOC, setPaymentModalOC] = useState(null);
     const [paymentBankId, setPaymentBankId] = useState('');
 
@@ -57,7 +61,12 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
             result = result.filter(po =>
                 (po.providerName || '').toLowerCase().includes(query) ||
                 (po.id || '').toLowerCase().includes(query) ||
-                (po.relatedOrders || []).some(ref => ref.toLowerCase().includes(query))
+                (po.status || '').toLowerCase().includes(query) ||
+                (po.paymentStatus || '').toLowerCase().includes(query) ||
+                (po.date || '').toLowerCase().includes(query) ||
+                (po.total || 0).toString().includes(query) ||
+                (po.relatedOrders || []).some(ref => ref.toLowerCase().includes(query)) ||
+                (po.items || []).some(item => (item.name || '').toLowerCase().includes(query))
             );
         }
 
@@ -96,117 +105,146 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
 
     const handleDownloadOCPDF = async (oc) => {
         const doc = new jsPDF();
+        const primaryColor = [2, 54, 54]; // #023636
 
-        // Header Build
-        doc.setFontSize(22);
-        doc.setTextColor(30, 41, 59);
-        doc.text('ORDEN DE COMPRA', 14, 22);
+        // 1. Logo "zeticas" in serif
+        doc.setFont('times', 'bold');
+        doc.setFontSize(30);
+        doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.text('zeticas', 14, 25);
 
-        try {
-            const logoUrl = 'https://obsvdzlsbbqmhpsxksnd.supabase.co/storage/v1/object/public/assets/logo.png';
-            const img = new Image();
-            img.crossOrigin = 'Anonymous';
-            img.src = logoUrl;
-            await new Promise((resolve, reject) => {
-                img.onload = resolve;
-                img.onerror = reject;
-            });
-            const imgWidth = 45;
-            const imgHeight = (img.height * imgWidth) / img.width;
-            doc.addImage(img, 'PNG', 196 - imgWidth, 12, imgWidth, imgHeight);
-        } catch (error) {
-            console.error("Error loading logo for PDF", error);
-        }
-
-        // OC Info
+        // 2. Document Title and Number
+        doc.setFont('helvetica', 'normal');
         doc.setFontSize(10);
         doc.setTextColor(100, 116, 139);
-        doc.text(`OC No: ${oc.id}`, 14, 30);
-        doc.text(`Fecha: ${oc.date}`, 14, 35);
-        const refText = Array.isArray(oc.relatedOrders) ? oc.relatedOrders.join(', ') : (oc.orderRef || 'N/A');
-        doc.text(`Ref. Pedidos: ${refText}`, 14, 40);
+        doc.text('ZETICAS SAS', 14, 32);
+        doc.text('NIT: 901.321.456-7', 14, 36);
+        doc.text('Bogotá D.C., Colombia', 14, 40);
 
-        doc.setDrawColor(226, 232, 240);
-        doc.line(14, 45, 196, 45);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(18);
+        doc.setTextColor(15, 23, 42); // #0f172a
+        doc.text('ORDEN DE COMPRA', 196, 25, { align: 'right' });
+        
+        doc.setFontSize(14);
+        doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.text(oc.id, 196, 33, { align: 'right' });
+        
+        doc.setFontSize(9);
+        doc.setTextColor(100, 116, 139);
+        doc.text(`Fecha: ${oc.date}`, 196, 39, { align: 'right' });
 
-        // Vendor (Zeticas)
+        // Horizontal Rule
+        doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.setLineWidth(0.8);
+        doc.line(14, 48, 196, 48);
+
+        // 3. Info Cards (Box backgrounds)
+        // Provider
+        doc.setFillColor(248, 250, 252);
+        doc.roundedRect(14, 55, 88, 30, 2, 2, 'F');
+        doc.setDrawColor(241, 245, 249);
+        doc.roundedRect(14, 55, 88, 30, 2, 2, 'S');
+
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(148, 163, 184);
+        doc.text('PROVEEDOR', 18, 60);
+
         doc.setFontSize(10);
+        doc.setTextColor(30, 41, 59);
+        doc.text(oc.providerName || 'Proveedor', 18, 66);
+        
+        const supInfo = providers.find(p => p.id === oc.providerId || p.name === oc.providerName);
+        doc.setFontSize(8);
         doc.setFont('helvetica', 'normal');
-        doc.setTextColor(51, 65, 85);
-        doc.text('COMPRADOR / FACTURAR A:', 14, 55);
+        doc.setTextColor(100, 116, 139);
+        doc.text(`NIT: ${supInfo?.nit || 'N/A'}`, 18, 71);
+        doc.text(`Tlf: ${oc.providerPhone || supInfo?.phone || 'N/A'}`, 18, 76);
+        doc.text(`Email: ${oc.providerEmail || supInfo?.email || 'N/A'}`, 18, 81);
+
+        // Shipping Info
+        doc.setFillColor(248, 250, 252);
+        doc.roundedRect(108, 55, 88, 30, 2, 2, 'F');
+        doc.setDrawColor(241, 245, 249);
+        doc.roundedRect(108, 55, 88, 30, 2, 2, 'S');
+
+        doc.setFontSize(7);
         doc.setFont('helvetica', 'bold');
-        doc.text('Zeticas S.A.S.', 14, 60);
+        doc.setTextColor(148, 163, 184);
+        doc.text('ENVIAR A:', 112, 60);
+
+        doc.setFontSize(10);
+        doc.setTextColor(30, 41, 59);
+        doc.text('Bodega Zeticas', 112, 66);
+        doc.setFontSize(8);
         doc.setFont('helvetica', 'normal');
-        doc.text('NIT: 901.234.567-8', 14, 65);
-        doc.text('Bogotá, Colombia', 14, 70);
+        doc.setTextColor(100, 116, 139);
+        doc.text('Calle 123 #45-67, Zona Industrial', 112, 71);
+        doc.text('Bogotá D.C., Colombia', 112, 76);
 
-        // Supplier Data
-        const supplierInfo = providers.find(s => s.name === oc.providerName || s.id === oc.providerId);
-        doc.text('DATOS DEL PROVEEDOR', 105, 55);
-        doc.setFont('helvetica', 'bold');
-        doc.text(oc.providerName || 'Proveedor', 105, 60);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`NIT: ${supplierInfo?.nit || '901.000.123-x'}`, 105, 65);
-        doc.text(`Tiempo de Entrega: ${supplierInfo?.lead_time || '2-3 días'}`, 105, 70);
-
-        // Products Table
-        const tableColumn = ["ID / Ref", "Insumo", "Cant.", "Und", "V. Unitario", "IVA", "V. Total"];
-        const tableRows = [];
-
-        // Mock taxes (IVA = 19%)
-        let subtotal = 0;
-        let totalTaxes = 0;
-
-        oc.items.forEach(item => {
-            const unitValue = item.purchasePrice || 0;
-            const itemTotal = unitValue * item.toBuy;
-            const iva = itemTotal * 0.19; // Simplified 19% VAT for illustration
-
-            subtotal += itemTotal;
-            totalTaxes += iva;
-
-            tableRows.push([
-                item.id,
-                item.name,
-                item.toBuy,
-                item.unit,
-                `$${Math.round(unitValue).toLocaleString()}`,
-                `19%`,
-                `$${Math.round(itemTotal).toLocaleString()}`
-            ]);
+        // 4. Items Table
+        const tableColumn = ["DESCRIPCIÓN", "CANTIDAD", "V. UNITARIO", "V. TOTAL"];
+        const tableRows = (oc.items || []).map(item => {
+            const qty = item.quantity || item.toBuy || 0;
+            const unit = item.unit_cost || item.purchasePrice || 0;
+            const total = item.total_cost || (qty * unit);
+            return [
+                item.name || 'Material',
+                qty.toLocaleString('es-CO'),
+                `$${Math.round(unit).toLocaleString('es-CO')}`,
+                `$${Math.round(total).toLocaleString('es-CO')}`
+            ];
         });
 
-        const numFormat = (num) => `$${Math.round(num).toLocaleString()}`;
-
         autoTable(doc, {
-            startY: 85,
+            startY: 95,
             head: [tableColumn],
             body: tableRows,
             theme: 'grid',
-            headStyles: { fillColor: [45, 79, 79], textColor: [255, 255, 255], fontStyle: 'bold' },
-            bodyStyles: { textColor: [51, 65, 85] },
+            styles: { fontSize: 8.5, cellPadding: 4, textColor: [30, 41, 59] },
+            headStyles: { fillColor: primaryColor, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
+            columnStyles: {
+                0: { cellWidth: 'auto' },
+                1: { halign: 'center', cellWidth: 30 },
+                2: { halign: 'right', cellWidth: 35 },
+                3: { halign: 'right', cellWidth: 35 }
+            },
             alternateRowStyles: { fillColor: [248, 250, 252] },
             margin: { left: 14, right: 14 }
         });
 
-        const finalY = doc.lastAutoTable?.finalY || 85;
-        const grantotal = subtotal + totalTaxes;
+        // 5. Totals
+        const finalY = doc.lastAutoTable?.finalY || 100;
+        const subtotal = (oc.items || []).reduce((sum, item) => sum + (item.total_cost || ((item.quantity || item.toBuy || 0) * (item.unit_cost || item.purchasePrice || 0))), 0);
+        const tax = subtotal * 0.19;
+        const total = subtotal + tax;
 
-        doc.setFontSize(10);
+        const numFormat = (num) => `$${Math.round(num).toLocaleString('es-CO')}`;
+
+        doc.setFontSize(9);
+        doc.setTextColor(100, 116, 139);
+        doc.text('Subtotal:', 145, finalY + 12, { align: 'right' });
+        doc.setTextColor(51, 65, 85);
+        doc.setFont('helvetica', 'bold');
+        doc.text(numFormat(subtotal), 196, finalY + 12, { align: 'right' });
+
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(100, 116, 139);
-        doc.text(`Subtotal: ${numFormat(subtotal)}`, 196, finalY + 10, { align: 'right' });
-        doc.text(`Impuestos (19%): ${numFormat(totalTaxes)}`, 196, finalY + 15, { align: 'right' });
-
-        doc.setFontSize(12);
+        doc.text('IVA (19%):', 145, finalY + 18, { align: 'right' });
+        doc.setTextColor(51, 65, 85);
         doc.setFont('helvetica', 'bold');
-        doc.setTextColor(30, 41, 59);
-        doc.text(`TOTAL OC: ${numFormat(grantotal)}`, 196, finalY + 23, { align: 'right' });
+        doc.text(numFormat(tax), 196, finalY + 18, { align: 'right' });
 
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'italic');
-        doc.setTextColor(148, 163, 184);
-        doc.text('Documento oficial de compras - Zeticas OS', 105, 280, { align: 'center' });
+        // Total badge in PDF
+        doc.setFillColor(240, 253, 244); // #f0fdf4 (Light green)
+        doc.roundedRect(125, finalY + 24, 71, 10, 2, 2, 'F');
+        
+        doc.setFontSize(11);
+        doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.text('TOTAL:', 145, finalY + 30, { align: 'right' });
+        doc.setFontSize(13);
+        doc.text(numFormat(total), 196, finalY + 30, { align: 'right' });
 
         doc.save(`${oc.id}.pdf`);
     };
@@ -245,39 +283,13 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
 
         // Persist Inventory & OC changes to Supabase
         const persistReceipt = async () => {
-            try {
-                // 1. Update Inventory for each item
-                for (const ocItem of oc.items) {
-                    const updatedItem = updatedInventory.find(i => i.id === ocItem.id);
-                    if (updatedItem) {
-                        await supabase.from('products')
-                            .update({
-                                stock: updatedItem.initial,
-                                cost: updatedItem.avgCost
-                            })
-                            .eq('id', updatedItem.id);
-                    }
-                }
-
-                // 2. Update OC Status (Purchases)
-                await supabase.from('purchases')
-                    .update({ status: 'RECIBIDA' })
-                    .eq('po_number', ocId);
-
-                // 3. Update related orders if all OCs are received
-                const refs = Array.isArray(oc.relatedOrders) ? oc.relatedOrders : [oc.orderRef];
-                for (const refId of refs) {
-                    if (!refId) continue;
-                    // Logic to check if all POs for this order are received
-                    const { data: pos } = await supabase.from('purchases').select('status').contains('related_orders', [refId]);
-                    if (pos && pos.every(p => p.status === 'RECIBIDA')) {
-                        await supabase.from('orders').update({ status: 'En Producción' }).eq('order_number', refId);
-                    }
-                }
-                // Recalculate PT costs based on new MP costs
+            const res = await receivePurchase(ocId, oc.items, refs);
+            if (!res.success) {
+                console.error("Error persisting receipt:", res.error);
+                alert("Error al guardar en la base de datos.");
+            } else {
                 await recalculatePTCosts();
-            } catch (err) {
-                console.error("Error persisting receipt:", err);
+                alert(`Ingreso registrado y base de datos actualizada.`);
             }
         };
         persistReceipt();
@@ -311,13 +323,9 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
         const amount = oc.total || 0;
 
         try {
-            // 1. Update OC Payment Status in Supabase
-            const { error: poErr } = await supabase
-                .from('purchases')
-                .update({ payment_status: 'Pagado', bank_id: paymentBankId })
-                .eq('po_number', oc.id);
-
-            if (poErr) throw poErr;
+            // 1. Update OC Payment Status in Firestore
+            const res = await payPurchase(oc.id, paymentBankId);
+            if (!res.success) throw new Error(res.error);
 
             // 2. Update Bank Balance (Expense) using centralized function
             await updateBankBalance(paymentBankId, amount, 'expense', `Pago OC ${oc.id} a ${oc.providerName}`, oc.id);
@@ -368,7 +376,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '1rem' }}>
                         <div style={{ background: 'rgba(255,255,255,0.15)', padding: '0.4rem', borderRadius: '10px' }}><Package size={18} /></div>
-                        <span style={{ fontSize: '0.75rem', fontWeight: '900', opacity: 0.8, textTransform: 'uppercase', letterSpacing: '1px' }}>Volume Procurement</span>
+                        <span style={{ fontSize: '0.75rem', fontWeight: '900', opacity: 0.8, textTransform: 'uppercase', letterSpacing: '1px' }}>Volumen de Compras</span>
                     </div>
                     <div style={{ fontSize: '2.2rem', fontWeight: '900', letterSpacing: '-1.5px', lineHeight: 1 }}>
                         <span style={{ fontSize: '1.4rem', opacity: 0.6, marginRight: '4px', verticalAlign: 'middle' }}>$</span>
@@ -441,7 +449,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                     <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem', background: '#fcfcfc', padding: '0.8rem 1.2rem', borderRadius: '14px', width: 'fit-content', border: '1px solid #f1f5f9' }}>
                         <div style={{ fontSize: '0.7rem', fontWeight: '900', color: '#64748b' }}>RECIBIDO: <span style={{ color: '#10b981' }}>{inventoryKPIs.receivedCount}</span></div>
                         <div style={{ height: '10px', width: '1px', background: '#cbd5e1' }} />
-                        <div style={{ fontSize: '0.7rem', fontWeight: '900', color: '#64748b' }}>TRANSIT: <span style={{ color: institutionOcre }}>{inventoryKPIs.pendingCount}</span></div>
+                        <div style={{ fontSize: '0.7rem', fontWeight: '900', color: '#64748b' }}>EN TRÁNSITO: <span style={{ color: institutionOcre }}>{inventoryKPIs.pendingCount}</span></div>
                     </div>
                 </div>
             </div>
@@ -517,12 +525,12 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                         <Search size={20} style={{ position: 'absolute', left: '1.2rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                         <input
                             type="text"
-                            placeholder="Busca por Proveedor, OC o Pedido..."
+                            placeholder="Busca por Proveedor, OC, Fecha, Valor o Pedido..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             style={{
                                 width: '100%',
-                                padding: '1rem 1rem 1rem 3.5rem',
+                                padding: '1rem 3.5rem 1rem 3.5rem',
                                 borderRadius: '16px',
                                 border: '1px solid #f1f5f9',
                                 outline: 'none',
@@ -535,6 +543,14 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                             onFocus={(e) => { e.target.style.borderColor = deepTeal; e.target.style.boxShadow = `0 12px 40px ${deepTeal}10`; }}
                             onBlur={(e) => { e.target.style.borderColor = '#f1f5f9'; e.target.style.boxShadow = 'none'; }}
                         />
+                        {searchTerm && (
+                            <button 
+                                onClick={() => setSearchTerm('')}
+                                style={{ position: 'absolute', right: '1.2rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center' }}
+                            >
+                                <X size={18} />
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
@@ -542,15 +558,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
 
             {/* List of Generated Purchase Orders (OC) - Premium Table */}
             <section style={{ marginBottom: '5rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '2.5rem' }}>
-                    <div style={{ width: '64px', height: '64px', borderRadius: '22px', background: `${deepTeal}10`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: deepTeal }}>
-                        <ShoppingCart size={32} />
-                    </div>
-                    <div>
-                        <h3 style={{ margin: 0, fontSize: '1.6rem', color: '#1e293b', fontWeight: '900', letterSpacing: '-0.5px' }}>Supply Chain Command Center</h3>
-                        <p style={{ margin: 0, fontSize: '0.9rem', color: '#64748b', fontWeight: '700' }}>Monitoreo en tiempo real de adquisiciones, liquidaciones y tiempos de tránsito.</p>
-                    </div>
-                </div>
+                <div style={{ marginBottom: '2rem' }} />
  
                 <div style={{ 
                     background: glassWhite,
@@ -563,28 +571,31 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                             <tr style={{ background: 'rgba(2, 83, 87, 0.03)', borderBottom: '1px solid #f1f5f9' }}>
-                                <th style={{ padding: '2rem 1.5rem', textAlign: 'left', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Master Ref</th>
-                                <th style={{ padding: '2rem 1.5rem', textAlign: 'left', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Partner Supplier</th>
-                                <th style={{ padding: '2rem 1.5rem', textAlign: 'left', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Sales Ref Hub</th>
-                                <th style={{ padding: '2rem 1.5rem', textAlign: 'left', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Timeline</th>
-                                <th style={{ padding: '2rem 1.5rem', textAlign: 'right', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Gross Value</th>
-                                <th style={{ padding: '2rem 1.5rem', textAlign: 'center', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Status</th>
+                                <th style={{ padding: '2rem 1.5rem', textAlign: 'left', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Referencia OC</th>
+                                <th style={{ padding: '2rem 1.5rem', textAlign: 'left', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Proveedor</th>
+                                <th style={{ padding: '2rem 1.5rem', textAlign: 'left', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Pedidos Relacionados</th>
+                                <th style={{ padding: '2rem 1.5rem', textAlign: 'left', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Fecha</th>
+                                <th style={{ padding: '2rem 1.5rem', textAlign: 'right', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Valor Total</th>
+                                <th style={{ padding: '2rem 1.5rem', textAlign: 'center', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Ingreso Inv.</th>
                                 <th style={{ padding: '2rem 1.5rem', textAlign: 'center', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Acciones</th>
+                                <th style={{ padding: '2rem 1.5rem', textAlign: 'center', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Status</th>
                             </tr>
                         </thead>
                         <tbody>
                             {filteredPurchaseOrders.length > 0 ? filteredPurchaseOrders.map(oc => (
                                 <tr
                                     key={oc.id}
-                                    onClick={() => setViewingOC(oc)}
-                                    style={{ borderBottom: '1px solid #f8fafc', cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}
+                                    style={{ borderBottom: '1px solid #f8fafc', transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}
                                     onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(2, 83, 87, 0.02)'; e.currentTarget.style.transform = 'scale(0.998)'; }}
                                     onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.transform = 'scale(1)'; }}
                                 >
                                     <td style={{ padding: '2rem 1.5rem' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                                        <div 
+                                            onClick={(e) => { e.stopPropagation(); setViewingOC(oc); }}
+                                            style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', cursor: 'pointer' }}
+                                        >
                                             <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: oc.status === 'Recibida' ? '#10b981' : institutionOcre }} />
-                                            <span style={{ fontWeight: '900', color: deepTeal, fontSize: '1rem', letterSpacing: '-0.2px' }}>{oc.id}</span>
+                                            <span style={{ fontWeight: '900', color: deepTeal, fontSize: '1rem', letterSpacing: '-0.2px', textDecoration: 'underline' }}>{oc.id}</span>
                                         </div>
                                     </td>
                                     <td style={{ padding: '2rem 1.5rem', fontWeight: '800', color: '#1e293b', fontSize: '0.95rem' }}>{oc.providerName || oc.supplier}</td>
@@ -599,8 +610,27 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                     <td style={{ padding: '2rem 1.5rem', textAlign: 'right' }}>
                                         <div style={{ fontWeight: '900', color: '#1e293b', fontSize: '1.2rem', letterSpacing: '-0.5px' }}>
                                             <span style={{ fontSize: '0.8rem', opacity: 0.4, marginRight: '4px' }}>$</span>
-                                            {(oc.total || 0).toLocaleString()}
+                                            {(oc.total || 0).toLocaleString('es-CO')}
                                         </div>
+                                    </td>
+                                    <td style={{ padding: '2rem 1.5rem', textAlign: 'center' }}>
+                                        {oc.status === 'Recibida' ? (
+                                            <div style={{ color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontWeight: 'bold', fontSize: '0.8rem' }}>
+                                                <CheckCircle2 size={24} /> INGRESADO
+                                            </div>
+                                        ) : (
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); setInvEntryOC(oc); }}
+                                                style={{
+                                                    background: '#fff', border: '1px solid #e2e8f0', padding: '0.6rem 1rem', borderRadius: '10px',
+                                                    fontSize: '0.75rem', fontWeight: 'bold', color: '#475569', cursor: 'pointer', transition: '0.2s'
+                                                }}
+                                                onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
+                                                onMouseLeave={(e) => e.currentTarget.style.background = '#fff'}
+                                            >
+                                                INGRESAR...
+                                            </button>
+                                        )}
                                     </td>
                                     <td style={{ padding: '2rem 1.5rem', textAlign: 'center' }}>
                                         {oc.paymentStatus !== 'Pagado' ? (
@@ -622,67 +652,27 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                                     letterSpacing: '1px',
                                                     transition: 'all 0.3s'
                                                 }}
-                                                onMouseEnter={(e) => { e.currentTarget.style.background = premiumSalmon; e.currentTarget.style.color = '#fff'; }}
-                                                onMouseLeave={(e) => { e.currentTarget.style.background = `${premiumSalmon}15`; e.currentTarget.style.color = premiumSalmon; }}
                                             >
-                                                <DollarSign size={16} /> Pagar OC
+                                                PAGAR
                                             </button>
                                         ) : (
-                                            <div style={{ background: '#10b98115', color: '#10b981', padding: '0.8rem 1.5rem', borderRadius: '50px', fontSize: '0.75rem', fontWeight: '900', display: 'inline-flex', alignItems: 'center', gap: '8px', textTransform: 'uppercase', letterSpacing: '1px', border: '1px solid #10b98130' }}>
-                                                <CheckCircle size={16} /> LIQUIDADA
-                                            </div>
+                                            <span style={{ fontSize: '0.75rem', fontWeight: '900', color: '#10b981' }}>LIQUIDADO</span>
                                         )}
                                     </td>
-                                    <td style={{ padding: '2rem 1.5rem' }}>
-                                        <div style={{ display: 'flex', gap: '0.8rem', justifyContent: 'center', alignItems: 'center' }}>
-                                            {oc.status === 'Enviada' && (
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); handleReceiveOC(oc.id); }}
-                                                    style={{ 
-                                                        background: deepTeal, 
-                                                        color: '#fff', 
-                                                        border: 'none', 
-                                                        borderRadius: '14px', 
-                                                        padding: '0.8rem', 
-                                                        cursor: 'pointer', 
-                                                        display: 'flex', 
-                                                        alignItems: 'center', 
-                                                        boxShadow: `0 8px 20px ${deepTeal}30`,
-                                                        transition: 'all 0.3s'
-                                                    }}
-                                                    onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1) rotate(5deg)'}
-                                                    onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1) rotate(0)'}
-                                                    title="Recibir Inventario"
-                                                >
-                                                    <Package size={20} />
-                                                </button>
-                                            )}
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); handleDownloadOCPDF(oc); }}
-                                                style={{ 
-                                                    background: '#fff', 
-                                                    border: '1px solid #f1f5f9', 
-                                                    color: '#64748b', 
-                                                    borderRadius: '14px', 
-                                                    padding: '0.8rem', 
-                                                    cursor: 'pointer', 
-                                                    display: 'flex', 
-                                                    alignItems: 'center',
-                                                    transition: 'all 0.3s',
-                                                    boxShadow: '0 4px 15px rgba(0,0,0,0.02)'
-                                                }}
-                                                onMouseEnter={(e) => { e.currentTarget.style.borderColor = deepTeal; e.currentTarget.style.color = deepTeal; e.currentTarget.style.background = `${deepTeal}05`; }}
-                                                onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#f1f5f9'; e.currentTarget.style.color = '#64748b'; e.currentTarget.style.background = '#fff'; }}
-                                                title="Descargar PDF"
-                                            >
-                                                <Download size={20} />
-                                            </button>
-                                        </div>
+                                    <td style={{ padding: '2rem 1.5rem', textAlign: 'center' }}>
+                                        <span style={{ 
+                                            padding: '6px 12px', borderRadius: '8px', fontSize: '0.7rem', fontWeight: '900',
+                                            background: oc.status === 'Recibida' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(214, 189, 152, 0.2)',
+                                            color: oc.status === 'Recibida' ? '#10b981' : '#B8A07E',
+                                            border: '1px solid currentColor'
+                                        }}>
+                                            {oc.status.toUpperCase()}
+                                        </span>
                                     </td>
                                 </tr>
                             )) : (
                                 <tr>
-                                    <td colSpan="7" style={{ padding: '6rem', textAlign: 'center', color: '#94a3b8', fontWeight: '900', fontSize: '1.2rem', textTransform: 'uppercase', letterSpacing: '2px' }}>
+                                    <td colSpan="8" style={{ padding: '6rem', textAlign: 'center', color: '#94a3b8', fontWeight: '900', fontSize: '1.2rem', textTransform: 'uppercase', letterSpacing: '2px' }}>
                                         No se encontraron registros de compra.
                                     </td>
                                 </tr>
@@ -811,15 +801,14 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                             <tr key={idx} style={{ background: '#f8fafc' }}>
                                                 <td style={{ padding: '1.2rem 1rem', borderRadius: '12px 0 0 12px' }}>
                                                     <div style={{ fontWeight: '900', color: '#1e293b' }}>{item.name}</div>
-                                                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '700' }}>ID: {item.id}</div>
                                                 </td>
                                                 <td style={{ padding: '1.2rem 1rem', textAlign: 'center', fontWeight: '900', color: '#1e293b' }}>
-                                                    {qtyValue} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{item.unit || ''}</span>
+                                                    {qtyValue.toLocaleString('es-CO')} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{item.unit || ''}</span>
                                                 </td>
-                                                <td style={{ padding: '1.2rem 1rem', textAlign: 'right', color: '#64748b', fontWeight: '700' }}>${Math.round(unitValue).toLocaleString()}</td>
+                                                <td style={{ padding: '1.2rem 1rem', textAlign: 'right', color: '#64748b', fontWeight: '700' }}>${Math.round(unitValue).toLocaleString('es-CO')}</td>
                                                 <td style={{ padding: '1.2rem 1rem', textAlign: 'right', color: '#94a3b8', fontWeight: '700' }}>19%</td>
                                                 <td style={{ padding: '1.2rem 1rem', textAlign: 'right', fontWeight: '900', color: '#1e293b', borderRadius: '0 12px 12px 0' }}>
-                                                    ${Math.round(total).toLocaleString()}
+                                                    ${Math.round(total).toLocaleString('es-CO')}
                                                 </td>
                                             </tr>
                                         );
@@ -843,17 +832,17 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                             <>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.8rem' }}>
                                                     <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#64748b' }}>SUBTOTAL NETO</span>
-                                                    <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#1e293b' }}>${Math.round(sub).toLocaleString()}</span>
+                                                    <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#1e293b' }}>${Math.round(sub).toLocaleString('es-CO')}</span>
                                                 </div>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.2rem' }}>
                                                     <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#64748b' }}>IVA (19%)</span>
-                                                    <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#1e293b' }}>${Math.round(iva).toLocaleString()}</span>
+                                                    <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#1e293b' }}>${Math.round(iva).toLocaleString('es-CO')}</span>
                                                 </div>
                                                 <div style={{ height: '1px', background: '#e2e8f0', margin: '1rem 0' }} />
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                     <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#025357' }}>TOTAL ORDEN</span>
                                                     <span style={{ fontSize: '1.5rem', fontWeight: '900', color: '#025357', letterSpacing: '-0.5px' }}>
-                                                        ${Math.round(sub + iva).toLocaleString()}
+                                                        ${Math.round(sub + iva).toLocaleString('es-CO')}
                                                     </span>
                                                 </div>
                                             </>
@@ -998,6 +987,51 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                 CONFIRMAR PAGO
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+            {/* Inventory Entry Modal (MP & Insumos) */}
+            {invEntryOC && (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(8px)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3100,
+                    padding: '2rem', animation: 'fadeIn 0.3s'
+                }}>
+                    <div style={{ 
+                        background: '#fff', padding: '2.5rem', borderRadius: '32px', width: '550px', 
+                        boxShadow: '0 30px 60px rgba(0,0,0,0.2)', position: 'relative'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', color: '#16a34a' }}>
+                                <Package size={24} />
+                                <h3 style={{ margin: 0, fontSize: '1.4rem', fontWeight: '900' }}>Ingreso de Materias Primas</h3>
+                            </div>
+                            <button onClick={() => setInvEntryOC(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={24} /></button>
+                        </div>
+                        
+                        <p style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+                            Confirma la recepción física de los siguientes insumos de la <strong>OC {invEntryOC.id}</strong> para que ingresen al inventario:
+                        </p>
+
+                        <div style={{ maxHeight: '300px', overflowY: 'auto', background: '#f8fafc', borderRadius: '16px', padding: '1.2rem', marginBottom: '2rem' }}>
+                            {invEntryOC.items.map((item, i) => (
+                                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.8rem 0', borderBottom: i === invEntryOC.items.length - 1 ? 'none' : '1px solid #e2e8f0' }}>
+                                    <div style={{ fontWeight: '700', fontSize: '0.9rem', color: '#1e293b' }}>{item.name}</div>
+                                    <div style={{ fontWeight: '900', color: '#023636' }}>{item.toBuy || item.quantity} <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{item.unit}</span></div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <button
+                            onClick={() => { handleReceiveOC(invEntryOC.id); setInvEntryOC(null); }}
+                            style={{
+                                width: '100%', padding: '1.2rem', background: '#16a34a', color: '#fff', border: 'none', borderRadius: '16px',
+                                fontWeight: '900', fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.8rem'
+                            }}
+                        >
+                            <Save size={20} /> INGRESO MP A INV.
+                        </button>
                     </div>
                 </div>
             )}

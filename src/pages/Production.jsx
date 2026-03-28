@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+// supabase import removed
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useBusiness } from '../context/BusinessContext';
@@ -38,7 +38,8 @@ const premiumSalmon = "#E29783";
 const glassWhite = "rgba(255, 255, 255, 0.85)";
 
 const Production = () => {
-    const { orders, items, recipes, refreshData } = useBusiness();
+    const { orders, items, recipes, refreshData, productionOrders, saveOdp, updateItem } = useBusiness();
+    
     const [explosionPreview, setExplosionPreview] = useState(null);
     const [odpSettings, setOdpSettings] = useState(() => {
         const saved = localStorage.getItem('zeticas_odp_settings');
@@ -58,80 +59,54 @@ const Production = () => {
     const [dateFilter, setDateFilter] = useState('month');
     const [customRange, setCustomRange] = useState({ from: '', to: '' });
 
-    // ── Cargar desde Supabase ─────────────────────────────────────────────────
-    const loadFromSupabase = useCallback(async () => {
-        try {
-            setSyncStatus('syncing');
-            const { data, error } = await supabase
-                .from('production_orders')
-                .select('sku, custom_qty, waste_qty, started_at, completed_at, mp_synced, inventory_synced, odp_number')
-                .not('sku', 'is', null);
-
-            if (error) throw error;
-
-            if (data && data.length > 0) {
-                const settingsFromDB = {};
-                data.forEach(row => {
-                    if (row.sku) {
-                        settingsFromDB[row.sku] = {
-                            customQty: row.custom_qty ?? undefined,
-                            wasteQty: row.waste_qty ?? undefined,
-                            start: row.started_at ? new Date(row.started_at).toISOString().slice(0, 16) : undefined,
-                            end: row.completed_at ? new Date(row.completed_at).toISOString().slice(0, 16) : undefined,
-                            mpSynced: row.mp_synced || false,
-                            inventorySynced: row.inventory_synced || false,
-                            odpId: row.odp_number
-                        };
-                    }
-                });
-                setOdpSettings(prev => {
-                    const merged = { ...prev, ...settingsFromDB };
-                    localStorage.setItem('zeticas_odp_settings', JSON.stringify(merged));
-                    return merged;
-                });
-            }
+    // ── Sync from Context to local state ──────────────────────────────────────
+    useEffect(() => {
+        if (productionOrders && productionOrders.length > 0) {
+            const settingsFromDB = {};
+            productionOrders.forEach(row => {
+                if (row.sku) {
+                    settingsFromDB[row.sku] = {
+                        customQty: row.custom_qty ?? undefined,
+                        wasteQty: row.waste_qty ?? undefined,
+                        start: row.started_at || undefined,
+                        end: row.completed_at || undefined,
+                        mpSynced: row.mp_synced || false,
+                        inventorySynced: row.inventory_synced || false,
+                        odpId: row.odp_number
+                    };
+                }
+            });
+            setOdpSettings(prev => {
+                const merged = { ...prev, ...settingsFromDB };
+                localStorage.setItem('zeticas_odp_settings', JSON.stringify(merged));
+                return merged;
+            });
             setSyncStatus('synced');
-        } catch (err) {
-            console.warn('No se pudo cargar desde Supabase, usando caché local:', err.message);
-            setSyncStatus('error');
         }
-    }, []);
+    }, [productionOrders]);
 
-    useEffect(() => { loadFromSupabase(); }, [loadFromSupabase]);
-
-    // ── Guardar en Supabase ───────────────────────────────────────────────────
-    const saveToSupabase = useCallback(async (sku, settings, odpId) => {
+    // ── Save to Firestore ───────────────────────────────────────────────────
+    const saveToFirestore = useCallback(async (sku, settings, odpId) => {
         try {
             setSyncStatus('syncing');
-            const { data: existing } = await supabase
-                .from('production_orders')
-                .select('id')
-                .eq('sku', sku)
-                .maybeSingle();
-
             const payload = {
-                sku,
                 odp_number: odpId || null,
                 custom_qty: settings.customQty !== undefined ? Number(settings.customQty) : null,
                 waste_qty: settings.wasteQty !== undefined ? Number(settings.wasteQty) : null,
-                started_at: settings.start ? new Date(settings.start).toISOString() : null,
-                completed_at: settings.end ? new Date(settings.end).toISOString() : null,
+                started_at: settings.start || null,
+                completed_at: settings.end || null,
                 mp_synced: settings.mpSynced || false,
                 inventory_synced: settings.inventorySynced || false,
                 status: settings.end ? 'DONE' : (settings.start ? 'IN_PROGRESS' : 'TO_DO'),
             };
 
-            if (existing?.id) {
-                await supabase.from('production_orders').update(payload).eq('id', existing.id);
-            } else {
-                await supabase.from('production_orders').insert({ ...payload, quantity: 0 });
-            }
+            await saveOdp(sku, payload);
             setSyncStatus('synced');
         } catch (err) {
-            console.warn('Error guardando en Supabase:', err.message);
+            console.warn('Error saving ODP to Firestore:', err.message);
             setSyncStatus('error');
         }
-    }, []);
+    }, [saveOdp]);
 
     // ── Cola de ODPs ──────────────────────────────────────────────────────────
     const pendingOrders = useMemo(() => orders.filter(o =>
@@ -141,11 +116,11 @@ const Production = () => {
     const odpQueue = useMemo(() => {
         const groups = {};
         pendingOrders.forEach(order => {
-            order.items.forEach(item => {
+            order.items?.forEach(item => {
                 const sku = item.name;
                 if (!groups[sku]) groups[sku] = { sku, relatedOrders: [], totalRequested: 0 };
                 groups[sku].relatedOrders.push(order);
-                groups[sku].totalRequested += item.quantity;
+                groups[sku].totalRequested += (Number(item.quantity) || 0);
             });
         });
 
@@ -262,7 +237,7 @@ const Production = () => {
         setOdpSettings(newSettings);
         localStorage.setItem('zeticas_odp_settings', JSON.stringify(newSettings));
         const odpEntry = odpQueue.find(o => o.sku === sku);
-        saveToSupabase(sku, newSettings[sku], odpEntry?.odpId);
+        saveToFirestore(sku, newSettings[sku], odpEntry?.odpId);
         
         if (field === 'end' && value && !newSettings[sku]?.inventorySynced) {
             const odp = odpQueue.find(o => o.sku === sku);
@@ -300,7 +275,7 @@ const Production = () => {
             const item = items.find(i => i.name === odp.sku);
             if (item) {
                 const newStock = (item.initial || 0) + Number(odp.finalQty);
-                await supabase.from('products').update({ stock: newStock }).eq('id', item.id);
+                await updateItem(item.id, { initial: newStock });
                 setOdpSettings({ ...odpSettings, [odp.sku]: { ...odpSettings[odp.sku], inventorySynced: true } });
                 await refreshData();
             }

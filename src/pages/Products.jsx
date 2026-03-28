@@ -1,31 +1,61 @@
 import React, { useState, useMemo } from 'react';
-import { Package, Plus, Search, Edit3, Trash2, X, Barcode, Save, AlertTriangle, RefreshCw, Upload, Download } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { Plus, Search, Edit3, Trash2, X, Barcode as BarcodeIcon, RefreshCw, Image } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
-import * as XLSX from 'xlsx';
+import Barcode from 'react-barcode';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { storage } from '../lib/firebase';
 
 const Products = () => {
-    const { items, refreshData, loading, recalculatePTCosts } = useBusiness();
+    const { items, refreshData, loading, recalculatePTCosts, addItem, updateItem, deleteItem } = useBusiness();
     const [searchTerm, setSearchTerm] = useState('');
-    const [selectedCategory, setSelectedCategory] = useState('Todos');
+    const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('Todos');
+    const [selectedLineFilter, setSelectedLineFilter] = useState('Todos');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [editingProduct, setEditingProduct] = useState(null);
     const [confirmModal, setConfirmModal] = useState({ show: false, target: null, title: '', message: '' });
     const [barcodeModal, setBarcodeModal] = useState({ show: false, product: null });
+    const [selectedForPrint, setSelectedForPrint] = useState([]); // Array of product objects
+    const [selectedFile, setSelectedFile] = useState(null);
+    const [selectedFile2, setSelectedFile2] = useState(null);
+    const [previewUrl, setPreviewUrl] = useState('');
+    const [previewUrl2, setPreviewUrl2] = useState('');
+
+    
+    const toggleSelection = (product) => {
+        if (selectedForPrint.find(p => p.id === product.id)) {
+            setSelectedForPrint(selectedForPrint.filter(p => p.id !== product.id));
+        } else {
+            setSelectedForPrint([...selectedForPrint, product]);
+        }
+    };
+
+    const handlePrintSelected = () => {
+        if (selectedForPrint.length === 0) return;
+        window.print();
+    };
+
     const [formData, setFormData] = useState({
         sku: '',
         name: '',
-        category: 'Sal',
+        category: 'Producto Terminado',
+        product_type: 'Sal',
         price: '',
         cost: '',
-        stock: '',
+        stock: '0',
         unit_measure: 'unidad',
-        type: 'PT'
+        type: 'PT',
+        barcode_text: '',
+        description: '',
+        benefits: '',
+        image_url: '',
+        image_url_2: '',
+        published: true // Default to true for new PT products
     });
+
+
     const [showUnitManager, setShowUnitManager] = useState(false);
     const [newUnitType, setNewUnitType] = useState('');
-
     const [unitOptions, setUnitOptions] = useState(() => {
         const saved = localStorage.getItem('zeticas_units');
         if (saved) return JSON.parse(saved);
@@ -59,136 +89,155 @@ const Products = () => {
         return Array.from(set);
     }, [unitOptions, formData.unit_measure]);
 
-
-
     const productsList = items.map(i => ({
         id: i.id,
         sku: i.sku,
         name: i.name,
-        category: i.group || 'Otros',
+        category: i.category || i.group || 'Otros',
+        product_type: i.product_type || 'Insumo',
         price: i.price || 0,
         cost: i.avgCost || 0,
         stock: i.initial || 0,
-        unit_measure: i.unit || 'unidad',
-        type: i.type === 'product' ? 'PT' : 'MP'
+        unit_measure: i.unit_measure || i.unit || 'unidad',
+        type: i.type === 'product' ? 'PT' : 'MP',
+        barcode_text: i.barcode_text || '',
+        image_url: i.image_url || '',
+        image_url_2: i.image_url_2 || '',
+        description: i.description || '',
+        benefits: i.benefits || '',
+        published: i.published !== undefined ? i.published : true
     }));
 
+
+
     const filteredProducts = productsList.filter(p => {
-        const matchesSearch = (p.name?.toLowerCase().includes(searchTerm.toLowerCase())) ||
-            (p.sku?.toLowerCase().includes(searchTerm.toLowerCase()));
-        const matchesCategory = selectedCategory === 'Todos' || p.category === selectedCategory;
-        return matchesSearch && matchesCategory;
+        const srch = searchTerm.toLowerCase();
+        const matchesSearch = (p.name?.toLowerCase().includes(srch)) ||
+            (p.sku?.toLowerCase().includes(srch)) ||
+            (p.product_type?.toLowerCase().includes(srch)) ||
+            (p.category?.toLowerCase().includes(srch));
+        
+        const matchesCategory = selectedCategoryFilter === 'Todos' || p.category === selectedCategoryFilter;
+        const matchesLine = selectedLineFilter === 'Todos' || p.product_type === selectedLineFilter;
+        
+        return matchesSearch && matchesCategory && matchesLine;
     });
+
 
     const handleOpenModal = (product = null) => {
         setShowUnitManager(false);
         if (product) {
             setEditingProduct(product);
-            setFormData({ ...product });
+            setFormData({ 
+                ...product,
+                barcode_text: product.barcode_text || '' 
+            });
         } else {
             setEditingProduct(null);
-            setFormData({ sku: '', name: '', category: 'Sal', price: '', cost: '', stock: '0', unit_measure: 'unidad', type: 'PT' });
+            setFormData({ 
+                sku: '', name: '', category: 'Producto Terminado', product_type: 'Sal', price: '', cost: '', stock: '0', unit_measure: 'unidad', type: 'PT', barcode_text: '', published: true
+            });
         }
+        setSelectedFile(null);
+        setSelectedFile2(null);
+        setPreviewUrl('');
+        setPreviewUrl2('');
         setIsModalOpen(true);
+
     };
 
     const handleSave = async (e) => {
         e.preventDefault();
         setIsSaving(true);
-        const data = {
-            sku: formData.sku,
-            name: formData.name,
-            category: formData.category,
-            price: parseFloat(formData.price) || 0,
-            cost: parseFloat(formData.cost) || 0,
-            stock: parseInt(formData.stock) || 0,
-            unit_measure: formData.unit_measure,
-            type: formData.type
-        };
-
         try {
-            if (editingProduct) {
-                await supabase.from('products').update(data).eq('id', editingProduct.id);
-            } else {
-                await supabase.from('products').insert([data]);
-            }
-            await refreshData();
+            let imageUrl = formData.image_url || '';
+            let imageUrl2 = formData.image_url_2 || '';
 
-            // Recalculate PT costs if a Raw Material was updated
-            if (data.type === 'MP') {
+            if (selectedFile) {
+                const storageRef = ref(storage, `products/${Date.now()}_1_${selectedFile.name}`);
+                await uploadBytes(storageRef, selectedFile);
+                imageUrl = await getDownloadURL(storageRef);
+            }
+
+            if (selectedFile2) {
+                const storageRef2 = ref(storage, `products/${Date.now()}_2_${selectedFile2.name}`);
+                await uploadBytes(storageRef2, selectedFile2);
+                imageUrl2 = await getDownloadURL(storageRef2);
+            }
+
+            
+            // Note: Currently only supporting one primary image upload in this UI, 
+            // but we could add a second one later if needed. 
+            // For now we persist imageUrl2 if it existed or was manually linked.
+
+            const productData = { 
+                sku: formData.sku,
+                name: formData.name,
+                category: formData.category,
+                product_type: formData.product_type,
+                price: parseFloat(formData.price) || 0,
+                cost: parseFloat(formData.cost) || 0,
+                stock: parseInt(formData.stock) || 0,
+                unit_measure: formData.unit_measure,
+                type: formData.type,
+                barcode_text: formData.barcode_text || '',
+                image_url: imageUrl,
+                image_url_2: imageUrl2,
+                description: formData.description || '',
+                benefits: formData.benefits || '',
+                published: formData.published !== undefined ? formData.published : true
+            };
+
+
+            if (editingProduct) {
+                await updateItem(editingProduct.id, productData);
+            } else {
+                await addItem(productData);
+            }
+
+            if (productData.type === 'MP') {
                 await recalculatePTCosts();
             }
+
             setIsModalOpen(false);
-        } catch (err) {
-            console.error("Error saving product:", err);
+            setEditingProduct(null);
+            setSelectedFile(null);
+            setPreviewUrl('');
+            refreshData();
+        } catch (error) {
+            console.error("Error saving product:", error);
+            if (error.code === 'storage/unauthorized' || error.message?.includes('CORS')) {
+                alert("Error de permisos (CORS): No se pudo subir la imagen. Por favor configura los permisos de Storage o intenta guardar sin subir una imagen nueva.");
+            } else {
+                alert("Error al guardar: " + error.message);
+            }
         } finally {
             setIsSaving(false);
         }
+
     };
 
-    const handleBulkUpload = (e) => {
+    const handleFileChange = (e) => {
         const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = async (evt) => {
-            const wb = XLSX.read(evt.target.result, { type: 'binary' });
-            const ws = wb.Sheets[wb.SheetNames[0]];
-            const data = XLSX.utils.sheet_to_json(ws);
-            if (!data.length) return;
-
-            const get = (row, terms) => {
-                const keys = Object.keys(row);
-                for (const t of terms) {
-                    const k = keys.find(k => k.trim().toLowerCase().includes(t.toLowerCase()));
-                    if (k && row[k] !== undefined) return row[k];
-                }
-                return null;
-            };
-
-            const mapped = data.map(row => {
-                const typeStr = String(get(row, ['tipo', 'type', 'clase']) || 'PT').toUpperCase();
-                return {
-                    sku: String(get(row, ['sku', 'referencia', 'ref', 'código']) || '').trim(),
-                    name: String(get(row, ['nombre', 'producto', 'item']) || 'Sin Nombre'),
-                    category: String(get(row, ['categoría', 'grupo']) || 'Otros'),
-                    price: parseFloat(get(row, ['precio', 'valor venta'])) || 0,
-                    cost: parseFloat(get(row, ['costo', 'valor compra', 'costo unitario'])) || 0,
-                    stock: parseFloat(get(row, ['stock', 'cantidad inicial', 'inventario'])) || 0,
-                    unit_measure: String(get(row, ['unidad', 'medida', 'u.m']) || 'unidad'),
-                    type: typeStr.includes('MP') ? 'MP' : 'PT'
-                };
-            }).filter(p => p.sku && p.name);
-
-            setIsSaving(true);
-            try {
-                const { error } = await supabase.from('products').insert(mapped);
-                if (error) throw error;
-                await refreshData();
-                alert(`✅ ${mapped.length} productos / SKU importados correctamente desde Excel.`);
-            } catch (err) {
-                alert('Error al importar: ' + err.message);
-            } finally {
-                setIsSaving(false);
-            }
-        };
-        reader.readAsBinaryString(file);
-        e.target.value = null;
+        if (file) {
+            setSelectedFile(file);
+            setPreviewUrl(URL.createObjectURL(file));
+        }
     };
 
-    const downloadTemplate = () => {
-        const ws = XLSX.utils.aoa_to_sheet([
-            ['SKU', 'Nombre', 'Categoría', 'Precio Venta', 'Costo Unitario', 'Stock Inicial', 'Unidad de Medida', 'Tipo (PT o MP)'],
-            ['PT-HUM-01', 'Hummus de Garbanzo', 'Sal', '21000', '12000', '50', 'frasco', 'PT'],
-            ['MP-GAR-01', 'Garbanzo Seco', 'Insumos', '0', '8000', '100', 'kg', 'MP']
-        ]);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Productos');
-        XLSX.writeFile(wb, 'Plantilla_Cargue_Masivo_Productos.xlsx');
+    const handleFileChange2 = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            setSelectedFile2(file);
+            setPreviewUrl2(URL.createObjectURL(file));
+        }
     };
+
+
     const executeDeletion = async () => {
         try {
-            await supabase.from('products').delete().eq('id', confirmModal.target.id);
-            await refreshData();
+            const res = await deleteItem(confirmModal.target.id);
+            if (!res.success) throw new Error(res.error);
             setConfirmModal({ show: false, target: null, title: '', message: '' });
         } catch (err) {
             console.error("Error deleting product:", err);
@@ -197,225 +246,481 @@ const Products = () => {
     };
 
     return (
-        <div className="products-module" style={{ padding: '0 0.5rem' }}>
-            <header style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center', 
-                marginBottom: '1.5rem',
-                marginTop: '1rem'
-            }}>
-                <div>
-                    <h2 className="font-serif" style={{ fontSize: '1.5rem', color: 'var(--color-primary)', margin: 0 }}>Maestro de SKU / Nube</h2>
-                    <p style={{ color: '#666', fontSize: '0.85rem', margin: 0 }}>Gestión centralizada de costos y precios.</p>
-                </div>
-                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                    <button onClick={refreshData} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', padding: '0.6rem', borderRadius: '12px', cursor: 'pointer' }}>
-                        <RefreshCw size={18} className={loading ? 'spin' : ''} />
-                    </button>
-                    {/* Template */}
-                    <button onClick={downloadTemplate} style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', padding: '0.65rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer' }}>
-                        <Download size={15} /> Plantilla
-                    </button>
-                    {/* Import */}
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', padding: '0.65rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', margin: 0 }}>
-                        <Upload size={15} /> Importar Excel
-                        <input type="file" accept=".xlsx,.xls" onChange={handleBulkUpload} style={{ display: 'none' }} />
-                    </label>
-                    <button onClick={() => handleOpenModal()} style={{ background: 'var(--color-secondary)', color: '#fff', padding: '0.7rem 1.5rem', borderRadius: '12px', border: 'none', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <Plus size={18} /> Nuevo SKU
-                    </button>
-                </div>
-            </header>
-
-            <div style={{ background: '#f8f9fa', padding: '1.5rem', borderRadius: '20px', marginBottom: '2rem', display: 'flex', gap: '1rem' }}>
-                <div style={{ flex: 1, position: 'relative' }}>
-                    <Search size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                    <input placeholder="Buscar en la nube..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ width: '100%', padding: '0.75rem 1rem 0.75rem 2.8rem', borderRadius: '12px', border: '1px solid #e2e8f0' }} />
-                </div>
-                <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} style={{ padding: '0.75rem', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', fontWeight: 'bold' }}>
-                    <option value="Todos">Categorías</option>
-                    <option value="Sal">Sal</option>
-                    <option value="Dulce">Dulce</option>
-                    <option value="Insumos">Insumos</option>
-                </select>
+        <div className="products-module" style={{ padding: '0 0.5rem' }}>            {/* ÁREA DE IMPRESIÓN PROFESIONAL (50mm x 25mm Standard) */}
+            <div className="print-area">
+                {selectedForPrint.map(p => (
+                    <div key={p.id} className="print-label">
+                        <div className="label-barcode">
+                            <div style={{ width: '46mm', display: 'flex', justifyContent: 'center' }}>
+                                <Barcode 
+                                    value={p.barcode_text || p.sku || 'ERROR'} 
+                                    format="CODE128"
+                                    width={1.4}
+                                    height={40}
+                                    fontSize={0}
+                                    margin={0}
+                                    background="#fff"
+                                />
+                            </div>
+                        </div>
+                        <div className="label-id">{p.barcode_text || p.sku}</div>
+                        <div className="label-name">{p.name}</div>
+                    </div>
+                ))}
             </div>
 
-            <div style={{ background: '#fff', borderRadius: '20px', border: '1px solid #f1f5f9', overflow: 'hidden' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead style={{ background: '#f8fafc' }}>
-                        <tr>
-                            <th style={{ padding: '1.2rem', textAlign: 'left', fontSize: '0.7rem' }}>SKU</th>
-                            <th style={{ padding: '1.2rem', textAlign: 'left', fontSize: '0.7rem' }}>PRODUCTO</th>
-                            <th style={{ padding: '1.2rem', textAlign: 'left', fontSize: '0.7rem' }}>CATEGORÍA</th>
-                            <th style={{ padding: '1.2rem', textAlign: 'left', fontSize: '0.7rem' }}>COSTO/COMPRA</th>
-                            <th style={{ padding: '1.2rem', textAlign: 'left', fontSize: '0.7rem' }}>PRECIO VENTA</th>
-                            <th style={{ padding: '1.2rem', textAlign: 'center', fontSize: '0.7rem' }}>ACCIONES</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {filteredProducts.map(p => (
-                            <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                <td style={{ padding: '1rem', fontWeight: 'bold', fontSize: '0.85rem' }}>{p.sku}</td>
-                                <td style={{ padding: '1rem' }}>
-                                    <div style={{ fontWeight: 'bold' }}>{p.name}</div>
-                                    <div style={{ fontSize: '0.7rem', color: '#666' }}>{p.unit_measure}</div>
-                                </td>
-                                <td style={{ padding: '1rem' }}>{p.category}</td>
-                                <td style={{ padding: '1rem', color: '#666' }}>${p.cost?.toLocaleString()}</td>
-                                <td style={{ padding: '1rem', fontWeight: 'bold', color: 'var(--color-primary)' }}>${p.price?.toLocaleString()}</td>
-                                <td style={{ padding: '1rem', textAlign: 'center' }}>
-                                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
-                                        <button onClick={() => setBarcodeModal({ show: true, product: p })} style={{ padding: '0.4rem', border: '1px solid #eee', background: 'none', cursor: 'pointer' }}><Barcode size={14} /></button>
-                                        <button onClick={() => handleOpenModal(p)} style={{ padding: '0.4rem', border: '1px solid #eee', background: 'none', cursor: 'pointer' }}><Edit3 size={14} /></button>
-                                        <button onClick={() => setConfirmModal({ show: true, target: p, title: 'Eliminar SKU', message: '¿Eliminar permanentemente?' })} style={{ padding: '0.4rem', border: '1px solid #fee2e2', background: 'none', cursor: 'pointer', color: '#ef4444' }}><Trash2 size={14} /></button>
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-
-            {/* Edit/New SKU Modal */}
-            {isModalOpen && (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3000 }}>
-                    <div style={{ background: '#fff', padding: '2rem', borderRadius: '24px', width: '90%', maxWidth: '500px', position: 'relative', maxHeight: '90vh', overflowY: 'auto' }}>
-                        <button
-                            onClick={() => setIsModalOpen(false)}
-                            style={{ position: 'absolute', right: '1.5rem', top: '1.5rem', border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}
-                        >
-                            <X size={24} />
+            <div className="no-print">
+                {/* Header and other UI content... */}
+                <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', marginTop: '1rem' }}>
+                    <div>
+                        <h2 className="font-serif" style={{ fontSize: '1.5rem', color: 'var(--color-primary)', margin: 0 }}>Maestro de SKU / Nube</h2>
+                        <p style={{ color: '#666', fontSize: '0.85rem', margin: 0 }}>Gestión centralizada de costos y precios.</p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                        {selectedForPrint.length > 0 && (
+                            <button 
+                                onClick={handlePrintSelected} 
+                                style={{ background: '#D4785A', color: '#fff', padding: '0.7rem 1.5rem', borderRadius: '12px', border: 'none', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 10px 20px rgba(212, 120, 90, 0.2)' }}
+                            >
+                                <BarcodeIcon size={18} /> Imprimir {selectedForPrint.length} Etiquetas
+                            </button>
+                        )}
+                        <button onClick={refreshData} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', padding: '0.6rem', borderRadius: '12px', cursor: 'pointer', display: 'flex' }}>
+                            <RefreshCw size={18} className={loading ? 'spin' : ''} />
                         </button>
-                        <h3 style={{ marginBottom: '1.5rem' }}>{editingProduct ? 'Editar SKU' : 'Nuevo SKU'}</h3>
-                        <form onSubmit={handleSave} style={{ display: 'grid', gap: '1.2rem', marginTop: '1rem' }}>
-                            <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.4rem', display: 'block' }}>SKU / REFERENCIA</label>
-                                <input placeholder="Ej: MP-SAL-01" value={formData.sku} onChange={(e) => setFormData({ ...formData, sku: e.target.value })} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', outline: 'none' }} />
-                            </div>
-                            <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.4rem', display: 'block' }}>NOMBRE DEL PRODUCTO</label>
-                                <input placeholder="Nombre descriptivo" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', outline: 'none' }} />
-                            </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                <div>
-                                    <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.4rem', display: 'block' }}>COSTO/COMPRA</label>
-                                    <input placeholder="0" type="number" value={formData.cost} onChange={(e) => setFormData({ ...formData, cost: e.target.value })} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', outline: 'none' }} />
-                                </div>
-                                <div>
-                                    <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.4rem', display: 'block' }}>PRECIO VENTA</label>
-                                    <input placeholder="0" type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: e.target.value })} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', outline: 'none' }} />
-                                </div>
-                            </div>
-                            <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.4rem', display: 'block' }}>UNIDAD DE MEDIDA</label>
-                                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                    <select
-                                        value={formData.unit_measure}
-                                        onChange={(e) => setFormData({ ...formData, unit_measure: e.target.value })}
-                                        style={{ flex: 1, padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', outline: 'none', background: '#fff' }}
-                                    >
-                                        {finalUnitOptions.map(u => (
-                                            <option key={u} value={u}>{u.charAt(0).toUpperCase() + u.slice(1)}</option>
-                                        ))}
-                                    </select>
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowUnitManager(!showUnitManager)}
-                                        style={{ padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', background: '#f8fafc', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                                        title="Gestionar Unidades"
-                                    >
-                                        <Plus size={18} />
-                                    </button>
-                                </div>
-                                {showUnitManager && (
-                                    <div style={{ marginTop: '1rem', padding: '1rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.8rem' }}>
-                                            <input
-                                                placeholder="Nueva unidad..."
-                                                value={newUnitType}
-                                                onChange={(e) => setNewUnitType(e.target.value)}
-                                                style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: '1px solid #ddd', outline: 'none', fontSize: '0.85rem' }}
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={handleAddUnit}
-                                                style={{ padding: '0.5rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.85rem' }}
-                                            >
-                                                Agregar
-                                            </button>
-                                        </div>
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                                            {unitOptions.map(u => (
-                                                <div key={u} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: '#fff', padding: '0.3rem 0.6rem', borderRadius: '6px', border: '1px solid #eee', fontSize: '0.75rem' }}>
-                                                    {u}
-                                                    <X size={12} style={{ cursor: 'pointer', color: '#fca5a5' }} onClick={() => handleRemoveUnit(u)} />
+                        <button onClick={() => handleOpenModal()} style={{ background: '#023636', color: '#fff', padding: '0.7rem 1.5rem', borderRadius: '12px', border: 'none', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 10px 20px rgba(2, 54, 54, 0.15)' }}>
+                            <Plus size={18} /> Nuevo SKU
+                        </button>
+                    </div>
+                </header>
+
+                <div style={{ background: '#fff', padding: '1.2rem', borderRadius: '25px', marginBottom: '2.5rem', display: 'flex', gap: '1.5rem', alignItems: 'center', boxShadow: '0 15px 35px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, position: 'relative', minWidth: '300px' }}>
+                        <Search size={22} style={{ position: 'absolute', left: '1.5rem', top: '50%', transform: 'translateY(-50%)', color: '#023636', opacity: 0.4 }} />
+                        <input 
+                            placeholder="Potencia tu búsqueda: SKU, Nombre o Categoría..." 
+                            value={searchTerm} 
+                            onChange={(e) => setSearchTerm(e.target.value)} 
+                            style={{ width: '100%', padding: '1.2rem 3.5rem 1.2rem 4rem', borderRadius: '20px', border: '1px solid #f1f5f9', outline: 'none', fontSize: '1.1rem', fontWeight: '500', background: '#f8fafc', transition: 'all 0.3s', boxSizing: 'border-box' }} 
+                            onFocus={(e) => { e.target.style.borderColor = '#023636'; e.target.style.background = '#fff'; }}
+                            onBlur={(e) => { e.target.style.borderColor = '#f1f5f9'; e.target.style.background = '#f8fafc'; }}
+                        />
+                        {searchTerm && (
+                            <button onClick={() => setSearchTerm('')} style={{ position: 'absolute', right: '1.2rem', top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.05)', border: 'none', width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}><X size={16} /></button>
+                        )}
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginRight: '4px' }}>Tipo:</span>
+                        {['Todos', 'Materia Prima', 'Producto Terminado'].map(cat => (
+                            <button 
+                                key={cat} 
+                                onClick={() => setSelectedCategoryFilter(cat)} 
+                                style={{ 
+                                    padding: '0.6rem 1.2rem', 
+                                    borderRadius: '12px', 
+                                    border: '1px solid #e2e8f0', 
+                                    background: selectedCategoryFilter === cat ? '#023636' : '#fff', 
+                                    color: selectedCategoryFilter === cat ? '#fff' : '#64748b', 
+                                    fontSize: '0.75rem', 
+                                    fontWeight: '900', 
+                                    cursor: 'pointer', 
+                                    textTransform: 'uppercase', 
+                                    transition: 'all 0.3s' 
+                                }}
+                            >
+                                {cat}
+                            </button>
+                        ))}
+                        
+                        <div style={{ width: '1px', height: '24px', background: '#e2e8f0', margin: '0 12px' }} />
+                        
+                        <span style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginRight: '4px' }}>Línea:</span>
+                        {['Todos', 'Sal', 'Dulce'].map(line => (
+                            <button 
+                                key={line} 
+                                onClick={() => setSelectedLineFilter(line)} 
+                                style={{ 
+                                    padding: '0.6rem 1.2rem', 
+                                    borderRadius: '12px', 
+                                    border: '1px solid #e2e8f0', 
+                                    background: selectedLineFilter === line ? '#D4785A' : '#fff', 
+                                    color: selectedLineFilter === line ? '#fff' : '#64748b', 
+                                    fontSize: '0.75rem', 
+                                    fontWeight: '900', 
+                                    cursor: 'pointer', 
+                                    textTransform: 'uppercase', 
+                                    transition: 'all 0.3s' 
+                                }}
+                            >
+                                {line}
+                            </button>
+                        ))}
+                    </div>
+
+                </div>
+
+                <div style={{ background: '#fff', borderRadius: '20px', border: '1px solid #f1f5f9', overflow: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead style={{ background: '#f8fafc' }}>
+                            <tr>
+                                <th style={{ padding: '1.2rem', textAlign: 'center', width: '50px' }}>
+                                    <input 
+                                        type="checkbox" 
+                                        checked={selectedForPrint.length === filteredProducts.length && filteredProducts.length > 0} 
+                                        onChange={(e) => {
+                                            if (e.target.checked) setSelectedForPrint(filteredProducts);
+                                            else setSelectedForPrint([]);
+                                        }}
+                                        style={{ cursor: 'pointer' }}
+                                    />
+                                </th>
+                                <th style={{ padding: '1.2rem', textAlign: 'left', fontSize: '0.7rem' }}>SKU</th>
+                                <th style={{ padding: '1.2rem', textAlign: 'left', fontSize: '0.7rem' }}>PRODUCTO</th>
+                                <th style={{ padding: '1.2rem', textAlign: 'left', fontSize: '0.7rem' }}>LÍNEA</th>
+                                <th style={{ padding: '1.2rem', textAlign: 'left', fontSize: '0.7rem' }}>TIPO / CATEGORÍA</th>
+                                <th style={{ padding: '1.2rem', textAlign: 'left', fontSize: '0.7rem' }}>COSTO</th>
+                                <th style={{ padding: '1.2rem', textAlign: 'left', fontSize: '0.7rem' }}>PRECIO VENTA</th>
+                                <th style={{ padding: '1.2rem', textAlign: 'center', fontSize: '0.7rem' }}>ACCIONES</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredProducts.map(p => (
+                                <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9', background: selectedForPrint.find(s => s.id === p.id) ? '#fff7ed' : 'transparent' }}>
+                                    <td style={{ padding: '1rem', textAlign: 'center' }}>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={!!selectedForPrint.find(s => s.id === p.id)} 
+                                            onChange={() => toggleSelection(p)}
+                                            style={{ cursor: 'pointer' }}
+                                        />
+                                    </td>
+                                    <td style={{ padding: '1rem', fontWeight: 'bold', fontSize: '0.85rem' }}>{p.sku}</td>
+                                    <td style={{ padding: '1rem' }}>
+                                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                            {p.image_url ? (
+                                                <div style={{ width: '40px', height: '40px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #eee', background: '#f8f9fa', flexShrink: 0 }}>
+                                                    <img src={p.image_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                                 </div>
-                                            ))}
+                                            ) : (
+                                                <div style={{ width: '40px', height: '40px', borderRadius: '8px', border: '1px dashed #ddd', background: '#fcfcfc', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                    <Image size={14} color="#94a3b8" />
+                                                </div>
+                                            )}
+                                            <div>
+                                                <div style={{ fontWeight: 'bold' }}>{p.name}</div>
+                                                <div style={{ fontSize: '0.7rem', color: '#666' }}>{p.unit_measure}</div>
+                                            </div>
                                         </div>
+                                    </td>
+
+                                    <td style={{ padding: '1rem' }}>
+                                        <span style={{ padding: '4px 10px', borderRadius: '8px', fontSize: '0.7rem', fontWeight: '900', background: p.product_type === 'Sal' ? '#f1f5f9' : p.product_type === 'Dulce' ? '#fff7ed' : '#f8fafc', color: p.product_type === 'Sal' ? '#475569' : p.product_type === 'Dulce' ? '#c2410c' : '#94a3b8', border: '1px solid currentColor', opacity: p.product_type === 'Insumo' ? 0.3 : 1 }}>{p.product_type}</span>
+                                    </td>
+                                    <td style={{ padding: '1rem', fontSize: '0.85rem' }}>{p.category}</td>
+                                    <td style={{ padding: '1rem', color: '#666' }}>${p.cost?.toLocaleString()}</td>
+                                    <td style={{ padding: '1rem', fontWeight: 'bold', color: 'var(--color-primary)' }}>${p.price?.toLocaleString()}</td>
+                                    <td style={{ padding: '1rem', textAlign: 'center' }}>
+                                        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                                            <button onClick={() => setBarcodeModal({ show: true, product: p })} style={{ padding: '0.4rem', border: '1px solid #eee', background: 'none', cursor: 'pointer' }}><BarcodeIcon size={14} /></button>
+                                            <button onClick={() => handleOpenModal(p)} style={{ padding: '0.4rem', border: '1px solid #eee', background: 'none', cursor: 'pointer' }}><Edit3 size={14} /></button>
+                                            <button onClick={() => setConfirmModal({ show: true, target: p, title: 'Eliminar SKU', message: '¿Eliminar permanentemente?' })} style={{ padding: '0.4rem', border: '1px solid #fee2e2', background: 'none', cursor: 'pointer', color: '#ef4444' }}><Trash2 size={14} /></button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                {isModalOpen && (
+                    <div className="no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3000 }}>
+                        <div style={{ background: '#fff', padding: '2rem', borderRadius: '24px', width: '90%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto', position: 'relative' }}>
+                            <button onClick={() => setIsModalOpen(false)} style={{ position: 'absolute', right: '1.5rem', top: '1.5rem', border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={24} /></button>
+                            <h3 style={{ marginBottom: '1.5rem' }}>{editingProduct ? 'Editar SKU' : 'Nuevo SKU'}</h3>
+                            <form onSubmit={handleSave} style={{ display: 'grid', gap: '1.2rem' }}>
+                                <div>
+                                    <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.4rem', display: 'block' }}>SKU / REFERENCIA</label>
+                                    <input placeholder="Ej: PT-VINAGRETA" value={formData.sku} onChange={(e) => setFormData({ ...formData, sku: e.target.value })} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', outline: 'none' }} />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.4rem', display: 'block' }}>NOMBRE DEL PRODUCTO</label>
+                                    <input placeholder="Nombre descriptivo" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', outline: 'none' }} />
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                    <div>
+                                        <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.4rem', display: 'block' }}>CATEGORÍA</label>
+                                        <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', background: '#fff' }}>
+                                            <option value="Producto Terminado">Producto Terminado</option>
+                                            <option value="Materia Prima">Materia Prima</option>
+                                            <option value="Otros">Otros</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.4rem', display: 'block' }}>LÍNEA DE PRODUCTO</label>
+                                        <select value={formData.product_type} onChange={(e) => setFormData({ ...formData, product_type: e.target.value })} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', background: '#fff' }}>
+                                            <option value="Sal">Sal</option>
+                                            <option value="Dulce">Dulce</option>
+                                            <option value="Insumo">Insumo</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                    <div>
+                                        <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.4rem', display: 'block' }}>COSTO / COMPRA</label>
+                                        <input type="number" value={formData.cost} onChange={(e) => setFormData({ ...formData, cost: e.target.value })} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd' }} />
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.4rem', display: 'block' }}>PRECIO VENTA</label>
+                                        <input type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: e.target.value })} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd' }} />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.4rem', display: 'block' }}>UNIDAD DE MEDIDA</label>
+                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                        <select value={formData.unit_measure} onChange={(e) => setFormData({ ...formData, unit_measure: e.target.value })} style={{ flex: 1, padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', background: '#fff' }}>
+                                            {finalUnitOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                                        </select>
+                                        <button type="button" onClick={() => setShowUnitManager(!showUnitManager)} style={{ padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', background: '#fff', cursor: 'pointer' }}><Plus size={20} /></button>
+                                    </div>
+                                    {showUnitManager && (
+                                        <div style={{ marginTop: '1rem', padding: '1rem', background: '#f8f9fa', borderRadius: '12px', border: '1px solid #eee' }}>
+                                            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                                                <input placeholder="Nueva unidad" value={newUnitType} onChange={(e) => setNewUnitType(e.target.value)} style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: '1px solid #ddd' }} />
+                                                <button type="button" onClick={handleAddUnit} style={{ padding: '0.5rem 1rem', background: '#023636', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Añadir</button>
+                                            </div>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                                {unitOptions.map(u => (
+                                                    <div key={u} style={{ padding: '0.3rem 0.6rem', background: '#fff', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>{u}<X size={12} style={{ cursor: 'pointer', color: '#fca5a5' }} onClick={() => handleRemoveUnit(u)} /></div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.4rem', display: 'block' }}>TEXTO CÓDIGO DE BARRAS / ETIQUETA</label>
+                                    <input placeholder="Ej: ZT001500" value={formData.barcode_text} onChange={(e) => setFormData({ ...formData, barcode_text: e.target.value })} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', outline: 'none' }} />
+                                </div>
+
+                                {formData.category === 'Producto Terminado' && (
+                                    <div style={{ display: 'grid', gap: '1.2rem' }}>
+                                        <div>
+                                            <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.4rem', display: 'block' }}>DESCRIPCIÓN COMERCIAL (TIENDA)</label>
+                                            <textarea 
+                                                rows="3"
+                                                placeholder="Ej: Mermelada gourmet endulzada con stevia, ideal para quesos..." 
+                                                value={formData.description} 
+                                                onChange={(e) => setFormData({ ...formData, description: e.target.value })} 
+                                                style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', outline: 'none', fontFamily: 'inherit' }} 
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.4rem', display: 'block' }}>BENEFICIOS / NOTAS</label>
+                                            <input 
+                                                placeholder="Ej: Antioxidante, Sin azúcar añadida" 
+                                                value={formData.benefits} 
+                                                onChange={(e) => setFormData({ ...formData, benefits: e.target.value })} 
+                                                style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', outline: 'none' }} 
+                                            />
+                                        </div>
+
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f0fdf4', padding: '1rem', borderRadius: '16px', border: '1px solid #bcf0da' }}>
+                                            <div>
+                                                <span style={{ fontSize: '0.85rem', fontWeight: '800', color: '#004B50', display: 'block' }}>Publicar en Tienda</span>
+                                                <span style={{ fontSize: '0.7rem', color: '#666' }}>Si está desactivado, el producto no aparecerá en el catálogo público.</span>
+                                            </div>
+                                            <div 
+                                                onClick={() => setFormData({ ...formData, published: !formData.published })}
+                                                style={{ 
+                                                    width: '50px', 
+                                                    height: '26px', 
+                                                    borderRadius: '13px', 
+                                                    background: formData.published ? '#10b981' : '#cbd5e1', 
+                                                    position: 'relative', 
+                                                    cursor: 'pointer',
+                                                    transition: 'all 0.3s ease'
+                                                }}
+                                            >
+                                                <div style={{ 
+                                                    width: '20px', 
+                                                    height: '20px', 
+                                                    borderRadius: '50%', 
+                                                    background: '#fff', 
+                                                    position: 'absolute', 
+                                                    top: '3px', 
+                                                    left: formData.published ? '27px' : '3px',
+                                                    transition: 'all 0.3s ease',
+                                                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                                }} />
+                                            </div>
+                                        </div>
+
+                                        <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                                            <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#023636', marginBottom: '0.8rem', display: 'block', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                Galería de Imágenes (Tienda)
+                                            </label>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                                {/* Image 1 */}
+                                                <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center', background: '#fff', padding: '0.5rem', borderRadius: '12px', border: '1px solid #eee' }}>
+                                                    <div style={{ width: '50px', height: '50px', borderRadius: '8px', border: '1px dashed #cbd5e1', overflow: 'hidden', background: '#f8f9fa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                        {previewUrl || formData.image_url ? <img src={previewUrl || formData.image_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Image size={18} color="#94a3b8" />}
+                                                    </div>
+                                                    <div style={{ flex: 1 }}>
+                                                        <input type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} id="img-1" />
+                                                        <label htmlFor="img-1" style={{ fontSize: '0.6rem', fontWeight: 'bold', cursor: 'pointer', color: '#475569', textDecoration: 'underline' }}>Principal</label>
+                                                    </div>
+                                                </div>
+                                                {/* Image 2 */}
+                                                <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center', background: '#fff', padding: '0.5rem', borderRadius: '12px', border: '1px solid #eee' }}>
+                                                    <div style={{ width: '50px', height: '50px', borderRadius: '8px', border: '1px dashed #cbd5e1', overflow: 'hidden', background: '#f8f9fa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                        {previewUrl2 || formData.image_url_2 ? <img src={previewUrl2 || formData.image_url_2} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Image size={18} color="#94a3b8" />}
+                                                    </div>
+                                                    <div style={{ flex: 1 }}>
+                                                        <input type="file" accept="image/*" onChange={handleFileChange2} style={{ display: 'none' }} id="img-2" />
+                                                        <label htmlFor="img-2" style={{ fontSize: '0.6rem', fontWeight: 'bold', cursor: 'pointer', color: '#475569', textDecoration: 'underline' }}>Secundaria</label>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
                                     </div>
                                 )}
+
+                                <button type="submit" disabled={isSaving} style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', padding: '1rem', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' }}>{isSaving ? 'Guardando...' : editingProduct ? 'Actualizar Producto' : 'Guardar SKU'}</button>
+                            </form>
+                        </div>
+                    </div>
+                )}
+
+                {barcodeModal.show && (
+                    <div className="no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4000 }}>
+                        <div style={{ background: '#fff', padding: '2.5rem', borderRadius: '24px', maxWidth: '400px', textAlign: 'center', position: 'relative' }}>
+                            <button onClick={() => setBarcodeModal({ show: false, product: null })} style={{ position: 'absolute', right: '1.5rem', top: '1.5rem', border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={24} /></button>
+                            <h3 style={{ marginBottom: '1.5rem' }}>Generador de Etiqueta Individual</h3>
+                            <div style={{ padding: '1rem', border: '2px dashed #e2e8f0', background: '#f8fafc', borderRadius: '16px', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                <Barcode 
+                                    value={barcodeModal.product?.barcode_text || barcodeModal.product?.sku || 'ERROR'} 
+                                    format="CODE128"
+                                    width={1.5}
+                                    height={60}
+                                    fontSize={14}
+                                    background="#f8fafc"
+                                />
+                                <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.5rem' }}>{barcodeModal.product?.name}</div>
                             </div>
-                            <button type="submit" disabled={isSaving} style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', padding: '1rem', borderRadius: '12px', fontWeight: 'bold', marginTop: '1rem', cursor: 'pointer' }}>
-                                {isSaving ? 'Guardando...' : editingProduct ? 'Actualizar Producto' : 'Guardar SKU'}
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            )}
-
-            {/* Barcode Modal */}
-            {barcodeModal.show && (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4000 }}>
-                    <div style={{ background: '#fff', padding: '2.5rem', borderRadius: '24px', maxWidth: '400px', textAlign: 'center', position: 'relative', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
-                        <button onClick={() => setBarcodeModal({ show: false, product: null })} style={{ position: 'absolute', right: '1.5rem', top: '1.5rem', border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={24} /></button>
-                        <h3 style={{ marginBottom: '1.5rem', color: 'var(--color-primary)' }}>Generador de Etiquetas</h3>
-                        <div style={{ padding: '2rem', border: '2px dashed #e2e8f0', background: '#f8fafc', borderRadius: '16px', marginBottom: '1.5rem' }}>
-                            <div style={{ fontSize: '3rem', color: '#1A3636', marginBottom: '0.5rem', letterSpacing: '2px' }}>||||||||||</div>
-                            <div style={{ fontWeight: '900', fontSize: '1.4rem', color: '#1e293b' }}>{barcodeModal.product?.sku}</div>
-                            <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.5rem', fontWeight: '500' }}>{barcodeModal.product?.name}</div>
-                        </div>
-                        <p style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '1.5rem' }}>Utiliza esta etiqueta para el control de inventario JIT y despacho.</p>
-                        <button
-                            onClick={() => window.print()}
-                            style={{ width: '100%', padding: '1rem', borderRadius: '12px', background: 'var(--color-primary)', color: '#fff', border: 'none', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
-                        >
-                            <Barcode size={18} /> Imprimir Etiqueta
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {/* Confirm Delete Modal */}
-            {confirmModal.show && (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4000 }}>
-                    <div style={{ background: '#fff', padding: '2.5rem', borderRadius: '24px', maxWidth: '400px', textAlign: 'center', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
-                        <div style={{ background: '#fee2e2', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
-                            <Trash2 size={32} color="#ef4444" />
-                        </div>
-                        <h3 style={{ marginBottom: '0.5rem', color: '#1e293b', fontSize: '1.5rem' }}>{confirmModal.title}</h3>
-                        <p style={{ color: '#64748b', marginBottom: '2rem', lineHeight: '1.5' }}>{confirmModal.message}</p>
-                        <div style={{ display: 'flex', gap: '1rem' }}>
-                            <button
-                                onClick={() => setConfirmModal({ show: false, target: null })}
-                                style={{ flex: 1, padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', fontWeight: '700', color: '#64748b' }}
+                            <button 
+                                onClick={() => {
+                                    setSelectedForPrint([barcodeModal.product]);
+                                    setTimeout(() => window.print(), 100);
+                                }} 
+                                style={{ width: '100%', padding: '1rem', borderRadius: '12px', background: 'var(--color-primary)', color: '#fff', border: 'none', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
                             >
-                                Cancelar
-                            </button>
-                            <button
-                                onClick={executeDeletion}
-                                style={{ flex: 1, padding: '1rem', borderRadius: '12px', border: 'none', background: '#ef4444', color: '#fff', fontWeight: '800', cursor: 'pointer' }}
-                            >
-                                Si, Eliminar
+                                <BarcodeIcon size={18} /> Imprimir Etiqueta Sola
                             </button>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
+
+                {confirmModal.show && (
+                    <div className="no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4000 }}>
+                        <div style={{ background: '#fff', padding: '2.5rem', borderRadius: '24px', maxWidth: '400px', textAlign: 'center' }}>
+                            <div style={{ background: '#fee2e2', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}><Trash2 size={32} color="#ef4444" /></div>
+                            <h3>{confirmModal.title}</h3>
+                            <p style={{ color: '#64748b', marginBottom: '2rem' }}>{confirmModal.message}</p>
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <button onClick={() => setConfirmModal({ show: false, target: null })} style={{ flex: 1, padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer' }}>Cancelar</button>
+                                <button onClick={executeDeletion} style={{ flex: 1, padding: '1rem', borderRadius: '12px', border: 'none', background: '#ef4444', color: '#fff', fontWeight: '800', cursor: 'pointer' }}>Si, Eliminar</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+            </div> {/* Fin no-print */}
 
             <style>{`
                 .spin { animation: spin 1s linear infinite; }
                 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+                .print-area { display: none; }
+
+                @media print {
+                    @page {
+                        size: letter;
+                        margin: 0;
+                    }
+                    body {
+                        margin: 0;
+                        padding: 0;
+                        background: #fff !important;
+                    }
+                    body * { visibility: hidden; }
+                    .print-area, .print-area * { visibility: visible; }
+                    .print-area { 
+                        display: grid; 
+                        grid-template-columns: repeat(4, 52mm); 
+                        grid-auto-rows: 27mm;
+                        gap: 2mm; 
+                        position: absolute; 
+                        left: 5mm; 
+                        top: 10mm; 
+                        width: 215mm;
+                        background: transparent;
+                    }
+                    .print-label {
+                        width: 50mm;
+                        height: 25mm;
+                        border: 0.2pt solid #ccc;
+                        border-radius: 1.5mm;
+                        padding: 1mm;
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                        background: white !important;
+                        overflow: hidden;
+                        page-break-inside: avoid;
+                    }
+                    .label-header {
+                        font-family: 'Inter', sans-serif;
+                        font-size: 7.5pt;
+                        font-weight: 800;
+                        text-align: center;
+                        text-transform: uppercase;
+                        margin-bottom: 0.5mm;
+                        white-space: nowrap;
+                        width: 100%;
+                        overflow: hidden;
+                    }
+                    .label-barcode {
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        padding: 1mm 0;
+                        width: 100%;
+                        overflow: hidden;
+                    }
+                    .label-barcode svg {
+                        max-width: 100%;
+                        height: auto;
+                    }
+                    .label-id {
+                        font-family: 'Inter', sans-serif;
+                        font-size: 12pt;
+                        font-weight: 900;
+                        text-align: center;
+                        margin-top: -2mm;
+                        letter-spacing: 1px;
+                        color: #000;
+                    }
+                    .label-name {
+                        font-family: 'Inter', sans-serif;
+                        font-size: 8pt;
+                        font-weight: 500;
+                        text-align: center;
+                        color: #666;
+                        margin-top: 0.5mm;
+                    }
+                    .no-print { display: none !important; }
+                }
             `}</style>
         </div>
     );

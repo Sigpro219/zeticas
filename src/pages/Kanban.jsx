@@ -251,7 +251,7 @@ const Kanban = ({ orders = [], items = [] }) => {
                                             </div>
                                             
                                             <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#1e293b', marginBottom: '0.5rem', lineHeight: '1.3' }}>
-                                                {order.items.map(i => i.name).join(' + ')}
+                                                {order.items?.map(i => i.name).join(' + ') || 'Sin ítems'}
                                             </div>
 
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', paddingTop: '0.8rem', borderTop: '1px solid #f8fafc' }}>
@@ -259,10 +259,10 @@ const Kanban = ({ orders = [], items = [] }) => {
                                                     <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                                         <User size={10} />
                                                     </div>
-                                                    {order.client.length > 15 ? order.client.substring(0, 15) + '...' : order.client}
+                                                    {(order.client || 'N/A').length > 15 ? (order.client || 'N/A').substring(0, 15) + '...' : (order.client || 'N/A')}
                                                 </div>
                                                 <div style={{ fontSize: '0.75rem', fontWeight: '900', color: deepTeal, background: `${deepTeal}0D`, padding: '4px 12px', borderRadius: '10px' }}>
-                                                    {order.items.reduce((acc, i) => acc + i.quantity, 0)} <span style={{ fontSize: '0.65rem', opacity: 0.6 }}>UND</span>
+                                                    {order.items?.reduce((acc, i) => acc + (Number(i.quantity) || 0), 0) || 0} <span style={{ fontSize: '0.65rem', opacity: 0.6 }}>UND</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -327,14 +327,14 @@ const Kanban = ({ orders = [], items = [] }) => {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
                                 <div>
                                     <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', letterSpacing: '0.05em' }}>CLIENTE / ID</label>
-                                    <div style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b' }}>{selectedOrder.client} ({selectedOrder.id})</div>
+                                    <div style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b' }}>{selectedOrder.client || 'N/A'} ({selectedOrder.id})</div>
                                      <div style={{ fontSize: '0.65rem', color: institutionOcre, fontWeight: '900', marginTop: '4px', textTransform: 'uppercase' }}>Consumidor Final / VIP</div>
                                  </div>
                                  <div>
                                      <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', letterSpacing: '0.05em' }}>PRODUCTO Y CANTIDAD</label>
-                                     {selectedOrder.items.map(item => (
+                                     {selectedOrder.items?.map(item => (
                                          <div key={item.id} style={{ fontSize: '0.95rem', fontWeight: '700', color: deepTeal }}>{item.name} - x{item.quantity} und</div>
-                                     ))}
+                                     )) || <div style={{ fontSize: '0.95rem', color: '#94a3b8' }}>Sin productos registrados</div>}
                                 </div>
                                 <div>
                                     <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', letterSpacing: '0.05em' }}>STATUS GLOBAL</label>
@@ -342,7 +342,7 @@ const Kanban = ({ orders = [], items = [] }) => {
                                         padding: '4px 10px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: '800',
                                         background: '#fff7ed', color: '#c2410c', border: '1px solid #ffedd5'
                                     }}>
-                                        {selectedOrder.status.toUpperCase()}
+                                        {(selectedOrder.status || 'PENDIENTE').toUpperCase()}
                                     </span>
                                 </div>
                             </div>
@@ -357,12 +357,12 @@ const Kanban = ({ orders = [], items = [] }) => {
                                             Inventario PT: <span style={{ fontWeight: 'bold' }}>Sincronizado</span>
                                         </p>
                                         <div style={{ marginTop: '0.5rem', background: '#fff', padding: '0.5rem', borderRadius: '8px', fontSize: '0.8rem' }}>
-                                            {selectedOrder.items.map(item => {
+                                            {selectedOrder.items?.map(item => {
                                                 const inv = items.find(i => i.id === item.id);
                                                 return (
                                                     <div key={item.id}>Stock {item.name}: {inv ? (inv.initial + inv.purchases - inv.sales) : 'N/A'} {inv?.unit}</div>
                                                 );
-                                            })}
+                                            }) || 'No hay ítems'}
                                         </div>
                                     </div>
                                 )}

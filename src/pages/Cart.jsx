@@ -4,8 +4,14 @@ import { useCart } from '../context/CartContext';
 import { Trash2, Plus, Minus, ArrowLeft, ShoppingBag } from 'lucide-react';
 
 const Cart = () => {
-    const { cart, removeFromCart, updateQuantity, cartTotal } = useCart();
+    const { cart, removeFromCart, updateQuantity, cartTotal, clearCart } = useCart();
     const navigate = useNavigate();
+
+    const handleClearCart = () => {
+        if (window.confirm("¿Estás seguro de que deseas vaciar todo el carrito? Esta acción no se puede deshacer.")) {
+            clearCart();
+        }
+    };
 
     if (cart.length === 0) {
         return (
@@ -23,11 +29,36 @@ const Cart = () => {
     return (
         <div className="cart-page botanical-bg" style={{ minHeight: '100vh', padding: '6rem 0' }}>
             <div className="container">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '4rem' }}>
-                    <button onClick={() => navigate('/tienda')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)' }}>
-                        <ArrowLeft size={24} />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <button onClick={() => navigate('/tienda')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)' }}>
+                            <ArrowLeft size={24} />
+                        </button>
+                        <h1 className="font-serif" style={{ fontSize: '3.5rem', color: 'var(--color-primary)' }}>Tu Carrito</h1>
+                    </div>
+                    
+                    <button 
+                        onClick={handleClearCart}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            background: '#fff1f2',
+                            color: '#e11d48',
+                            border: '1px solid #fda4af',
+                            padding: '0.6rem 1.2rem',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '0.9rem',
+                            fontWeight: 'bold',
+                            transition: 'all 0.2s'
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = '#ffe4e6'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = '#fff1f2'; }}
+                    >
+                        <Trash2 size={16} />
+                        VACIAR CARRITO
                     </button>
-                    <h1 className="font-serif" style={{ fontSize: '3.5rem', color: 'var(--color-primary)' }}>Tu Carrito</h1>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '4rem', alignItems: 'start' }}>

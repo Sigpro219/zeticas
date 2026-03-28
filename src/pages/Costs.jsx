@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useBusiness } from '../context/BusinessContext';
 import {
     DollarSign,
@@ -8,62 +8,41 @@ import {
     RefreshCcw,
     Calculator
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+// supabase import removed
 import SkeletonLoader from '../components/SkeletonLoader';
 
 const Costs = () => {
-    const { recalculatePTCosts } = useBusiness();
-    const [rawMaterials, setRawMaterials] = useState([]);
-    const [products, setProducts] = useState([]);
-    const [recipesMap, setRecipesMap] = useState({});
-    const [loading, setLoading] = useState(true);
+    const { items, recipes, recalculatePTCosts, loading: contextLoading } = useBusiness();
     const [isRecalculating, setIsRecalculating] = useState(false);
 
-    const loadData = async () => {
-        setLoading(true);
-        try {
-            // Fetch all products
-            const { data: allProducts, error: prodError } = await supabase.from('products').select('*').order('name');
-            if (prodError) throw prodError;
+    const { rawMaterials, products, recipesMap } = useMemo(() => {
+        if (!items || !recipes) return { rawMaterials: [], products: [], recipesMap: {} };
 
-            // Fetch recipes
-            const { data: recipes, error: recError } = await supabase.from('recipes').select(`
-                id, finished_good_id, raw_material_id, quantity_required,
-                raw_material:products!recipes_raw_material_id_fkey(name, unit_measure, cost)
-            `);
-            if (recError) throw recError;
+        const mps = items.filter(p => p.type === 'MP');
+        const pts = items.filter(p => p.type === 'PT');
 
-            const mps = allProducts.filter(p => p.type === 'MP');
-            const pts = allProducts.filter(p => p.type === 'PT');
+        const rMap = {};
+        const recipeList = Array.isArray(recipes) ? recipes : Object.values(recipes).flat();
+        
+        recipeList.forEach(r => {
+            if (!r) return;
+            const finishedGoodId = r.finished_good_id;
+            if (!finishedGoodId) return;
+            if (!rMap[finishedGoodId]) rMap[finishedGoodId] = [];
+            const mp = items.find(i => i.id === r.raw_material_id || i.name === r.raw_material_name);
+            rMap[finishedGoodId].push({
+                id: r.raw_material_id || (mp?.id),
+                name: mp?.name || r.raw_material_name || 'Desconocido',
+                qty: r.quantity_required,
+                unit: mp?.unit_measure || mp?.unit || 'unid',
+                cost: mp?.cost || mp?.avgCost || 0
+            });
+        });
 
-            setRawMaterials(mps);
-            setProducts(pts);
+        return { rawMaterials: mps, products: pts, recipesMap: rMap };
+    }, [items, recipes]);
 
-            // Group recipes by PT
-            const rMap = {};
-            if (recipes) {
-                recipes.forEach(r => {
-                    if (!rMap[r.finished_good_id]) rMap[r.finished_good_id] = [];
-                    rMap[r.finished_good_id].push({
-                        id: r.raw_material_id,
-                        name: r.raw_material?.name || 'Desconocido',
-                        qty: r.quantity_required,
-                        unit: r.raw_material?.unit_measure || 'unid',
-                        cost: r.raw_material?.cost || 0
-                    });
-                });
-            }
-            setRecipesMap(rMap);
-        } catch (error) {
-            console.error("Error loading costs:", error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        loadData();
-    }, []);
+    const loading = contextLoading;
 
     const totalInventoryValue = rawMaterials.reduce((acc, item) => {
         return acc + ((item.stock || 0) * (item.cost || 0));
@@ -88,7 +67,6 @@ const Costs = () => {
                     onClick={async () => {
                         setIsRecalculating(true);
                         await recalculatePTCosts();
-                        await loadData();
                         setIsRecalculating(false);
                         alert("Costos de Productos Terminados recalculados exitosamente.");
                     }}

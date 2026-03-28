@@ -3,7 +3,8 @@ import { MessageCircle, ArrowUp, Check, Leaf, Users, Factory, Tractor, Umbrella,
 import { GiFishingNet, GiBeehive, GiSugarCane, GiBanana, GiCow, GiPalmTree, GiPineTree, GiCompass, GiSprout, GiPlantRoots, GiProcessor } from "react-icons/gi";
 import { FaCoffee, FaPalette, FaLeaf, FaBuilding, FaUniversity, FaUmbrellaBeach, FaClipboardList, FaClipboardCheck, FaSearchPlus, FaHandshake, FaVenusMars, FaUsersCog, FaChalkboardTeacher, FaBookReader, FaHandHoldingHeart, FaGlobe, FaHeart, FaTractor, FaIndustry } from "react-icons/fa";
 import { MdBrush } from "react-icons/md";
-import { useBusiness } from '../context/BusinessContext';
+import { useBusiness, CAMPAIGN_PRESETS } from '../context/BusinessContext';
+import PromoModal from '../components/PromoModal';
 
 const HomeCZ = () => {
     const { siteContent } = useBusiness();
@@ -14,6 +15,7 @@ const HomeCZ = () => {
     const knowledge = siteContent?.knowledge || {};
     const impact = siteContent?.impact || {};
     const extra = siteContent?.extra || {};
+    const campaign = siteContent?.campaign || {};
 
     const imagesConsulting = [
         '/assets/consultoria/863125fb-99a6-41bd-9da2-3079f747cf87.JPG',
@@ -41,29 +43,39 @@ const HomeCZ = () => {
     const yarumoUrl = '/assets/yarumo_tree.png';
     const logoCZ = 'https://www.zeticas.com/wp-content/uploads/2023/11/cropped-cropped-logo-removebg-preview-e1698878511967.png';
     const institutionalOcre = '#B59E74';
-    const deepTeal = '#004B50';
+    const deepTeal = campaign?.active ? (CAMPAIGN_PRESETS[campaign.preset]?.accentColor || '#004B50') : '#004B50';
+    const campaignActive = campaign?.active;
+    const campaignTheme = campaign?.preset ? CAMPAIGN_PRESETS[campaign.preset] : null;
 
     return (
-        <div className="home-cz" style={{ backgroundColor: '#fff', minHeight: '100vh', fontFamily: "'Quicksand', sans-serif" }}>
+        <div className="home-cz" style={{ backgroundColor: campaignActive ? (campaignTheme?.primaryColor || '#fff') : '#fff', minHeight: '100vh', fontFamily: "'Quicksand', sans-serif" }}>
+            <PromoModal campaign={campaign} />
             
             {/* 1. Hero Section */}
             <div id="inicio" style={{ scrollMarginTop: '150px' }}></div>
-            <section style={{ padding: '6rem 5% 10rem', position: 'relative', display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: '2rem' }}>
-                    <div style={{ textAlign: 'center', padding: '0 2rem' }}>
-                        <p style={{ fontStyle: 'italic', color: '#666', fontSize: '1.2rem', lineHeight: '1.8' }} className="font-serif">
-                             {extra.hero_quote || '"Los árboles son solo un elemento del bosque, hacen parte de un ecosistema, que aprende, colabora, conecta, se comunica y responde; Nuestro “Yarumo” ancestral, pensativo y reflexivo nos permite ser parte dé ser cada día mejor."'}
-                        </p>
-                    </div>
-                    <div style={{ position: 'relative', width: '280px', display: 'flex', justifyContent: 'center' }}>
-                        <img src={yarumoUrl} alt="Yarumo Tree" style={{ width: '100%', height: 'auto', zIndex: 2 }} />
-                    </div>
-                    <div style={{ textAlign: 'center', padding: '0 2rem' }}>
-                        <img src={logoCZ} alt="CZ Logo" style={{ height: '100px', marginBottom: '1.5rem', opacity: 0.8 }} />
-                        <p style={{ color: '#444', fontSize: '1.05rem', lineHeight: '1.7' }}>
-                            {extra.hero_desc || 'Apoyamos y acompañamos a comunidades y organizaciones para pensar y reflexionar, reconocer su potencial y vivir plenamente su territorio. Lo hacemos fortaleciendo capacidades, valorando su identidad, desarrollando productos y gestionando alianzas, con el fin de construir un tejido social profundo, conectado, productivo y en equilibrio con la naturaleza.'}
-                        </p>
-                    </div>
-                </section>
+            <section style={{ 
+                padding: '6rem 5% 10rem', 
+                position: 'relative', 
+                display: 'grid', 
+                gridTemplateColumns: '1fr auto 1fr', 
+                alignItems: 'center', 
+                gap: '2rem' 
+            }}>
+                <div style={{ textAlign: 'center', padding: '0 2rem' }}>
+                    <p style={{ fontStyle: 'italic', color: '#666', fontSize: '1.2rem', lineHeight: '1.8' }} className="font-serif">
+                            {extra.hero_quote || '"Los árboles son solo un elemento del bosque, hacen parte de un ecosistema, que aprende, colabora, conecta, se comunica y responde; Nuestro “Yarumo” ancestral, pensativo y reflexivo nos permite ser parte dé ser cada día mejor."'}
+                    </p>
+                </div>
+                <div style={{ position: 'relative', width: '280px', display: 'flex', justifyContent: 'center' }}>
+                    <img src={yarumoUrl} alt="Yarumo Tree" style={{ width: '100%', height: 'auto', zIndex: 2 }} />
+                </div>
+                <div style={{ textAlign: 'center', padding: '0 2rem' }}>
+                    <img src={logoCZ} alt="CZ Logo" style={{ height: '100px', marginBottom: '1.5rem', opacity: 0.8 }} />
+                    <p style={{ color: '#444', fontSize: '1.05rem', lineHeight: '1.7' }}>
+                        {extra.hero_desc || 'Apoyamos y acompañamos a comunidades y organizaciones para pensar y reflexionar, reconocer su potencial y vivir plenamente su territorio. Lo hacemos fortaleciendo capacidades, valorando su identidad, desarrollando productos y gestionando alianzas, con el fin de construir un tejido social profundo, conectado, productivo y en equilibrio con la naturaleza.'}
+                    </p>
+                </div>
+            </section>
 
             {/* 2. Filosofía Section */}
             <section id="filosofia" style={{ padding: '8rem 5%', background: '#F8F9FA', scrollMarginTop: '130px' }}>

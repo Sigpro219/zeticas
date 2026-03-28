@@ -1,32 +1,53 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useMemo } from 'react';
 import { useCart } from '../context/CartContext';
-import { products } from '../data/products';
+import { useBusiness } from '../context/BusinessContext';
 import { Search, ShoppingBag, ArrowRight, X } from 'lucide-react';
 
 const Shop = () => {
     const { addToCart } = useCart();
-    const navigate = useNavigate();
-    const [filter, setFilter] = useState('Todos');
+    const { items } = useBusiness();
+    const [selectedProduct, setSelectedProduct] = useState(null);
+    const [quantity, setQuantity] = useState(1);
+    const [activeCategory, setActiveCategory] = useState('Todos');
     const [searchTerm, setSearchTerm] = useState('');
 
-    // Optimization: Supabase Image Transformation
-    const getThumbnailUrl = (url) => {
-        // Reverting to direct link as render/image/public is failing
-        return url;
+    // Transform library items to Shop format
+    const shopProducts = useMemo(() => {
+        return items
+            .filter(i => i.category === 'Producto Terminado' && (i.published !== false))
+            .map(i => ({
+                id: i.id,
+                nombre: i.name,
+                precio: i.price,
+                categoria: i.product_type || 'Otros',
+                imagen_url: i.image_url || '/assets/placeholder-jar.png',
+                imagen_url_2: i.image_url_2 || null,
+                descripcion: i.description || 'Nuestra selecta conserva artesanal diseñada para elevar tus experiencias culinarias.',
+                beneficios: i.benefits || 'Ingredientes 100% naturales, sin conservantes artificiales.',
+                sku: i.sku,
+                published: i.published !== undefined ? i.published : true
+            }));
+    }, [items]);
+
+    const handleAddToCart = (product, qty = 1) => {
+        // Since useCart usually takes {id, nombre, precio, quantity}
+        for(let i = 0; i < qty; i++) {
+            addToCart(product);
+        }
+        // Simple notification or feedback could go here
+    };
+    const [activeImage, setActiveImage] = useState(0);
+
+    const openQuickView = (product) => {
+        setSelectedProduct(product);
+        setQuantity(1);
+        setActiveImage(0); // Reset to first image
     };
 
-    const handleAddToCart = (product) => {
-        addToCart(product);
-        navigate('/carrito');
-    };
+    const getThumbnailUrl = (url) => url;
 
-    const handleProductClick = (id) => {
-        navigate(`/producto/${id}`);
-    };
-
-    const filteredProducts = products.filter(p => {
-        const matchesFilter = filter === 'Todos' || p.categoria === filter;
+    const filteredProducts = shopProducts.filter(p => {
+        const matchesFilter = activeCategory === 'Todos' || p.categoria === activeCategory;
         const matchesSearch = p.nombre.toLowerCase().includes(searchTerm.toLowerCase());
         return matchesFilter && matchesSearch;
     });
@@ -73,7 +94,7 @@ const Shop = () => {
                         Nuestra Despensa
                     </h1>
                     
-                    {/* Refined Control Bar: Filters (Center) + Integrated Search & Clear (Right) */}
+                    {/* Refined Control Bar */}
                     <div style={{ 
                         display: 'flex', 
                         justifyContent: 'center', 
@@ -84,18 +105,17 @@ const Shop = () => {
                         position: 'relative',
                         gap: '2rem'
                     }}>
-                        {/* Centered Filter Categories */}
                         <nav style={{ display: 'flex', gap: '3rem' }}>
                             {['Todos', 'Dulce', 'Sal'].map((cat) => (
                                 <button
                                     key={cat}
-                                    onClick={() => setFilter(cat)}
+                                    onClick={() => setActiveCategory(cat)}
                                     style={{
                                         background: 'none',
                                         border: 'none',
-                                        color: filter === cat ? 'var(--color-primary)' : '#999',
+                                        color: activeCategory === cat ? 'var(--color-primary)' : '#999',
                                         fontSize: '0.9rem',
-                                        fontWeight: filter === cat ? '800' : '500',
+                                        fontWeight: activeCategory === cat ? '800' : '500',
                                         cursor: 'pointer',
                                         padding: '0.5rem 0',
                                         position: 'relative',
@@ -105,7 +125,7 @@ const Shop = () => {
                                     }}
                                 >
                                     {cat}
-                                    {filter === cat && (
+                                    {activeCategory === cat && (
                                         <div style={{
                                             position: 'absolute',
                                             bottom: '-1px',
@@ -120,7 +140,6 @@ const Shop = () => {
                             ))}
                         </nav>
 
-                        {/* Integrated Search & Clear Action (Right side absolute or flex) */}
                         <div style={{ 
                             position: 'absolute', 
                             right: 0,
@@ -128,9 +147,9 @@ const Shop = () => {
                             alignItems: 'center',
                             gap: '12px'
                         }}>
-                            {(filter !== 'Todos' || searchTerm) && (
+                            {(activeCategory !== 'Todos' || searchTerm) && (
                                 <button 
-                                    onClick={() => { setFilter('Todos'); setSearchTerm(''); }}
+                                    onClick={() => { setActiveCategory('Todos'); setSearchTerm(''); }}
                                     style={{
                                         background: 'rgba(2, 83, 87, 0.05)', border: 'none', 
                                         color: 'var(--color-primary)',
@@ -173,7 +192,7 @@ const Shop = () => {
                     gap: '3.5rem'
                 }}>
                     {filteredProducts.map((product) => (
-                        <div key={product.id} className="premium-product-card" style={{
+                        <div key={product.id} className="premium-product-card" onClick={() => openQuickView(product)} style={{
                             background: 'rgba(255, 255, 255, 0.6)',
                             backdropFilter: 'blur(10px)',
                             padding: '1rem',
@@ -183,88 +202,48 @@ const Shop = () => {
                             flexDirection: 'column',
                             transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
                             position: 'relative',
-                            overflow: 'hidden'
+                            overflow: 'hidden',
+                            cursor: 'pointer'
                         }}>
-                            {/* Product Image Stage */}
-                            <div 
-                                onClick={() => handleProductClick(product.id)}
-                                style={{
-                                    aspectRatio: '1',
-                                    background: '#f8f4f2',
-                                    borderRadius: '18px',
-                                    marginBottom: '1.5rem',
-                                    overflow: 'hidden',
-                                    cursor: 'pointer',
-                                    position: 'relative',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center'
-                                }}
-                            >
+                            <div style={{
+                                aspectRatio: '1',
+                                background: '#f8f4f2',
+                                borderRadius: '18px',
+                                marginBottom: '1.5rem',
+                                overflow: 'hidden',
+                                position: 'relative',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}>
                                 <img
                                     src={getThumbnailUrl(product.imagen_url)}
                                     alt={product.nombre}
-                                    loading="lazy"
-                                    decoding="async"
                                     style={{ 
-                                        width: '100%', 
-                                        height: '100%', 
-                                        objectFit: 'cover', 
-                                        transition: 'transform 0.8s cubic-bezier(0.165, 0.84, 0.44, 1)' 
+                                        width: '90%', 
+                                        height: '90%', 
+                                        objectFit: 'contain', 
+                                        transition: 'transform 0.8s' 
                                     }}
                                 />
                                 <div className="card-overlay">
-                                    <ShoppingBag size={24} color="#fff" />
+                                    <span style={{ color: '#fff', fontSize: '0.7rem', fontWeight: '800', letterSpacing: '0.2em' }}>DETALLES</span>
                                 </div>
                             </div>
 
-                            {/* Info Block */}
                             <div style={{ padding: '0 0.5rem 1rem' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
                                     <div>
-                                        <span style={{ 
-                                            fontSize: '0.65rem', 
-                                            textTransform: 'uppercase', 
-                                            letterSpacing: '0.2em', 
-                                            color: 'var(--color-secondary)',
-                                            fontWeight: '700' 
-                                        }}>
-                                            {product.categoria}
-                                        </span>
-                                        <h3 className="font-serif" style={{ 
-                                            fontSize: '1.6rem', 
-                                            color: 'var(--color-primary)', 
-                                            margin: '0.2rem 0',
-                                            cursor: 'pointer' 
-                                        }} onClick={() => handleProductClick(product.id)}>
-                                            {product.nombre}
-                                        </h3>
+                                        <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--color-secondary)', fontWeight: '700' }}>{product.categoria}</span>
+                                        <h3 className="font-serif" style={{ fontSize: '1.6rem', color: 'var(--color-primary)', margin: '0.2rem 0' }}>{product.nombre}</h3>
                                     </div>
-                                    <span style={{ 
-                                        fontSize: '1.25rem', 
-                                        fontWeight: '800', 
-                                        color: 'var(--color-primary)' 
-                                    }}>
-                                        ${product.precio.toLocaleString('es-CO')}
-                                    </span>
+                                    <span style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--color-primary)' }}>${product.precio.toLocaleString('es-CO')}</span>
                                 </div>
-                                
-                                <p style={{ 
-                                    fontSize: '0.85rem', 
-                                    color: 'rgba(0,0,0,0.6)', 
-                                    lineHeight: '1.6',
-                                    marginBottom: '2rem',
-                                    height: '2.8rem',
-                                    overflow: 'hidden',
-                                    display: '-webkit-box',
-                                    WebkitLineClamp: 2,
-                                    WebkitBoxOrient: 'vertical'
-                                }}>
+                                <p style={{ fontSize: '0.85rem', color: 'rgba(0,0,0,0.6)', lineHeight: '1.6', marginBottom: '2rem', height: '2.8rem', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                                     {product.descripcion}
                                 </p>
-
                                 <button
-                                    onClick={() => handleAddToCart(product)}
+                                    onClick={(e) => { e.stopPropagation(); handleAddToCart(product); }}
                                     style={{
                                         width: '100%',
                                         background: 'var(--color-primary)',
@@ -280,8 +259,7 @@ const Shop = () => {
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
-                                        gap: '0.8rem',
-                                        transition: 'all 0.3s ease'
+                                        gap: '0.8rem'
                                     }}
                                     className="add-to-cart-btn"
                                 >
@@ -294,6 +272,162 @@ const Shop = () => {
                 </div>
             </div>
 
+            {/* PRODUCT QUICK VIEW MODAL */}
+            {selectedProduct && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: 'rgba(2, 54, 54, 0.4)',
+                    backdropFilter: 'blur(8px)',
+                    zIndex: 2000,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '2rem'
+                }} onClick={() => setSelectedProduct(null)}>
+                    <div style={{
+                        background: '#fff',
+                        width: '100%',
+                        maxWidth: '1000px',
+                        height: 'auto',
+                        maxHeight: '94vh',
+                        borderRadius: '32px',
+                        display: 'grid',
+                        gridTemplateColumns: '1.2fr 1fr',
+                        overflow: 'hidden',
+                        position: 'relative',
+                        boxShadow: '0 40px 100px -20px rgba(0,0,0,0.3)',
+                        animation: 'modalFadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
+                    }} onClick={e => e.stopPropagation()}>
+                        
+                        {/* Close Button */}
+                        <button 
+                            onClick={() => setSelectedProduct(null)}
+                            style={{
+                                position: 'absolute',
+                                top: '1.5rem', right: '1.5rem',
+                                background: 'white',
+                                border: 'none',
+                                width: '40px', height: '40px',
+                                borderRadius: '50%',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                cursor: 'pointer',
+                                zIndex: 10,
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                            }}
+                        >
+                            <X size={20} color="var(--color-primary)" />
+                        </button>
+
+                        {/* LEFT: Image Section */}
+                        <div style={{ background: '#f8f4f2', display: 'flex', flexDirection: 'column', padding: '2rem', gap: '1.5rem' }}>
+                            <div style={{ flex: 1, borderRadius: '24px', overflow: 'hidden', background: '#fff', position: 'relative', cursor: 'zoom-in' }} className="zoom-container">
+                                <img 
+                                    src={activeImage === 0 ? selectedProduct.imagen_url : selectedProduct.imagen_url_2} 
+                                    alt={selectedProduct.nombre} 
+                                    style={{ width: '100%', height: '100%', objectFit: 'contain', transition: 'transform 0.5s ease' }} 
+                                    className="main-modal-img"
+                                />
+                            </div>
+                            
+                            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                                {/* Thumb 1 */}
+                                <div 
+                                    onClick={() => setActiveImage(0)}
+                                    style={{ 
+                                        width: '74px', height: '74px', borderRadius: '12px', 
+                                        border: activeImage === 0 ? '2px solid var(--color-primary)' : '1px solid #ddd', 
+                                        padding: '4px', background: '#fff', cursor: 'pointer',
+                                        transition: 'all 0.2s', transform: activeImage === 0 ? 'scale(1.05)' : 'scale(1)'
+                                    }}
+                                >
+                                    <img src={selectedProduct.imagen_url} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px' }} />
+                                </div>
+                                
+                                {/* Thumb 2 */}
+                                {selectedProduct.imagen_url_2 && (
+                                    <div 
+                                        onClick={() => setActiveImage(1)}
+                                        style={{ 
+                                            width: '74px', height: '74px', borderRadius: '12px', 
+                                            border: activeImage === 1 ? '2px solid var(--color-primary)' : '1px solid #ddd', 
+                                            padding: '4px', background: '#fff', cursor: 'pointer',
+                                            transition: 'all 0.2s', transform: activeImage === 1 ? 'scale(1.05)' : 'scale(1)'
+                                        }}
+                                    >
+                                        <img src={selectedProduct.imagen_url_2} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px' }} />
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* RIGHT: Content Section */}
+                        <div style={{ padding: '3.5rem 3rem', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: '800', color: 'var(--color-secondary)', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: '1rem' }}>
+                                {selectedProduct.categoria}
+                            </span>
+                            <h2 className="font-serif" style={{ fontSize: 'clamp(2rem, 4vw, 3rem)', color: 'var(--color-primary)', lineHeight: 1.1, marginBottom: '1.5rem' }}>
+                                {selectedProduct.nombre}
+                            </h2>
+                            <div style={{ fontSize: '1.8rem', fontWeight: '800', color: 'var(--color-primary)', marginBottom: '2rem' }}>
+                                ${selectedProduct.precio.toLocaleString('es-CO')}
+                            </div>
+
+                            <p style={{ color: '#555', lineHeight: 1.8, fontSize: '0.95rem', marginBottom: '2rem' }}>
+                                {selectedProduct.descripcion}
+                            </p>
+
+                            <div style={{ borderTop: '1px solid #eee', paddingTop: '1.5rem', marginBottom: '2.5rem' }}>
+                                <h4 style={{ fontSize: '0.7rem', fontWeight: '900', color: '#999', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.8rem' }}>Notas y Beneficios</h4>
+                                <div style={{ 
+                                    padding: '1.2rem', background: '#fcf8f6', borderRadius: '16px', borderLeft: '3px solid var(--color-secondary)',
+                                    fontSize: '0.9rem', color: '#444', fontStyle: 'italic', lineHeight: 1.6 
+                                }}>
+                                    "{selectedProduct.beneficios}"
+                                </div>
+                            </div>
+
+                            <div style={{ marginTop: 'auto', display: 'flex', gap: '1.2rem', alignItems: 'center' }}>
+                                {/* Quantity Selector */}
+                                <div style={{ 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    background: '#f8f8f8', 
+                                    borderRadius: '14px',
+                                    padding: '0.4rem',
+                                    border: '1px solid #eee'
+                                }}>
+                                    <button onClick={() => setQuantity(Math.max(1, quantity - 1))} style={{ border: 'none', background: 'none', width: '36px', height: '36px', fontSize: '1.2rem', cursor: 'pointer', color: 'var(--color-primary)' }}>-</button>
+                                    <span style={{ width: '40px', textAlign: 'center', fontWeight: '800', fontSize: '1.1rem' }}>{quantity}</span>
+                                    <button onClick={() => setQuantity(quantity + 1)} style={{ border: 'none', background: 'none', width: '36px', height: '36px', fontSize: '1.2rem', cursor: 'pointer', color: 'var(--color-primary)' }}>+</button>
+                                </div>
+
+                                <button
+                                    onClick={() => { handleAddToCart(selectedProduct, quantity); setSelectedProduct(null); }}
+                                    style={{
+                                        flex: 1,
+                                        background: 'var(--color-primary)',
+                                        color: '#fff',
+                                        border: 'none',
+                                        padding: '1.2rem',
+                                        borderRadius: '16px',
+                                        fontWeight: '800',
+                                        fontSize: '0.85rem',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.1em',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.3s ease'
+                                    }}
+                                    className="modal-add-btn"
+                                >
+                                    Añadir a la Canasta
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <style>{`
                 .premium-product-card:hover {
                     background: rgba(255, 255, 255, 0.9);
@@ -301,12 +435,12 @@ const Shop = () => {
                     box-shadow: 0 25px 50px -12px rgba(2, 83, 87, 0.15);
                 }
                 .premium-product-card:hover img {
-                    transform: scale(1.1);
+                    transform: scale(1.05);
                 }
                 .card-overlay {
                     position: absolute;
                     top: 0; left: 0; width: 100%; height: 100%;
-                    background: rgba(2, 83, 87, 0.3);
+                    background: rgba(2, 54, 54, 0.15);
                     display: flex; align-items: center; justify-content: center;
                     opacity: 0; transition: opacity 0.5s ease;
                 }
@@ -316,11 +450,23 @@ const Shop = () => {
                 .add-to-cart-btn:hover {
                     background: var(--color-secondary);
                     transform: translateY(-2px);
-                    box-shadow: 0 10px 20px rgba(243, 124, 121, 0.2);
+                    box-shadow: 0 10px 20px rgba(212, 120, 90, 0.2);
+                }
+                .zoom-container:hover .main-modal-img {
+                    transform: scale(1.2);
+                }
+                .modal-add-btn:hover {
+                    background: var(--color-secondary);
+                    transform: translateY(-2px);
+                    box-shadow: 0 8px 16px rgba(212, 120, 90, 0.2);
                 }
                 @keyframes slideIn {
                     from { width: 0; }
                     to { width: 100%; }
+                }
+                @keyframes modalFadeIn {
+                    from { opacity: 0; transform: scale(0.95) translateY(20px); }
+                    to { opacity: 1; transform: scale(1) translateY(0); }
                 }
             `}</style>
         </div>

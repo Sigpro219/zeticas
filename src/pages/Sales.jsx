@@ -1,13 +1,13 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useBusiness } from '../context/BusinessContext';
-import { supabase } from '../lib/supabase';
+import DocumentBuilder from '../components/DocumentBuilder';
 // import { products } from '../data/products'; // Removed unused import
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { RefreshCw, FileText, Download, TrendingUp, Calendar, Plus, Trash2, Filter, ShoppingCart, Globe, Users, Briefcase, Search, ChevronDown, X, Save, AlertTriangle, ArrowRight, Mail, Phone, CheckCircle, ChefHat, DollarSign } from 'lucide-react';
 const CheckCircle2 = CheckCircle;
 
-const Orders = ({ orders, setOrders }) => {
+const Orders = ({ orders }) => {
     useEffect(() => {
         window.scrollTo(0, 0);
     }, []);
@@ -17,6 +17,8 @@ const Orders = ({ orders, setOrders }) => {
         providers,
         addOrder,
         deleteOrders,
+        updateOrder,
+        addPurchase,
         refreshData,
         clients
     } = useBusiness();
@@ -102,8 +104,8 @@ const Orders = ({ orders, setOrders }) => {
 
 
     // Metrics
-    const totalSales = (filteredOrders || []).reduce((sum, o) => sum + o.amount, 0);
-    const orderCount = filteredOrders.length;
+    const totalSales = (filteredOrders || []).reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+    const orderCount = (filteredOrders || []).length;
 
     // Breakdown by source
     const sourceBreakdown = useMemo(() => {
@@ -247,8 +249,9 @@ const Orders = ({ orders, setOrders }) => {
                 });
             });
 
-            if (missingRecipes.length > 0) {
-                alert(`Atención: Faltan recetas configuradas para: ${missingRecipes.join(', ')}. Estos ítems no se incluyeron en la explosión.`);
+            const uniqueMissing = [...new Set(missingRecipes)].filter(Boolean);
+            if (uniqueMissing.length > 0) {
+                alert(`⚠️ Atención: No se han configurado las recetas para los siguientes productos: ${uniqueMissing.join(', ')}. No es posible realizar la explosión de materia prima sin estas fórmulas. Por favor, diríjase al módulo de Recetas y regístrelas para continuar.`);
             }
 
             const previewItems = Object.values(requiredRawMaterials).map(mat => {
@@ -338,49 +341,33 @@ const Orders = ({ orders, setOrders }) => {
                 console.warn("No valid DB IDs found for selected orders.");
             }
 
-            // Update orders table - Use UUID 'id' for maximum reliability
-            const { error: errorOrders } = await supabase
-                .from('orders')
-                .update({ status: 'En Compras' })
-                .in('id', selectedDbIds);
-
-            if (errorOrders) {
-                console.error("Error updating orders in DB:", errorOrders);
-                alert(`Error al actualizar pedidos: ${errorOrders.message}`);
-                setIsLoading(false);
-                return;
+            // 1. Update orders status
+            for (const dbId of selectedDbIds) {
+                await updateOrder(dbId, { status: 'En Compras' });
             }
 
             // 2. Persist each Purchase Order
             for (const po of poPreviewList) {
-                // IMPORTANT: po.providerId is already the UUID from master data
-                const { data: dbPur, error: poError } = await supabase.from('purchases').insert({
-                    po_number: po.id,
-                    supplier_id: po.providerId,
-                    status: 'ENVIADA',
-                    total_cost: po.total,
-                    associated_orders: po.relatedOrders ? po.relatedOrders.join(', ') : null
-                }).select().single();
-
-                if (poError) {
-                    console.error("Error creating PO in DB:", poError);
-                    alert(`Error al crear OC ${po.id}: ${poError.message}`);
-                    continue; // Continue with next PO
-                }
-
-                if (dbPur && po.items.length > 0) {
-                    const mappedItems = po.items.map(i => ({
-                        purchase_id: dbPur.id,
-                        raw_material_id: i.id,
+                const purchaseData = {
+                    id: po.id,
+                    provider_id: po.providerId,
+                    provider_name: po.providerName,
+                    status: 'Enviada',
+                    payment_status: 'Pendiente',
+                    total_amount: po.total,
+                    order_date: po.date,
+                    related_orders: po.relatedOrders || [],
+                    items: po.items.map(i => ({
+                        id: i.id,
+                        name: i.name,
                         quantity: i.toBuy,
                         unit_cost: i.purchasePrice,
                         total_cost: Number(i.purchasePrice) * Number(i.toBuy)
-                    }));
-                    
-                    const { error: itemsError } = await supabase.from('purchase_items').insert(mappedItems);
-                    if (itemsError) {
-                        console.error("Error inserting items for PO:", itemsError);
-                    }
+                    }))
+                };
+                const res = await addPurchase(purchaseData);
+                if (!res.success) {
+                    console.error("Error creating PO in Firestore:", res.error);
                 }
             }
 
@@ -399,26 +386,15 @@ const Orders = ({ orders, setOrders }) => {
         }
     };
 
-    const handleMoveToProduction = async () => {
+    const handleMoveToProduction = async (orderId) => {
         try {
             setIsLoading(true);
-            const selectedDbIds = orders
-                .filter(o => selectedOrders.includes(o.id))
-                .map(o => o.dbId)
-                .filter(Boolean);
-
-            const { error } = await supabase
-                .from('orders')
-                .update({ status: 'En Producción' })
-                .in('id', selectedDbIds);
-
-            if (error) throw error;
-
-            // Trigger global refresh
-            await refreshData();
-            setIsExplosionModalOpen(false);
-            setSelectedOrders([]);
-            alert('¡Listo! Los pedidos han sido movidos exitosamente al tablero de Producción.');
+            const orderDoc = orders.find(o => o.id === orderId);
+            if (orderDoc?.dbId) {
+                await updateOrder(orderDoc.dbId, { status: 'En Producción' });
+                await refreshData();
+                alert('¡Listo! El pedido ha sido movido exitosamente al tablero de Producción.');
+            }
         } catch (error) {
             console.error("Error moving to production:", error);
             alert("No se pudieron mover los pedidos a producción.");
@@ -428,13 +404,13 @@ const Orders = ({ orders, setOrders }) => {
     };
 
     const handleSendWhatsApp = (po) => {
-        const text = `Hola ${po.providerName}, somos ZETICAS SAS. Adjuntamos nuestra orden de compra ${po.id} por un total de $${po.total.toLocaleString()}. Quedamos atentos a confirmación.`;
+        const text = `Hola ${po.providerName}, somos ZETICAS SAS. Adjuntamos nuestra orden de compra ${po.id} por un total de $${(po.total || 0).toLocaleString('es-CO')}. Quedamos atentos a confirmación.`;
         window.open(`https://wa.me/57${po.providerPhone}?text=${encodeURIComponent(text)}`, '_blank');
     };
 
     const handleSendEmail = (po) => {
         const subject = `Orden de Compra ZETICAS SAS - ${po.id}`;
-        const body = `Señores ${po.providerName},\n\nAdjuntamos orden de compra ${po.id}.\nTotal a pagar: $${po.total.toLocaleString()}.\n\nPara ver los detalles por favor revisar el sistema o contactarnos.\n\nAtentamente,\nZETICAS SAS`;
+        const body = `Señores ${po.providerName},\n\nAdjuntamos orden de compra ${po.id}.\nTotal a pagar: $${(po.total || 0).toLocaleString('es-CO')}.\n\nPara ver los detalles por favor revisar el sistema o contactarnos.\n\nAtentamente,\nZETICAS SAS`;
         window.open(`mailto:${po.providerEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
     };
 
@@ -512,27 +488,16 @@ const Orders = ({ orders, setOrders }) => {
         const updated = { ...viewingOrder, amount: total };
 
         // Persist change to Supabase
+        // Persist change to Firestore
         try {
-            await supabase.from('orders').update({
-                total_amount: updated.amount,
-                status: updated.status
-            }).eq('id', updated.dbId);
-
-            // Update items if modified - need to handle product UUIDs
-            if (updated.items && updated.dbId) {
-                await supabase.from('order_items').delete().eq('order_id', updated.dbId);
-                const itemsToInsert = updated.items.map(item => ({
-                    order_id: updated.dbId,
-                    product_id: item.id,
-                    quantity: item.quantity,
-                    unit_price: item.price,
-                    total_price: item.price * item.quantity
-                }));
-                await supabase.from('order_items').insert(itemsToInsert);
-            }
-            await refreshData();
+            const res = await updateOrder(updated.dbId, {
+                amount: updated.amount,
+                status: updated.status,
+                items: updated.items
+            });
+            if (!res.success) throw new Error(res.error);
         } catch (e) {
-            console.error("Error updating order in Supabase:", e);
+            console.error("Error updating order in Firestore:", e);
         }
 
         setViewingOrder(null);
@@ -552,110 +517,123 @@ const Orders = ({ orders, setOrders }) => {
         const doc = new jsPDF();
         const clientInfo = clients.find(c => c.name === order.client);
 
-        // Header Title
-        doc.setFontSize(22);
-        doc.setTextColor(30, 41, 59); // Slate 800
-        doc.text('NOTA DE PEDIDO', 14, 22);
+        // Header Build (DocumentBuilder Style)
+        doc.setFont('times', 'bold');
+        doc.setFontSize(30);
+        doc.setTextColor(2, 54, 54);
+        doc.text('zeticas', 14, 25);
 
-        // Load Logo Asynchronously
-        try {
-            const logoUrl = 'https://obsvdzlsbbqmhpsxksnd.supabase.co/storage/v1/object/public/assets/logo.png';
-            const img = new Image();
-            img.crossOrigin = 'Anonymous';
-            img.src = logoUrl;
-            await new Promise((resolve, reject) => {
-                img.onload = resolve;
-                img.onerror = reject;
-            });
-            const imgWidth = 45;
-            const imgHeight = (img.height * imgWidth) / img.width;
-            doc.addImage(img, 'PNG', 196 - imgWidth, 12, imgWidth, imgHeight);
-        } catch (error) {
-            console.error("Error loading logo for PDF", error);
-        }
-
-        // Order Info Box
-        doc.setFontSize(10);
-        doc.setTextColor(100, 116, 139); // Slate 500
-        doc.text(`ID del Pedido: ${order.id}`, 14, 30);
-        doc.text(`Fecha: ${order.date}`, 14, 35);
-        doc.text(`Origen: ${order.source}`, 14, 40);
-
-        // Divider
-        doc.setDrawColor(226, 232, 240); // Slate 200
-        doc.line(14, 45, 196, 45);
-
-        // Zeticas / Vendor Data
-        doc.setFontSize(10);
         doc.setFont('helvetica', 'normal');
-        doc.setTextColor(51, 65, 85);
-        doc.text('DATOS DEL VENDEDOR', 14, 55);
+        doc.setFontSize(10);
+        doc.setTextColor(100, 116, 139);
+        doc.text('ZETICAS SAS', 14, 32);
+        doc.text('NIT: 901.321.456-7', 14, 36);
+        doc.text('Bogotá D.C., Colombia', 14, 40);
+
         doc.setFont('helvetica', 'bold');
-        doc.setTextColor(15, 23, 42);
-        doc.text('Zeticas S.A.S.', 14, 60);
+        doc.setFontSize(18);
+        doc.setTextColor(15, 23, 42); 
+        doc.text('NOTA DE PEDIDO', 196, 25, { align: 'right' });
+        
+        doc.setFontSize(14);
+        doc.setTextColor(2, 54, 54);
+        doc.text(order.id, 196, 33, { align: 'right' });
+        
+        doc.setFontSize(9);
+        doc.setTextColor(100, 116, 139);
+        doc.text(`Fecha: ${order.date}`, 196, 39, { align: 'right' });
+
+        // Horizontal Rule
+        doc.setDrawColor(2, 54, 54);
+        doc.setLineWidth(0.8);
+        doc.line(14, 48, 196, 48);
+
+        // Info Cards (Box backgrounds)
+        doc.setFillColor(248, 250, 252);
+        doc.roundedRect(14, 55, 88, 30, 2, 2, 'F');
+        doc.setDrawColor(241, 245, 249);
+        doc.roundedRect(14, 55, 88, 30, 2, 2, 'S');
+
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(148, 163, 184);
+        doc.text('VENDEDOR / EMISOR', 18, 60);
+
+        doc.setFontSize(10);
+        doc.setTextColor(30, 41, 59);
+        doc.text('Zeticas S.A.S.', 18, 66);
+        doc.setFontSize(8);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(100, 116, 139);
-        doc.text('NIT: 901.234.567-8', 14, 65);
-        doc.text('Bogotá, Colombia', 14, 70);
+        doc.text('NIT: 901.321.456-7', 18, 71);
+        doc.text('comercial@zeticas.com', 18, 76);
 
         // Client Data
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(51, 65, 85);
-        doc.text('DATOS DEL CLIENTE', 120, 55);
+        doc.setFillColor(248, 250, 252);
+        doc.roundedRect(108, 55, 88, 30, 2, 2, 'F');
+        doc.setDrawColor(241, 245, 249);
+        doc.roundedRect(108, 55, 88, 30, 2, 2, 'S');
+
+        doc.setFontSize(7);
         doc.setFont('helvetica', 'bold');
-        doc.setTextColor(15, 23, 42);
-        doc.text(order.client, 120, 60);
+        doc.setTextColor(148, 163, 184);
+        doc.text('DATOS DEL CLIENTE', 112, 60);
+
+        doc.setFontSize(10);
+        doc.setTextColor(30, 41, 59);
+        doc.text(order.client, 112, 66);
+        doc.setFontSize(8);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(100, 116, 139);
-        doc.text(clientInfo?.nit || 'NIT: No reportado', 120, 65);
-        doc.text(clientInfo?.address || 'Bogotá, Colombia', 120, 70);
+        doc.text(clientInfo?.nit || 'NIT: No registrado', 112, 71);
+        doc.text(clientInfo?.address || 'Destino por confirmar', 112, 76);
+        doc.text(`Origen: ${order.source}`, 112, 81);
 
         // Items Table
-        const tableColumn = ["Producto", "Cantidad", "V. Unitario", "V. Total"];
-        const tableRows = [];
-
-        order.items.forEach(item => {
-            const rowData = [
-                item.name,
-                item.quantity.toString(),
-                `$${item.price.toLocaleString()}`,
-                `$${(item.price * item.quantity).toLocaleString()}`
-            ];
-            tableRows.push(rowData);
-        });
+        const tableColumn = ["DESCRIPCIÓN", "CANTIDAD", "V. UNITARIO", "V. TOTAL"];
+        const tableRows = order.items.map(item => [
+            item.name,
+            item.quantity.toLocaleString('es-CO'),
+            `$${Math.round(item.price || 0).toLocaleString('es-CO')}`,
+            `$${Math.round((item.price * item.quantity) || 0).toLocaleString('es-CO')}`
+        ]);
 
         autoTable(doc, {
-            startY: 85,
+            startY: 95,
             head: [tableColumn],
             body: tableRows,
             theme: 'grid',
-            headStyles: { fillColor: [248, 250, 252], textColor: [100, 116, 139], fontStyle: 'bold', halign: 'center' },
-            bodyStyles: { textColor: [51, 65, 85] },
+            styles: { fontSize: 8.5, cellPadding: 4, textColor: [30, 41, 59] },
+            headStyles: { fillColor: [2, 54, 54], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
             columnStyles: {
-                0: { halign: 'left' },
-                1: { halign: 'center' },
-                2: { halign: 'right' },
-                3: { halign: 'right', fontStyle: 'bold' }
+                0: { cellWidth: 'auto' },
+                1: { halign: 'center', cellWidth: 30 },
+                2: { halign: 'right', cellWidth: 35 },
+                3: { halign: 'right', cellWidth: 35 }
             },
-            styles: { fontSize: 9, cellPadding: 5 }
+            alternateRowStyles: { fillColor: [248, 250, 252] },
+            margin: { left: 14, right: 14 }
         });
 
-        // Total
-        const total = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(15, 23, 42);
-        const finalY = doc.lastAutoTable?.finalY || 85;
-        doc.text(`TOTAL A PAGAR: $${total.toLocaleString()}`, 196, finalY + 15, { align: 'right' });
+        // Totals
+        const finalY = doc.lastAutoTable?.finalY || 100;
+        const totalAmount = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-        // Footer disclaimer
+        doc.setFillColor(240, 253, 244); 
+        doc.roundedRect(125, finalY + 10, 71, 12, 2, 2, 'F');
+        
+        doc.setFontSize(11);
+        doc.setTextColor(2, 54, 54);
+        doc.text('TOTAL PEDIDO:', 145, finalY + 18, { align: 'right' });
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`$${Math.round(totalAmount).toLocaleString('es-CO')}`, 196, finalY + 18, { align: 'right' });
+
         doc.setFontSize(8);
         doc.setFont('helvetica', 'italic');
-        doc.setTextColor(148, 163, 184); // slate-400
-        doc.text('Documento generado automáticamente por Zeticas OS', 105, 280, { align: 'center' });
+        doc.setTextColor(148, 163, 184);
+        doc.text('Este documento es una nota de pedido oficial generada por Zeticas OS.', 105, 280, { align: 'center' });
 
-        // Save
         doc.save(`Pedido_${order.id}.pdf`);
     };
 
@@ -707,7 +685,7 @@ const Orders = ({ orders, setOrders }) => {
                     </div>
                     <div style={{ fontSize: '2.2rem', fontWeight: '900', letterSpacing: '-1.5px', lineHeight: 1 }}>
                         <span style={{ fontSize: '1.4rem', opacity: 0.6, marginRight: '4px', verticalAlign: 'middle' }}>$</span>
-                        {totalSales.toLocaleString()}
+                        {(totalSales || 0).toLocaleString()}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '1.2rem' }}>
                         <div style={{ background: 'rgba(255,255,255,0.1)', padding: '0.6rem 1.2rem', borderRadius: '14px', fontSize: '0.85rem', fontWeight: '900', border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -913,7 +891,7 @@ const Orders = ({ orders, setOrders }) => {
                         onChange={(e) => setSearchTerm(e.target.value)}
                         style={{
                             width: '100%',
-                            padding: '1.2rem 1.2rem 1.2rem 4rem',
+                            padding: '1.2rem 3.5rem 1.2rem 4rem',
                             borderRadius: '18px',
                             border: '1px solid #f1f5f9',
                             outline: 'none',
@@ -926,6 +904,25 @@ const Orders = ({ orders, setOrders }) => {
                         onFocus={(e) => { e.target.style.borderColor = deepTeal; e.target.style.boxShadow = `0 12px 40px ${deepTeal}10`; }}
                         onBlur={(e) => { e.target.style.borderColor = '#f1f5f9'; e.target.style.boxShadow = 'none'; }}
                     />
+                    {searchTerm && (
+                        <button 
+                            onClick={() => setSearchTerm('')}
+                            style={{ 
+                                position: 'absolute', 
+                                right: '1.5rem', 
+                                top: '50%', 
+                                transform: 'translateY(-50%)', 
+                                background: 'none', 
+                                border: 'none', 
+                                color: '#94a3b8', 
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center'
+                            }}
+                        >
+                            <X size={20} />
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -1049,7 +1046,7 @@ const Orders = ({ orders, setOrders }) => {
                                     </div>
                                 </td>
                                 <td style={{ padding: '1.2rem 1.5rem', fontSize: '0.8rem', color: '#64748b', fontWeight: '700' }}>{order.date}</td>
-                                <td style={{ padding: '1.2rem 1.5rem', textAlign: 'right', fontWeight: '900', color: '#0f172a', fontSize: '1rem' }}>${order.amount.toLocaleString()}</td>
+                                <td style={{ padding: '1.2rem 1.5rem', textAlign: 'right', fontWeight: '900', color: '#0f172a', fontSize: '1rem' }}>${(order.amount || 0).toLocaleString('es-CO')}</td>
                                 <td style={{ padding: '1.2rem 1.5rem', textAlign: 'center' }}>
                                     <span style={{
                                         padding: '6px 14px',
@@ -1057,6 +1054,8 @@ const Orders = ({ orders, setOrders }) => {
                                         fontSize: '0.65rem',
                                         fontWeight: '900',
                                         letterSpacing: '0.5px',
+                                        whiteSpace: 'nowrap',
+                                        display: 'inline-block',
                                         background: 
                                             order.status === 'Pagado' || order.status === 'Entregado' ? 'rgba(22, 163, 74, 0.1)' : 
                                             order.status === 'PENDIENTE' ? 'rgba(214, 189, 152, 0.15)' : 'rgba(2, 83, 87, 0.05)',
@@ -1069,7 +1068,28 @@ const Orders = ({ orders, setOrders }) => {
                                     </span>
                                 </td>
                                 <td style={{ padding: '1.2rem 1.5rem', textAlign: 'center' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', alignItems: 'center' }}>
+                                        {order.status === 'En Compras' && (
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); handleMoveToProduction(order.id); }}
+                                                style={{ 
+                                                    background: deepTeal, 
+                                                    color: '#fff', 
+                                                    border: 'none', 
+                                                    borderRadius: '8px', 
+                                                    padding: '6px 12px', 
+                                                    cursor: 'pointer', 
+                                                    fontSize: '0.65rem', 
+                                                    fontWeight: 'bold', 
+                                                    display: 'flex', 
+                                                    alignItems: 'center', 
+                                                    gap: '0.4rem' 
+                                                }}
+                                                title="Mover a Producción"
+                                            >
+                                                <ChefHat size={14} /> PRODUCCIÓN
+                                            </button>
+                                        )}
                                         <button onClick={(e) => { e.stopPropagation(); handleDownloadPDF(order); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#cbd5e1' }} title="Descargar"><Download size={20} /></button>
                                         <button
                                             onClick={(e) => { e.stopPropagation(); handleDeleteOrder(order.id); }}
@@ -1193,7 +1213,7 @@ const Orders = ({ orders, setOrders }) => {
                                                     <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', padding: '1rem 1.2rem', borderRadius: '16px', border: '1px solid #f1f5f9', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
                                                         <div style={{ flex: 1 }}>
                                                             <div style={{ fontWeight: '800', fontSize: '0.9rem', color: '#1e293b' }}>{item.name}</div>
-                                                            <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '600' }}>Precio Unit: <span style={{ color: deepTeal }}>${item.price.toLocaleString()}</span></div>
+                                                            <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '600' }}>Precio Unit: <span style={{ color: deepTeal }}>${(item.price || 0).toLocaleString()}</span></div>
                                                         </div>
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
                                                             <div style={{ 
@@ -1204,7 +1224,7 @@ const Orders = ({ orders, setOrders }) => {
                                                                 fontWeight: '900', 
                                                                 fontSize: '0.8rem' 
                                                             }}>x{item.quantity}</div>
-                                                            <div style={{ fontWeight: '900', width: '90px', textAlign: 'right', color: '#0f172a', fontSize: '0.95rem' }}>${(item.price * item.quantity).toLocaleString()}</div>
+                                                            <div style={{ fontWeight: '900', width: '90px', textAlign: 'right', color: '#0f172a', fontSize: '0.95rem' }}>${(((item.price || 0) * (item.quantity || 0)) || 0).toLocaleString()}</div>
                                                             <button
                                                                 onClick={() => setNewOrder({ ...newOrder, items: newOrder.items.filter(i => i.id !== item.id) })}
                                                                 style={{ border: 'none', background: 'transparent', color: 'rgba(212, 120, 90, 0.4)', cursor: 'pointer', transition: 'all 0.2s' }}
@@ -1217,7 +1237,7 @@ const Orders = ({ orders, setOrders }) => {
                                                 <div style={{ marginTop: '1.5rem', borderTop: '2px dashed #f1f5f9', paddingTop: '1.5rem', textAlign: 'right' }}>
                                                     <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Total Consolidado</div>
                                                     <div style={{ fontSize: '2.2rem', fontWeight: '900', color: deepTeal, marginTop: '0.2rem' }}>
-                                                        ${newOrder.items.reduce((sum, i) => sum + (i.price * i.quantity), 0).toLocaleString()}
+                                                        ${((newOrder.items.reduce((sum, i) => sum + ((i.price || 0) * (i.quantity || 0)), 0)) || 0).toLocaleString()}
                                                     </div>
                                                 </div>
                                             </div>
@@ -1245,7 +1265,7 @@ const Orders = ({ orders, setOrders }) => {
                                             onChange={(e) => setProductSearchTerm(e.target.value)}
                                             style={{ 
                                                 width: '100%', 
-                                                padding: '0.7rem 0.7rem 0.7rem 2.8rem', 
+                                                padding: '0.7rem 2.8rem 0.7rem 2.8rem', 
                                                 borderRadius: '12px', 
                                                 border: '1px solid #f1f5f9', 
                                                 fontSize: '0.85rem', 
@@ -1255,6 +1275,25 @@ const Orders = ({ orders, setOrders }) => {
                                                 color: deepTeal
                                             }}
                                         />
+                                        {productSearchTerm && (
+                                            <button 
+                                                onClick={() => setProductSearchTerm('')}
+                                                style={{ 
+                                                    position: 'absolute', 
+                                                    right: '0.8rem', 
+                                                    top: '50%', 
+                                                    transform: 'translateY(-50%)', 
+                                                    background: 'none', 
+                                                    border: 'none', 
+                                                    color: '#cbd5e1', 
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center'
+                                                }}
+                                            >
+                                                <X size={16} />
+                                            </button>
+                                        )}
                                     </div>
 
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', maxHeight: '450px', overflowY: 'auto', paddingRight: '0.5rem' }}>
@@ -1263,7 +1302,7 @@ const Orders = ({ orders, setOrders }) => {
                                                 <div key={prod.id} style={{ padding: '1rem', border: '1px solid #f1f5f9', borderRadius: '16px', background: '#fff', transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.01)' }}>
                                                     <div style={{ fontWeight: '800', fontSize: '0.85rem', marginBottom: '0.4rem', color: '#1e293b' }}>{prod.name}</div>
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                        <span style={{ fontSize: '0.9rem', color: deepTeal, fontWeight: '900' }}>${prod.price.toLocaleString()}</span>
+                                                        <span style={{ fontSize: '0.9rem', color: deepTeal, fontWeight: '900' }}>${(prod.price || 0).toLocaleString()}</span>
                                                         <button
                                                             onClick={() => handleAddProductToOrder(prod.id)}
                                                             style={{ 
@@ -1462,7 +1501,7 @@ const Orders = ({ orders, setOrders }) => {
 
                         <div style={{ padding: '1.5rem 2rem', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff' }}>
                             <div style={{ fontSize: '0.9rem', color: '#64748b' }}>
-                                Total Estimado OCs: <span style={{ fontSize: '1.4rem', fontWeight: '900', color: 'var(--color-primary)' }}>${explosionPreview.reduce((sum, item) => sum + (item.quantityToBuy * item.unitCost), 0).toLocaleString()}</span>
+                                Total Estimado OCs: <span style={{ fontSize: '1.4rem', fontWeight: '900', color: 'var(--color-primary)' }}>${((explosionPreview.reduce((sum, item) => sum + ((item.quantityToBuy || 0) * (item.unitCost || 0)), 0) || 0) || 0).toLocaleString()}</span>
                             </div>
                             <div style={{ display: 'flex', gap: '1rem' }}>
                                 <button
@@ -1470,12 +1509,6 @@ const Orders = ({ orders, setOrders }) => {
                                     style={{ padding: '0.8rem 2rem', borderRadius: '12px', border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontWeight: '600', color: '#475569' }}
                                 >
                                     Cerrar y Cancelar
-                                </button>
-                                <button
-                                    onClick={handleMoveToProduction}
-                                    style={{ padding: '0.8rem 2rem', borderRadius: '12px', border: '1px solid var(--color-primary)', background: '#fff', color: 'var(--color-primary)', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.6rem' }}
-                                >
-                                    <ChefHat size={18} /> Mover a Producción
                                 </button>
                                 <button
                                     onClick={handleGeneratePOPreviews}
@@ -1541,91 +1574,44 @@ const Orders = ({ orders, setOrders }) => {
 
                         <div style={{ padding: '2rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                             {poPreviewList.map(po => (
-                                <div key={po.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '2.5rem', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.05)' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid var(--color-primary)', paddingBottom: '1.5rem', marginBottom: '1.5rem' }}>
-                                        <div>
-                                            <h1 style={{ margin: 0, fontFamily: 'serif', color: 'var(--color-primary)', fontSize: '2.5rem' }}>zeticas</h1>
-                                            <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.5rem' }}>
-                                                <strong>ZETICAS SAS</strong><br />
-                                                NIT: 901.321.456-7<br />
-                                                Bogotá D.C., Colombia
-                                            </div>
-                                        </div>
-                                        <div style={{ textAlign: 'right' }}>
-                                            <h2 style={{ margin: 0, color: '#0f172a', fontSize: '1.8rem', fontWeight: '900', letterSpacing: '-0.5px' }}>ORDEN DE COMPRA</h2>
-                                            <div style={{ fontSize: '1.2rem', color: 'var(--color-primary)', fontWeight: 'bold', marginTop: '0.5rem' }}>{po.id}</div>
-                                            <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.5rem' }}>Fecha: {po.date}</div>
-                                        </div>
-                                    </div>
-
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
-                                        <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
-                                            <div style={{ fontSize: '0.7rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Proveedor</div>
-                                            <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#1e293b' }}>{po.providerName}</div>
-                                            <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.3rem' }}>NIT: {providers.find(p => p.id === po.providerId)?.nit || '901.000.123-x'}</div>
-                                            <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                                <Phone size={14} /> {po.providerPhone}
-                                            </div>
-                                            <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.2rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                                <Mail size={14} /> {po.providerEmail}
-                                            </div>
-                                        </div>
-                                        <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
-                                            <div style={{ fontSize: '0.7rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Enviar a</div>
-                                            <div style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#1e293b' }}>Bodega Zeticas</div>
-                                            <div style={{ fontSize: '0.85rem', color: '#475569', marginTop: '0.2rem' }}>Calle 123 #45-67, Zona Industrial</div>
-                                        </div>
-                                    </div>
-
-                                    <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '2rem' }}>
-                                        <thead>
-                                            <tr style={{ background: 'var(--color-primary)', color: '#fff', fontSize: '0.8rem' }}>
-                                                <th style={{ padding: '0.8rem', textAlign: 'left', fontWeight: '600', borderRadius: '6px 0 0 6px' }}>ITEM / MATERIAL</th>
-                                                <th style={{ padding: '0.8rem', textAlign: 'center', fontWeight: '600' }}>CANTIDAD</th>
-                                                <th style={{ padding: '0.8rem', textAlign: 'right', fontWeight: '600' }}>V. UNITARIO</th>
-                                                <th style={{ padding: '0.8rem', textAlign: 'right', fontWeight: '600', borderRadius: '0 6px 6px 0' }}>V. TOTAL</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {po.items.map((item, idx) => (
-                                                <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', fontSize: '0.9rem' }}>
-                                                    <td style={{ padding: '1rem 0.8rem', color: '#334155', fontWeight: '500' }}>{item.name}</td>
-                                                    <td style={{ padding: '1rem 0.8rem', textAlign: 'center', color: '#475569' }}>{item.toBuy}</td>
-                                                    <td style={{ padding: '1rem 0.8rem', textAlign: 'right', color: '#475569' }}>${item.purchasePrice.toLocaleString()}</td>
-                                                    <td style={{ padding: '1rem 0.8rem', textAlign: 'right', fontWeight: '600', color: '#0f172a' }}>${(item.toBuy * item.purchasePrice).toLocaleString()}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                        <tfoot>
-                                            <tr>
-                                                <td colSpan="2"></td>
-                                                <td style={{ padding: '1rem 0.8rem', textAlign: 'right', fontSize: '0.85rem', color: '#64748b' }}>Subtotal:</td>
-                                                <td style={{ padding: '1rem 0.8rem', textAlign: 'right', fontWeight: '600', color: '#334155' }}>${po.subtotal.toLocaleString()}</td>
-                                            </tr>
-                                            <tr>
-                                                <td colSpan="2"></td>
-                                                <td style={{ padding: '0.5rem 0.8rem', textAlign: 'right', fontSize: '0.85rem', color: '#64748b' }}>IVA (19%):</td>
-                                                <td style={{ padding: '0.5rem 0.8rem', textAlign: 'right', fontWeight: '600', color: '#334155' }}>${po.iva.toLocaleString()}</td>
-                                            </tr>
-                                            <tr>
-                                                <td colSpan="2"></td>
-                                                <td style={{ padding: '1rem 0.8rem', textAlign: 'right', fontSize: '1.1rem', fontWeight: '900', color: 'var(--color-primary)' }}>TOTAL:</td>
-                                                <td style={{ padding: '1rem 0.8rem', textAlign: 'right', fontSize: '1.3rem', fontWeight: '900', color: 'var(--color-primary)', background: '#f0fdf4', borderRadius: '4px' }}>${po.total.toLocaleString()}</td>
-                                            </tr>
-                                        </tfoot>
-                                    </table>
-
-                                    {/* Action Buttons inside PO Format for communications */}
-                                    <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem', marginTop: '1rem', paddingTop: '1.5rem', borderTop: '1px solid #e2e8f0' }}>
-                                        <button onClick={() => handleSendWhatsApp(po)} style={{ padding: '0.8rem 1.5rem', background: '#25D366', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
-                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.052 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z" /></svg>
-                                            Enviar por WhatsApp
-                                        </button>
-                                        <button onClick={() => handleSendEmail(po)} style={{ padding: '0.8rem 1.5rem', background: '#1e293b', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
-                                            <Mail size={18} /> Enviar por Correo
-                                        </button>
-                                    </div>
-                                </div>
+                                <DocumentBuilder 
+                                    key={po.id}
+                                    type="ORDEN DE COMPRA"
+                                    docId={po.id}
+                                    date={po.date}
+                                    provider={{
+                                        name: po.providerName,
+                                        nit: providers.find(p => p.id === po.providerId)?.nit,
+                                        phone: po.providerPhone,
+                                        email: po.providerEmail
+                                    }}
+                                    items={po.items.map(item => ({
+                                        name: item.name,
+                                        quantity: item.toBuy,
+                                        unitCost: item.purchasePrice,
+                                        totalCost: item.toBuy * item.purchasePrice
+                                    }))}
+                                    totals={{
+                                        subtotal: po.subtotal,
+                                        taxLabel: 'IVA (19%)',
+                                        taxValue: po.iva,
+                                        total: po.total
+                                    }}
+                                    actions={[
+                                        { 
+                                            label: 'WhatsApp', 
+                                            icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.052 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z" /></svg>, 
+                                            onClick: () => handleSendWhatsApp(po), 
+                                            background: '#25D366' 
+                                        },
+                                        { 
+                                            label: 'Correo', 
+                                            icon: <Mail size={18} />, 
+                                            onClick: () => handleSendEmail(po), 
+                                            background: '#1e293b' 
+                                        }
+                                    ]}
+                                />
                             ))}
                         </div>
 
@@ -1718,8 +1704,8 @@ const Orders = ({ orders, setOrders }) => {
                                                         min="1"
                                                     />
                                                 </td>
-                                                <td style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9', textAlign: 'right', color: '#64748b' }}>${item.price.toLocaleString()}</td>
-                                                <td style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9', textAlign: 'right', fontWeight: 'bold' }}>${(item.price * item.quantity).toLocaleString()}</td>
+                                                <td style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9', textAlign: 'right', color: '#64748b' }}>${(item.price || 0).toLocaleString()}</td>
+                                                <td style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9', textAlign: 'right', fontWeight: 'bold' }}>${((item.price * item.quantity) || 0).toLocaleString()}</td>
                                                 <td style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9', textAlign: 'center' }}>
                                                     <button
                                                         onClick={() => setConfirmModal({
@@ -1754,7 +1740,7 @@ const Orders = ({ orders, setOrders }) => {
                                                 >
                                                     <option value="">Seleccionar producto para agregar...</option>
                                                     {availableProducts.map(p => (
-                                                        <option key={p.id} value={p.id}>{p.name} - ${p.price.toLocaleString()}</option>
+                                                        <option key={p.id} value={p.id}>{p.name} - ${(p.price || 0).toLocaleString()}</option>
                                                     ))}
                                                 </select>
                                             </td>
@@ -1768,10 +1754,10 @@ const Orders = ({ orders, setOrders }) => {
                                                 />
                                             </td>
                                             <td style={{ padding: '0.8rem 1rem', borderBottom: '1px solid #e2e8f0', borderTop: '2px solid #e2e8f0', textAlign: 'right', color: '#64748b' }}>
-                                                ${newViewedItem.price.toLocaleString()}
+                                                ${(newViewedItem.price || 0).toLocaleString()}
                                             </td>
                                             <td style={{ padding: '0.8rem 1rem', borderBottom: '1px solid #e2e8f0', borderTop: '2px solid #e2e8f0', textAlign: 'right', fontWeight: 'bold' }}>
-                                                ${(newViewedItem.price * newViewedItem.quantity).toLocaleString()}
+                                                ${((newViewedItem.price * newViewedItem.quantity) || 0).toLocaleString()}
                                             </td>
                                             <td style={{ padding: '0.8rem 1rem', borderBottom: '1px solid #e2e8f0', borderTop: '2px solid #e2e8f0', textAlign: 'center' }}>
                                                 <button
@@ -1800,7 +1786,7 @@ const Orders = ({ orders, setOrders }) => {
                                 <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                                     <div style={{ color: '#475569', fontSize: '0.9rem', fontWeight: 'bold' }}>TOTAL A PAGAR:</div>
                                     <div style={{ color: 'var(--color-primary)', fontSize: '1.5rem', fontWeight: '800' }}>
-                                        ${viewingOrder.items.reduce((sum, i) => sum + (i.price * i.quantity), 0).toLocaleString()}
+                                        ${(viewingOrder.items.reduce((sum, i) => sum + (i.price * i.quantity), 0) || 0).toLocaleString()}
                                     </div>
                                 </div>
                             </div>

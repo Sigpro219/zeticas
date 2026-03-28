@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { X, Send, User, Bot, ExternalLink, MessageCircle } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { useBusiness } from '../context/BusinessContext';
 
-const WHATSAPP_NUMBER = '573138865666'; // Official Zeticas number
+const WHATSAPP_NUMBER = '573166169353'; // Official Zeticas number
 
 const Chatbot = () => {
+    const { addLead } = useBusiness();
     const location = useLocation();
     const isGestion = location.pathname.includes('/gestion');
     const [isOpen, setIsOpen] = useState(false);
@@ -95,31 +96,38 @@ const Chatbot = () => {
                 updatedData.city = text;
                 setLeadData(updatedData);
                 setSubStep(2);
-                setTimeout(() => addMessage(`Anotado. ¿Qué volumen o cantidad de kits/unidades (o cajas de 12 unidades) estimas que necesitas para iniciar?`, 'bot'), 600);
+                setTimeout(() => addMessage(`Anotado. ¿Qué volumen o cantidad de productos necesitas para iniciar?`, 'bot'), 600);
                 break;
             case 2: // Volume
                 updatedData.estimated_volume = text;
                 setLeadData(updatedData);
                 setSubStep(3);
-                setTimeout(() => addMessage(`Perfecto. Por último, déjanos tu correo electrónico para enviarte la lista de precios mayorista y el catálogo formal.`, 'bot'), 600);
+                setTimeout(() => addMessage(`Perfecto. ¿Cuál es tu número de teléfono o WhatsApp para contactarte?`, 'bot'), 600);
                 break;
-            case 3: // Email
-                updatedData.email = text;
+            case 3: // Phone
+                updatedData.phone = text;
                 setLeadData(updatedData);
                 setSubStep(4);
+                setTimeout(() => addMessage(`Casi terminamos. Por último, déjanos tu correo electrónico para enviarte la lista de precios y el catálogo formal.`, 'bot'), 600);
+                break;
+            case 4: // Email
+                updatedData.email = text;
+                setLeadData(updatedData);
+                setSubStep(5);
                 setTimeout(async () => {
                     addMessage(`¡Listo! He registrado tu interés en nuestro panel de gestión. Ahora te pondré en contacto directo con el encargado para agilizar tu pedido. 👇`, 'bot');
                     
                     // CRM Save
                     try {
-                        await supabase.from('leads').insert([{
+                        await addLead({
                             name: updatedData.name,
                             city: updatedData.city,
                             interest_type: updatedData.interest_type,
                             estimated_volume: updatedData.estimated_volume,
+                            phone: updatedData.phone,
                             email: updatedData.email,
                             stage: 'Nuevo Lead'
-                        }]);
+                        });
                     } catch (e) { console.error("Error saving lead", e); }
                     
                 }, 800);
@@ -225,8 +233,8 @@ const Chatbot = () => {
                             </div>
                         )}
 
-                        {/* B2B FLOW FINAL BUTTON (Step 4) */}
-                        {step === 'B2B_FLOW' && subStep === 4 && (
+                        {/* B2B FLOW FINAL BUTTON (Step 5) */}
+                        {step === 'B2B_FLOW' && subStep === 5 && (
                             <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center' }}>
                                 <a 
                                     href={generateWhatsAppLink(leadData)} 
@@ -267,7 +275,7 @@ const Chatbot = () => {
                     </div>
 
                     {/* Input Area (Only for B2B flow) */}
-                    {step === 'B2B_FLOW' && subStep < 4 && (
+                    {step === 'B2B_FLOW' && subStep < 5 && (
                         <div style={{ padding: '15px', borderTop: '1px solid #eee', display: 'flex', gap: '10px', alignItems: 'center' }}>
                             <input 
                                 type="text"

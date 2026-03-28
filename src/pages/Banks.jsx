@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { Landmark, Plus, Edit3, Trash2, X, AlertCircle } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
-import { supabase } from '../lib/supabase';
+// supabase import removed
 
 const Banks = () => {
-    const { banks, setBanks } = useBusiness();
+    const { banks, addBank, updateBank, deleteBank } = useBusiness();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingBank, setEditingBank] = useState(null);
     const [formData, setFormData] = useState({
@@ -58,33 +58,12 @@ const Banks = () => {
 
         try {
             if (editingBank) {
-                const { error } = await supabase
-                    .from('banks')
-                    .update(data)
-                    .eq('id', editingBank.id);
-
-                if (!error) {
-                    setBanks(banks.map(b => b.id === editingBank.id ? { ...b, ...data } : b));
-                }
+                await updateBank(editingBank.id, data);
             } else {
-                const { data: newBank, error } = await supabase
-                    .from('banks')
-                    .insert([data])
-                    .select();
-
-                if (!error && newBank) {
-                    setBanks([...banks, newBank[0]]);
-                } else {
-                    setBanks([...banks, { ...data, id: Date.now() }]);
-                }
+                await addBank(data);
             }
         } catch (err) {
             console.error("Error saving bank:", err);
-            if (editingBank) {
-                setBanks(banks.map(b => b.id === editingBank.id ? { ...b, ...data } : b));
-            } else {
-                setBanks([...banks, { ...data, id: Date.now() }]);
-            }
         }
         handleCloseModal();
     };
@@ -94,12 +73,9 @@ const Banks = () => {
             return;
         }
         try {
-            const { error } = await supabase.from('banks').delete().eq('id', id);
-            if (!error) {
-                setBanks(banks.filter(b => b.id !== id));
-            }
+            await deleteBank(id);
         } catch (err) {
-            setBanks(banks.filter(b => b.id !== id));
+            console.error("Error deleting bank:", err);
         }
     };
 

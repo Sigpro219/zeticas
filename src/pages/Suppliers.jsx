@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { supabase } from '../lib/supabase';
 import { useBusiness } from '../context/BusinessContext';
 import {
     Truck,
@@ -19,17 +18,19 @@ import {
     Trash2,
     AlertTriangle,
     RefreshCw,
-    Briefcase
+    Briefcase,
+    Download,
+    ShoppingBag
 } from 'lucide-react';
 
 const Suppliers = () => {
-    const { items, providers: suppliers, refreshData, loading } = useBusiness();
+    const { items, providers: suppliers, refreshData, addSupplier, updateSupplier } = useBusiness();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [activeCatalogSupplier, setActiveCatalogSupplier] = useState(null);
     const [editingSupplier, setEditingSupplier] = useState(null);
-    const [confirmModal, setConfirmModal] = useState({ show: false, targetId: null, title: '', message: '' });
+    const [showArchived, setShowArchived] = useState(false);
 
     const [newSupplier, setNewSupplier] = useState({
         name: '',
@@ -42,11 +43,21 @@ const Suppliers = () => {
         category: 'Insumos'
     });
 
-    const filteredSuppliers = suppliers.filter(s =>
-        s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        s.nit?.includes(searchTerm) ||
-        (s.category && s.category.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
+    const q = searchTerm.toLowerCase();
+    const filteredSuppliers = suppliers.filter(s => {
+        const matchesSearch = (
+            (s.name || '').toLowerCase().includes(q) ||
+            (s.nit || '').toLowerCase().includes(q) ||
+            (s.city || '').toLowerCase().includes(q) ||
+            (s.email || '').toLowerCase().includes(q) ||
+            (s.phone || '').toLowerCase().includes(q) ||
+            (s.contact_person || '').toLowerCase().includes(q) ||
+            (s.category || '').toLowerCase().includes(q)
+        );
+        const isArchived = s.status === 'Archived';
+        if (showArchived) return matchesSearch && isArchived;
+        return matchesSearch && !isArchived;
+    });
 
     const handleSaveSupplier = async (e) => {
         e.preventDefault();
@@ -65,11 +76,11 @@ const Suppliers = () => {
 
         try {
             if (editingSupplier) {
-                const { error } = await supabase.from('suppliers').update(supplierData).eq('id', editingSupplier.id);
-                if (error) throw error;
+                const res = await updateSupplier(editingSupplier.id, supplierData);
+                if (!res.success) throw new Error(res.error);
             } else {
-                const { error } = await supabase.from('suppliers').insert([supplierData]);
-                if (error) throw error;
+                const res = await addSupplier(supplierData);
+                if (!res.success) throw new Error(res.error);
             }
 
             await refreshData();
@@ -83,23 +94,24 @@ const Suppliers = () => {
         }
     };
 
-    const handleDeleteClick = (supplier) => {
-        setConfirmModal({
-            show: true,
-            targetId: supplier.id,
-            title: '¿Eliminar Proveedor?',
-            message: `¿Estás seguro que quieres eliminar a "${supplier.name}"? Esta acción no se puede deshacer.`
-        });
-    };
-
-    const executeDeletion = async () => {
-        try {
-            const { error } = await supabase.from('suppliers').delete().eq('id', confirmModal.targetId);
-            if (error) throw error;
-            await refreshData();
-            setConfirmModal({ show: false, targetId: null, title: '', message: '' });
-        } catch (err) {
-            console.error("Error deleting supplier:", err);
+    /* ── archive ─────────────────────────────────────────────────────── */
+    const toggleArchive = async (s) => {
+        const isCurrentlyArchived = s.status === 'Archived';
+        const confirmMsg = isCurrentlyArchived 
+            ? `¿Deseas restaurar a ${s.name}?` 
+            : `¿Estás seguro de archivar a ${s.name}? No aparecerá en los listados activos.`;
+        
+        if (window.confirm(confirmMsg)) {
+            setIsSaving(true);
+            try {
+                const res = await updateSupplier(s.id, { status: isCurrentlyArchived ? 'Active' : 'Archived' });
+                if (!res.success) throw new Error(res.error);
+                await refreshData();
+            } catch (err) {
+                alert('Error al procesar: ' + err.message);
+            } finally {
+                setIsSaving(false);
+            }
         }
     };
 
@@ -112,10 +124,9 @@ const Suppliers = () => {
             : [...currentItems, materialId];
 
         try {
-            const { error } = await supabase.from('suppliers').update({ associated_items: updatedItems }).eq('id', activeCatalogSupplier.id);
-            if (!error) {
+            const res = await updateSupplier(activeCatalogSupplier.id, { associated_items: updatedItems });
+            if (res.success) {
                 setActiveCatalogSupplier({ ...activeCatalogSupplier, associatedItems: updatedItems });
-                await refreshData();
             }
         } catch (err) {
             console.error("Error updating association:", err);
@@ -144,6 +155,16 @@ const Suppliers = () => {
                     </div>
                     <button onClick={refreshData} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', padding: '0.55rem', borderRadius: '12px', cursor: 'pointer' }} title="Actualizar Datos">
                         <RefreshCw size={18} color="#64748b" />
+                    </button>
+                    <button 
+                        onClick={() => setShowArchived(!showArchived)}
+                        style={{ 
+                            display: 'flex', alignItems: 'center', gap: '0.45rem', padding: '0.62rem 1.2rem', borderRadius: '12px', 
+                            border: '1px solid #e2e8f0', background: showArchived ? '#64748b' : '#f8fafc', 
+                            color: showArchived ? '#fff' : '#475569', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' 
+                        }}
+                    >
+                        <ShoppingBag size={15} style={{ opacity: 0.7 }} /> {showArchived ? 'Ver Activos' : 'Ver Archivados'}
                     </button>
                     <button
                         onClick={() => {
@@ -183,10 +204,20 @@ const Suppliers = () => {
                     }} className="supplier-card">
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem' }}>
                             <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1a3636', margin: 0 }}>{s.name}</h3>
+                            <span style={{ 
+                                background: s.status === 'Archived' ? '#f1f5f9' : '#dcfce7', 
+                                padding: '4px 10px', 
+                                borderRadius: '20px', 
+                                fontSize: '0.65rem', 
+                                color: s.status === 'Archived' ? '#64748b' : '#166534', 
+                                fontWeight: '700' 
+                            }}>
+                                {s.status === 'Archived' ? 'Archivado' : 'Activo'}
+                            </span>
                         </div>
                         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.2rem' }}>
                             <span style={{ background: '#f0fdf4', padding: '4px 10px', borderRadius: '8px', fontSize: '0.7rem', color: '#166534', border: '1px solid #dcfce7', fontWeight: '600' }}>
-                                {s.group || 'General'}
+                                {s.category || 'General'}
                             </span>
                             <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.7rem', color: '#64748b', fontWeight: '500' }}>
                                 <Package size={12} /> {(s.associatedItems || []).length} Materias
@@ -225,8 +256,8 @@ const Suppliers = () => {
                             <button onClick={() => { setEditingSupplier(s); setNewSupplier({ ...s }); setIsModalOpen(true); }} style={{ padding: '0.55rem', border: '1px solid #e2e8f0', borderRadius: '12px', background: '#fff', cursor: 'pointer', color: '#64748b' }}>
                                 <Edit3 size={14} />
                             </button>
-                            <button onClick={() => handleDeleteClick(s)} style={{ padding: '0.55rem', border: '1px solid #fca5a5', borderRadius: '12px', background: '#fff', cursor: 'pointer', color: '#ef4444' }}>
-                                <Trash2 size={14} />
+                            <button onClick={() => toggleArchive(s)} title={s.status === 'Archived' ? 'Restaurar' : 'Archivar'} style={{ padding: '0.55rem', border: '1px solid #e2e8f0', borderRadius: '12px', background: '#fff', cursor: 'pointer', color: '#64748b' }}>
+                                <Download size={14} style={{ transform: s.status === 'Archived' ? 'rotate(180deg)' : 'none' }} />
                             </button>
                         </div>
                     </div>
@@ -310,21 +341,7 @@ const Suppliers = () => {
                         </form>
                     </div>
                 </div>
-            )}
 
-            {/* Confirm Modal */}
-            {confirmModal.show && (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4000 }}>
-                    <div style={{ background: '#fff', padding: '2rem', borderRadius: '24px', maxWidth: '400px', textAlign: 'center' }}>
-                        <AlertTriangle size={48} color="#ef4444" style={{ margin: '0 auto 1.5rem' }} />
-                        <h3 style={{ marginBottom: '1rem' }}>{confirmModal.title}</h3>
-                        <p style={{ color: '#64748b', marginBottom: '2rem' }}>{confirmModal.message}</p>
-                        <div style={{ display: 'flex', gap: '1rem' }}>
-                            <button onClick={() => setConfirmModal({ ...confirmModal, show: false })} style={{ flex: 1, padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', background: '#fff' }}>Cancelar</button>
-                            <button onClick={executeDeletion} style={{ flex: 1, padding: '0.8rem', borderRadius: '12px', border: 'none', background: '#ef4444', color: '#fff', fontWeight: 'bold' }}>Eliminar</button>
-                        </div>
-                    </div>
-                </div>
             )}
         </div>
     );

@@ -1,43 +1,127 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useBusiness } from '../context/BusinessContext';
-import { ArrowLeft, CreditCard, Wallet, ShieldCheck, CheckCircle, Truck, MapPin, Settings2 } from 'lucide-react';
-
-
+import { ArrowLeft, CreditCard, Wallet, ShieldCheck, CheckCircle, Truck, MapPin, Settings2, Info } from 'lucide-react';
+import { colombia_cities } from '../data/colombia_cities';
+import CryptoJS from 'crypto-js';
 
 const Checkout = () => {
     const { cart, cartTotal, clearCart } = useCart();
-    const { addOrder } = useBusiness();
+    const { addOrder, siteContent } = useBusiness();
     const navigate = useNavigate();
     const [step, setStep] = useState(1); // 1: Info, 2: Payment, 3: Success
-    const [paymentMethod, setPaymentMethod] = useState('card'); // 'card' or 'wompi'
     const [formData, setFormData] = useState({
-        nombre: 'Maria Camila',
-        apellido: 'Gomez',
-        direccion: 'Carrera 15 # 85-20, Bogotá',
-        ciudad: 'Bogotá',
-        telefono: '3109876543'
+        nombreCompleto: '',
+        direccion: '',
+        ciudad: '',
+        departamento: '',
+        telefono: ''
     });
 
-    // Parámetros de Envío
-    const [shipConfig, setShipConfig] = useState({
-        destino: 'Bogotá',
-        distance: 58,  // Distancia inicial
-        valorKg: 510,  // Valor por KG (usado como multiplicador por KM según el usuario)
-        weightPerSku: 0.35 // 350 grs
+    // Parámetros de Envío desde Administración Web
+    const [shipSettings, setShipSettings] = useState({
+        tarifa_local: 5400,
+        tarifa_regional: 7200,
+        tarifa_nacional: 13500,
+        threshold_free: 120000,
+        weight_per_sku: 0.400,
+        origin_city: 'Guasca',
+        bold_mode: 'sandbox',
+        bold_sandbox_identity: '',
+        bold_sandbox_secret: '',
+        bold_prod_identity: '',
+        bold_prod_secret: ''
     });
 
-    const totalWeight = cart.reduce((acc, item) => acc + (item.quantity * shipConfig.weightPerSku), 0);
-    const shippingCost = Math.round(shipConfig.distance * shipConfig.valorKg);
+    useEffect(() => {
+        if (siteContent && siteContent.web_shipping) {
+            setShipSettings({
+                tarifa_local: Number(siteContent.web_shipping.tarifa_local) || 5400,
+                tarifa_regional: Number(siteContent.web_shipping.tarifa_regional) || 7200,
+                tarifa_nacional: Number(siteContent.web_shipping.tarifa_nacional) || 13500,
+                threshold_free: Number(siteContent.web_shipping.threshold_free) || 120000,
+                weight_per_sku: Number(siteContent.web_shipping.weight_per_sku) || 0.400,
+                origin_city: siteContent.web_shipping.origin_city || 'Guasca',
+                bold_mode: siteContent.web_shipping.bold_mode || 'sandbox',
+                bold_sandbox_identity: siteContent.web_shipping.bold_sandbox_identity || '',
+                bold_sandbox_secret: siteContent.web_shipping.bold_sandbox_secret || '',
+                bold_prod_identity: siteContent.web_shipping.bold_prod_identity || '',
+                bold_prod_secret: siteContent.web_shipping.bold_prod_secret || ''
+            });
+        }
+    }, [siteContent]);
+
+    // Calcular costos
+    const totalWeight = cart.reduce((acc, item) => acc + (item.quantity * shipSettings.weight_per_sku), 0);
+    const roundedWeight = Math.ceil(totalWeight);
+    
+    // Detectar Zona
+    const getShippingCost = () => {
+        if (cartTotal >= shipSettings.threshold_free) return 0;
+        
+        const destination = colombia_cities.find(c => 
+            c.city.toLowerCase() === formData.ciudad.toLowerCase()
+        );
+
+        let rate = shipSettings.tarifa_nacional;
+        if (destination) {
+            if (destination.city === shipSettings.origin_city) rate = shipSettings.tarifa_local;
+            else if (destination.state === 'Cundinamarca' || destination.state === 'Boyacá') rate = shipSettings.tarifa_regional;
+        }
+
+        return roundedWeight * rate;
+    };
+
+    const shippingCost = getShippingCost();
     const finalTotal = cartTotal + shippingCost;
+    const missingForFree = Math.max(0, shipSettings.threshold_free - cartTotal);
 
-    const handlePayment = (e) => {
-        e.preventDefault();
+    const handleBoldCheckout = () => {
+        const isSandbox = shipSettings.bold_mode === 'sandbox';
+        const apiKey = isSandbox ? shipSettings.bold_sandbox_identity : shipSettings.bold_prod_identity;
+        const secretKey = isSandbox ? shipSettings.bold_sandbox_secret : shipSettings.bold_prod_secret;
 
+        if (!apiKey || !secretKey) {
+            alert("Error: Configuración de Bold incompleta. Por favor contacta al administrador.");
+            return;
+        }
+
+        const orderId = `ZET-${Date.now()}`;
+        const amountStr = Math.round(finalTotal).toString();
+        const currency = 'COP';
+
+        // Firma de Integridad: {ID_DE_PEDIDO}{MONTO}{DIVISA}{LLAVE_SECRETA}
+        const signaturePayload = `${orderId}${amountStr}${currency}${secretKey}`;
+        const integritySignature = CryptoJS.SHA256(signaturePayload).toString();
+
+        console.log("Iniciando Bold Checkout Real...", { orderId, amountStr, integritySignature, mode: shipSettings.bold_mode });
+
+        try {
+            if (window.BoldCheckout) {
+                const checkout = new window.BoldCheckout({
+                    orderId: orderId,
+                    currency: currency,
+                    amount: amountStr,
+                    apiKey: apiKey,
+                    integritySignature: integritySignature,
+                    description: `Compra Zeticas - ${formData.nombreCompleto}`,
+                    redirectionUrl: window.location.origin + '/checkout?status=success'
+                });
+                checkout.open();
+            } else {
+                alert("Error: La librería de Bold no ha cargado correctamente. Recarga la página.");
+            }
+        } catch (err) {
+            console.error("Error al abrir Bold Checkout", err);
+            alert("Hubo un error al conectar con la pasarela de pago.");
+        }
+    };
+
+    const handleSuccess = () => {
         const newOrder = {
             id: `WEB-${Math.floor(Math.random() * 10000)}`,
-            client: `${formData.nombre} ${formData.apellido}`,
+            client: formData.nombreCompleto,
             amount: finalTotal,
             date: new Date().toISOString().split('T')[0],
             status: 'Pendiente',
@@ -59,7 +143,7 @@ const Checkout = () => {
 
         const newClientData = {
             id: existingClientIndex !== -1 ? clientsList[existingClientIndex].id : Date.now(),
-            name: `${formData.nombre} ${formData.apellido}`,
+            name: formData.nombreCompleto,
             idType: 'CC',
             nit: clientId,
             source: 'Web',
@@ -67,7 +151,7 @@ const Checkout = () => {
             location: formData.ciudad,
             phone: formData.telefono,
             email: 'No registrado',
-            contactName: `${formData.nombre} ${formData.apellido}`,
+            contactName: formData.nombreCompleto,
             contactRole: 'Comprador Web',
             type: 'Natural',
             subType: 'B2C',
@@ -88,6 +172,18 @@ const Checkout = () => {
         setTimeout(() => {
             clearCart();
         }, 500);
+    };
+
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('status') === 'success') {
+            handleSuccess();
+        }
+    }, []);
+
+    const handlePaymentSubmit = (e) => {
+        e.preventDefault();
+        handleBoldCheckout();
     };
 
     if (step === 3) {
@@ -120,79 +216,82 @@ const Checkout = () => {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '4rem', alignItems: 'start' }}>
                     <div style={{ background: '#fff', padding: '3rem', borderRadius: '4px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
-                        <form onSubmit={handlePayment}>
+                        <form onSubmit={handlePaymentSubmit}>
                             {step === 1 ? (
                                 <div className="shipping-info">
                                     <h2 className="font-serif" style={{ fontSize: '1.8rem', marginBottom: '2rem', color: 'var(--color-primary)' }}>Información de Envío</h2>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                            <label style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#888' }}>Nombre</label>
-                                            <input type="text" required value={formData.nombre} onChange={e => setFormData({ ...formData, nombre: e.target.value })} style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px', color: '#94a3b8' }} />
-                                        </div>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                            <label style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#888' }}>Apellido</label>
-                                            <input type="text" required value={formData.apellido} onChange={e => setFormData({ ...formData, apellido: e.target.value })} style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px', color: '#94a3b8' }} />
-                                        </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.5rem' }}>
+                                        <label style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#888' }}>Nombre Completo</label>
+                                        <input type="text" required value={formData.nombreCompleto} onChange={e => setFormData({ ...formData, nombreCompleto: e.target.value })} placeholder="Ej: Juan Perez" style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '4px', color: '#334155', fontWeight: 'bold' }} />
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.5rem' }}>
                                         <label style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#888' }}>Dirección de Entrega</label>
-                                        <input type="text" required value={formData.direccion} onChange={e => setFormData({ ...formData, direccion: e.target.value })} placeholder="Calle, número, apto..." style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px', color: '#94a3b8' }} />
+                                        <input type="text" required value={formData.direccion} onChange={e => setFormData({ ...formData, direccion: e.target.value })} placeholder="Calle 123 # 45-67..." style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px', color: '#334155' }} />
                                     </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2.5rem' }}>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                            <label style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#888' }}>Ciudad</label>
+                                            <label style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#888' }}>Ciudad / Municipio</label>
                                             <input
+                                                list="cities-list"
                                                 type="text"
                                                 required
                                                 value={formData.ciudad}
                                                 onChange={e => setFormData({ ...formData, ciudad: e.target.value })}
-                                                style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px', color: '#334155', outline: 'none' }}
+                                                placeholder="Ej: Bogotá, Guasca..."
+                                                style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '4px', color: '#334155', fontWeight: 'bold' }}
                                             />
+                                            <datalist id="cities-list">
+                                                {colombia_cities.map((c, i) => (
+                                                    <option key={i} value={c.city}>{c.state}</option>
+                                                ))}
+                                            </datalist>
                                         </div>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                             <label style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#888' }}>Teléfono</label>
-                                            <input type="tel" required value={formData.telefono} onChange={e => setFormData({ ...formData, telefono: e.target.value })} style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px', color: '#94a3b8' }} />
+                                            <input type="tel" required value={formData.telefono} onChange={e => setFormData({ ...formData, telefono: e.target.value })} placeholder="310 000 0000" style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '4px' }} />
                                         </div>
                                     </div>
 
-                                    {/* Módulo Interrapidisimo */}
-                                    <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '12px', marginBottom: '2.5rem', border: '1px solid #e2e8f0' }}>
-                                        <h4 style={{ margin: '0 0 1rem', fontSize: '1rem', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                            <Truck size={18} /> Calcula costo de envío (Interrapidisimo)
-                                        </h4>
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                                            <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                                                <strong>PARTIDA:</strong> Interrapidisimo Guasca / Cundinamarca
-                                            </div>
-                                            <div style={{ fontSize: '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                                <strong>DESTINO:</strong>
-                                                <input
-                                                    type="text"
-                                                    value={shipConfig.destino}
-                                                    onChange={e => setShipConfig({ ...shipConfig, destino: e.target.value })}
-                                                    style={{ border: 'none', background: 'transparent', borderBottom: '1px solid #cbd5e1', color: '#64748b', fontSize: '0.75rem', outline: 'none', padding: '0 2px', width: '100px' }}
-                                                />
-                                            </div>
+                                    {/* Módulo Envío Interrapidisimo */}
+                                    <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '20px', marginBottom: '2.5rem', border: '1px dotted var(--color-primary)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.2rem' }}>
+                                            <h4 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '800' }}>
+                                                <Truck size={20} /> ENVÍO INTERRAPIDISIMO
+                                            </h4>
+                                            {shippingCost === 0 ? (
+                                                <span style={{ background: '#10b981', color: '#fff', padding: '0.2rem 0.8rem', borderRadius: '20px', fontSize: '0.7rem', fontWeight: '900' }}>¡GRATIS!</span>
+                                            ) : (
+                                                <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 'bold' }}>Envío Estándar</span>
+                                            )}
                                         </div>
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1.5rem', background: '#fff', padding: '1.2rem', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                                                    <label style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#94a3b8' }}>DISTANCIA (KM)</label>
-                                                    <input type="number" value={shipConfig.distance} onChange={e => setShipConfig({ ...shipConfig, distance: Number(e.target.value) })} style={{ border: 'none', borderBottom: '2px solid #e2e8f0', width: '80px', fontWeight: 'bold', outline: 'none', fontSize: '1.1rem' }} />
+
+                                        {missingForFree > 0 && (
+                                            <div style={{ marginBottom: '1rem' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', marginBottom: '0.4rem', color: '#64748b', fontWeight: '700' }}>
+                                                    <span>Faltan <strong>${missingForFree.toLocaleString('es-CO')}</strong> para envío gratis</span>
+                                                    <span>{Math.round((cartTotal / shipSettings.threshold_free) * 100)}%</span>
                                                 </div>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                                                    <label style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#94a3b8' }}>VALOR KG</label>
-                                                    <input type="number" value={shipConfig.valorKg} onChange={e => setShipConfig({ ...shipConfig, valorKg: Number(e.target.value) })} style={{ border: 'none', borderBottom: '2px solid #e2e8f0', width: '80px', fontWeight: 'bold', outline: 'none', fontSize: '1.1rem' }} />
+                                                <div style={{ width: '100%', height: '6px', background: '#e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
+                                                    <div style={{ width: `${Math.min(100, (cartTotal / shipSettings.threshold_free) * 100)}%`, height: '100%', background: 'var(--color-secondary)' }} />
                                                 </div>
                                             </div>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                                                <div style={{ textAlign: 'right' }}>
-                                                    <div style={{ color: '#94a3b8', fontSize: '0.7rem' }}>PESO TOTAL</div>
-                                                    <div style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>{totalWeight.toFixed(2)} KG</div>
+                                        )}
+
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: '#fff', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                                            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#fffaf8', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-primary)' }}>
+                                                <MapPin size={20} />
+                                            </div>
+                                            <div>
+                                                <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#1e293b' }}>
+                                                    {formData.ciudad || 'Selecciona ciudad'}
                                                 </div>
-                                                <div style={{ background: '#ecfdf5', color: '#10b981', padding: '0.8rem', borderRadius: '12px', textAlign: 'right' }}>
-                                                    <div style={{ fontSize: '0.65rem', fontWeight: 'bold', textTransform: 'uppercase' }}>COSTO ESTIMADO</div>
-                                                    <div style={{ fontWeight: 'bold', fontSize: '1.3rem' }}>${shippingCost.toLocaleString('es-CO')}</div>
+                                                <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '600' }}>
+                                                    {shippingCost === 0 ? 'Aplica envío gratuito por monto' : 'Entrega nacional garantizada'}
+                                                </div>
+                                            </div>
+                                            <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+                                                <div style={{ fontSize: '1.2rem', fontWeight: '900', color: 'var(--color-primary)' }}>
+                                                    {shippingCost === 0 ? '$0' : `$${shippingCost.toLocaleString('es-CO')}`}
                                                 </div>
                                             </div>
                                         </div>
@@ -212,84 +311,46 @@ const Checkout = () => {
 
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '3rem' }}>
                                         <div
-                                            onClick={() => setPaymentMethod('card')}
                                             style={{
                                                 padding: '1.5rem',
-                                                border: `2px solid ${paymentMethod === 'card' ? 'var(--color-secondary)' : '#eee'}`,
+                                                border: `2px solid var(--color-secondary)`,
                                                 borderRadius: '4px',
                                                 cursor: 'pointer',
                                                 display: 'flex',
                                                 alignItems: 'center',
                                                 gap: '1.5rem',
                                                 transition: 'all 0.3s ease',
-                                                background: paymentMethod === 'card' ? '#fffaf8' : '#fff'
+                                                background: '#fffaf8'
                                             }}
                                         >
                                             <div style={{ width: '20px', height: '20px', borderRadius: '50%', border: '2px solid var(--color-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                {paymentMethod === 'card' && <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--color-secondary)' }} />}
+                                                <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--color-secondary)' }} />
                                             </div>
-                                            <CreditCard size={24} color="var(--color-primary)" />
+                                            <Wallet size={24} color="#7c3aed" />
                                             <div>
-                                                <span style={{ fontWeight: 'bold', display: 'block' }}>Tarjeta Crédito / Débito</span>
-                                                <span style={{ fontSize: '0.8rem', color: '#888' }}>Visa, Mastercard, Amex</span>
-                                            </div>
-                                        </div>
-
-                                        <div
-                                            onClick={() => setPaymentMethod('wompi')}
-                                            style={{
-                                                padding: '1.5rem',
-                                                border: `2px solid ${paymentMethod === 'wompi' ? 'var(--color-secondary)' : '#eee'}`,
-                                                borderRadius: '4px',
-                                                cursor: 'pointer',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '1.5rem',
-                                                transition: 'all 0.3s ease',
-                                                background: paymentMethod === 'wompi' ? '#fffaf8' : '#fff'
-                                            }}
-                                        >
-                                            <div style={{ width: '20px', height: '20px', borderRadius: '50%', border: '2px solid var(--color-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                {paymentMethod === 'wompi' && <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--color-secondary)' }} />}
-                                            </div>
-                                            <Wallet size={24} color="#5e17eb" />
-                                            <div>
-                                                <span style={{ fontWeight: 'bold', display: 'block' }}>Wompi Bancolombia</span>
-                                                <span style={{ fontSize: '0.8rem', color: '#888' }}>PSE, Corresponsal, Botón Bancolombia</span>
+                                                <span style={{ fontWeight: 'bold', display: 'block' }}>Pasarela Segura (Bold)</span>
+                                                <span style={{ fontSize: '0.8rem', color: '#888' }}>Tarjetas de Crédito, PSE, Nequi y Daviplata</span>
                                             </div>
                                         </div>
                                     </div>
 
-                                    {paymentMethod === 'card' && (
-                                        <div style={{ padding: '2rem', background: '#f9f9f9', borderRadius: '4px', marginBottom: '2rem' }}>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.5rem' }}>
-                                                <label style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#888' }}>Número de Tarjeta</label>
-                                                <input type="text" placeholder="0000 0000 0000 0000" style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px' }} />
-                                            </div>
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#888' }}>Vencimiento</label>
-                                                    <input type="text" placeholder="MM/YY" style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px' }} />
-                                                </div>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#888' }}>CVV</label>
-                                                    <input type="password" placeholder="***" style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '2px' }} />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
+                                    <div style={{ padding: '2rem', background: '#f8fafc', borderRadius: '8px', marginBottom: '2rem', border: '1px dashed #e2e8f0' }}>
+                                        <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b', textAlign: 'center' }}>
+                                            Al hacer clic en el botón, serás redirigido a la pasarela segura de <strong>Bold</strong> para completar tu pago de forma protegida.
+                                        </p>
+                                    </div>
 
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '3rem', color: 'var(--color-sage)', fontSize: '0.9rem' }}>
                                         <ShieldCheck size={20} />
-                                        <span>Tu pago está protegido con encriptación SSL de 256 bits.</span>
+                                        <span>Tu pago está protegido con encriptación SSL de 256 bits y certificación PCI-DSS.</span>
                                     </div>
 
                                     <button
                                         type="submit"
                                         className="btn btn-primary"
-                                        style={{ width: '100%', padding: '1.2rem' }}
+                                        style={{ width: '100%', padding: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}
                                     >
-                                        PAGAR ${finalTotal.toLocaleString('es-CO')}
+                                        PAGAR CON BOLD ${finalTotal.toLocaleString('es-CO')}
                                     </button>
                                 </div>
                             )}
@@ -313,8 +374,10 @@ const Checkout = () => {
                                     <span>${cartTotal.toLocaleString('es-CO')}</span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', color: '#666' }}>
-                                    <span>Envío ({totalWeight.toFixed(1)}kg)</span>
-                                    <span>${shippingCost.toLocaleString('es-CO')}</span>
+                                    <span>Costo de envío</span>
+                                    <span style={{ color: shippingCost === 0 ? '#10b981' : '#666', fontWeight: shippingCost === 0 ? 'bold' : 'normal' }}>
+                                        {shippingCost === 0 ? 'GRATIS' : `$${shippingCost.toLocaleString('es-CO')}`}
+                                    </span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--color-primary)', marginTop: '1rem' }}>
                                     <span>Total</span>

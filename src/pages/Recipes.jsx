@@ -1,13 +1,23 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ChefHat, RefreshCw, Plus, Edit3, Trash2, X, PlusCircle, MinusCircle, Save, AlertTriangle, Search } from 'lucide-react';
-import { supabase } from '../lib/supabase';
 import { useBusiness } from '../context/BusinessContext';
 
 const Recipes = () => {
-    const { recalculatePTCosts } = useBusiness();
-    const [recipesList, setRecipesList] = useState([]);
-    const [materials, setMaterials] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const { items, recipes, recalculatePTCosts, addRecipe, deleteRecipeByProduct } = useBusiness();
+    
+    // Split items into PTs and Materials
+    const pts = useMemo(() => items.filter(i => i.type === 'product' || i.type === 'PT'), [items]);
+    const materials = useMemo(() => items.filter(i => i.type === 'material' || i.type === 'material'), [items]);
+
+    const recipesList = useMemo(() => {
+        return pts.map(pt => ({
+            id: pt.id,
+            name: pt.name,
+            yield: 'Batch Producción',
+            ingredients: recipes[pt.name] || [] // Context groups by name
+        }));
+    }, [pts, recipes]);
+
     const [isSaving, setIsSaving] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -22,54 +32,8 @@ const Recipes = () => {
         ingredients: [{ rm_id: '', name: '', qty: '', unit: '' }]
     });
 
-    const loadData = async () => {
-        setLoading(true);
-        try {
-            // Get all PTs
-            const { data: pts, error: ptError } = await supabase.from('products').select('*').eq('type', 'PT').order('name');
-            if (ptError) throw ptError;
-
-            // Get all materials for dropdowns
-            const { data: mats, error: matError } = await supabase.from('products').select('*').neq('type', 'PT').order('name');
-            if (matError) throw matError;
-            setMaterials(mats);
-
-            // Get all Recipes mapping
-            const { data: recipesMap, error: recError } = await supabase.from('recipes').select(`
-                id, finished_good_id, raw_material_id, quantity_required,
-                raw_material:products!recipes_raw_material_id_fkey(name, unit_measure)
-            `);
-            if (recError) throw recError;
-
-            if (pts && recipesMap) {
-                const list = pts.map(pt => {
-                    const myIngs = recipesMap.filter(r => r.finished_good_id === pt.id);
-                    const ingredients = myIngs.map(i => ({
-                        id: i.id, // ID of the recipe record
-                        rm_id: i.raw_material_id,
-                        name: i.raw_material?.name || 'Desconocido',
-                        qty: i.quantity_required,
-                        unit: i.raw_material?.unit_measure || 'unid'
-                    }));
-                    return {
-                        id: pt.id, // This is the PT ID
-                        name: pt.name,
-                        yield: 'Batch Producción',
-                        ingredients
-                    };
-                });
-                setRecipesList(list);
-            }
-        } catch (error) {
-            console.error("Error loading recipes from DB:", error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        loadData();
-    }, []);
+    // loadData removed as it's now handled by useMemo and context subscriptions
+    const loading = false; // BusinessContext handles loading externally if needed, but here we can assume it's live
 
     const filteredRecipes = useMemo(() => {
         if (!searchTerm) return recipesList;
@@ -89,10 +53,8 @@ const Recipes = () => {
     const executeDeletion = async () => {
         setIsDeleting(true);
         try {
-            const { error } = await supabase.from('recipes').delete().eq('finished_good_id', confirmModal.targetId);
-            if (error) throw error;
-
-            setRecipesList(prev => prev.map(r => r.id === confirmModal.targetId ? { ...r, ingredients: [] } : r));
+            const res = await deleteRecipeByProduct(confirmModal.targetId);
+            if (!res.success) throw new Error(res.error);
             setConfirmModal({ show: false, targetId: null, title: '', message: '' });
         } catch (err) {
             console.error("Error deleting recipe:", err);
@@ -170,27 +132,27 @@ const Recipes = () => {
 
         setIsSaving(true);
         try {
-            // Delete existing rows for this finished_good_id
-            await supabase.from('recipes').delete().eq('finished_good_id', formData.id);
+            // Delete existing rows for this finished_good_id in Firestore
+            await deleteRecipeByProduct(formData.id);
 
             // Insert new rows
-            const rowsToInsert = formData.ingredients
-                .filter(i => i.rm_id && i.qty)
-                .map(i => ({
-                    finished_good_id: formData.id,
-                    raw_material_id: i.rm_id,
-                    quantity_required: parseFloat(i.qty)
-                }));
-
-            if (rowsToInsert.length > 0) {
-                const { error } = await supabase.from('recipes').insert(rowsToInsert);
-                if (error) throw error;
+            for (const i of formData.ingredients) {
+                if (i.rm_id && i.qty) {
+                    await addRecipe({
+                        finished_good_id: formData.id,
+                        finished_good_name: formData.name,
+                        raw_material_id: i.rm_id,
+                        raw_material_name: i.name,
+                        raw_material_sku: i.sku || i.name,
+                        quantity_required: parseFloat(i.qty)
+                    });
+                }
             }
 
             // Recalculate PT costs based on the new recipe
             await recalculatePTCosts();
 
-            await loadData();
+            // await loadData(); // No longer needed
             setIsModalOpen(false);
         } catch (error) {
             console.error("Error saving recipe:", error);

@@ -19,13 +19,13 @@ import {
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { supabase } from '../lib/supabase';
+// supabase import removed
 
 const Shipping = () => {
     useEffect(() => {
         window.scrollTo(0, 0);
     }, []);
-    const { orders, items, refreshData } = useBusiness();
+    const { orders, items, refreshData, updateOrder } = useBusiness();
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState('month');
     const [customRange, setCustomRange] = useState({ from: '', to: '' });
@@ -145,11 +145,11 @@ const Shipping = () => {
 
         doc.save(`Factura_${invNum}_${order.client}.pdf`);
 
-        // Update in Supabase
-        await supabase.from('orders').update({
+        // Update in Firestore
+        await updateOrder(order.dbId, {
             invoice_number: invNum,
             status: 'Facturado'
-        }).eq('order_number', order.id);
+        });
 
         await refreshData();
     };
@@ -204,11 +204,11 @@ const Shipping = () => {
 
         doc.save(`Etiqueta_${order.id}.pdf`);
 
-        // Update in Supabase
-        await supabase.from('orders').update({
+        // Update in Firestore
+        await updateOrder(order.dbId, {
             dispatched_at: new Date().toISOString(),
             status: 'Despachado'
-        }).eq('order_number', order.id);
+        });
 
         await refreshData();
     };
@@ -521,7 +521,7 @@ const Shipping = () => {
                                         <div style={{ fontSize: '1rem', color: '#1e293b', fontWeight: '900', letterSpacing: '-0.2px' }}>{order.client}</div>
                                         <div style={{ display: 'flex', gap: '8px', marginTop: '0.3rem' }}>
                                             <span style={{ fontSize: '0.65rem', color: institutionOcre, fontWeight: '900', background: `${institutionOcre}10`, padding: '2px 8px', borderRadius: '6px' }}>
-                                                {order.items.length} SKUs
+                                                {order.items?.length || 0} SKUs
                                             </span>
                                             <span style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: '900', background: 'rgba(2, 83, 87, 0.04)', padding: '2px 8px', borderRadius: '6px' }}>
                                                 ${order.amount.toLocaleString()}

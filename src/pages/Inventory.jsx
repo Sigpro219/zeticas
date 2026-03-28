@@ -1,10 +1,9 @@
-import React, { useState, useMemo } from 'react';
-import { AlertCircle, RefreshCw, Plus, Package, Save, X, ArrowUpRight, Search, Zap, ShieldCheck } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import React, { useState } from 'react';
+import { AlertCircle, RefreshCw, Plus, Package, Save, X, ArrowUpRight, Search } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
 
 const Inventory = () => {
-    const { items, refreshData } = useBusiness();
+    const { items, refreshData, addItem, updateItem } = useBusiness();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [modalType, setModalType] = useState('MP'); // 'MP' or 'PT'
     const [editData, setEditData] = useState([]);
@@ -26,7 +25,7 @@ const Inventory = () => {
 
     const getFinalStock = (item) => (item.initial || 0) + (item.purchases || 0) - (item.sales || 0);
 
-    const pullSignals = items.filter(item =>
+    const pullSignals = (items || []).filter(item =>
         getFinalStock(item) <= (item.safety || 0) && !dismissedPulls.includes(item.id)
     );
 
@@ -82,22 +81,22 @@ const Inventory = () => {
             for (const item of editData) {
                 const dbData = {
                     name: item.name,
-                    stock: item.initial,
-                    min_stock_level: item.safety,
-                    unit_measure: item.unit,
-                    cost: item.avgCost,
+                    initial: item.initial,
+                    safety: item.safety,
+                    unit: item.unit,
+                    avgCost: item.avgCost,
                     price: item.price,
-                    type: item.type === 'product' ? 'PT' : 'MP',
+                    type: item.type === 'product' || item.type === 'PT' ? 'product' : 'material',
                     sku: item.sku || ('SKU-' + Math.random().toString(36).substr(2, 5).toUpperCase())
                 };
 
                 if (item.id && typeof item.id === 'string' && !item.id.startsWith('TEMP_')) {
-                    await supabase.from('products').update(dbData).eq('id', item.id);
+                    await updateItem(item.id, dbData);
                 } else if (item.isNew && item.name) {
-                    await supabase.from('products').insert([dbData]);
+                    await addItem(dbData);
                 }
             }
-            await refreshData();
+            // await refreshData(); // Auto handled by context snapshots
             setIsModalOpen(false);
             setModalSearch('');
         } catch (err) {

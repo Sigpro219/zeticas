@@ -5,10 +5,10 @@ import {
     Trash2, Search, Filter, TrendingUp, TrendingDown, Pencil, X
 } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
-import { supabase } from '../lib/supabase';
+// supabase import removed
 
 const Expenses = () => {
-    const { expenses, setExpenses, orders, purchaseOrders, banks, updateBankBalance } = useBusiness();
+    const { expenses, orders, purchaseOrders, banks, updateBankBalance, addExpense, updateExpense, deleteExpense } = useBusiness();
     const [searchTerm, setSearchTerm] = useState('');
     const [showModal, setShowModal] = useState(false);
     const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -134,31 +134,28 @@ const Expenses = () => {
         const amount = parseFloat(formData.amount) || 0;
         try {
             if (editingExpense) {
-                const { error } = await supabase
-                    .from('expenses')
-                    .update({
-                        expense_date: formData.date,
-                        category: formData.category,
-                        description: formData.description,
-                        amount: amount,
-                        bank_id: formData.bankId
-                    })
-                    .eq('id', editingExpense.id);
-                if (error) throw error;
+                const res = await updateExpense(editingExpense.id, {
+                    expense_date: formData.date,
+                    category: formData.category,
+                    description: formData.description,
+                    amount: amount,
+                    bank_id: formData.bankId
+                });
+                if (!res.success) throw new Error(res.error);
+                
                 if (editingExpense.bankId) await updateBankBalance(editingExpense.bankId, editingExpense.amount, 'income', `Reversión Gasto: ${editingExpense.description}`);
                 if (formData.bankId) await updateBankBalance(formData.bankId, amount, 'expense', `Actualización Gasto: ${formData.description}`, editingExpense.id);
-                setExpenses(expenses.map(exp => exp.id === editingExpense.id ? { ...exp, date: formData.date, category: formData.category, description: formData.description, amount: amount, bankId: formData.bankId } : exp));
                 setEditingExpense(null);
             } else {
-                const { data: newExp, error } = await supabase
-                    .from('expenses')
-                    .insert([{ expense_date: formData.date, category: formData.category, description: formData.description, amount: amount, bank_id: formData.bankId }])
-                    .select();
-                if (error) throw error;
-                if (newExp && newExp[0]) {
-                    setExpenses([{ id: newExp[0].id, date: newExp[0].expense_date, category: newExp[0].category, description: newExp[0].description, amount: newExp[0].amount, bankId: newExp[0].bank_id }, ...expenses]);
-                    if (formData.bankId) await updateBankBalance(formData.bankId, amount, 'expense', `Gasto: ${formData.description}`, newExp[0].id);
-                }
+                const res = await addExpense({
+                    expense_date: formData.date,
+                    category: formData.category,
+                    description: formData.description,
+                    amount: amount,
+                    bank_id: formData.bankId
+                });
+                if (!res.success) throw new Error(res.error);
+                if (formData.bankId) await updateBankBalance(formData.bankId, amount, 'expense', `Gasto: ${formData.description}`, res.id);
             }
             setFormData({ date: new Date().toISOString().split('T')[0], category: categories[0] || 'Administración', description: '', amount: '', bankId: '' });
             setShowModal(false);
@@ -178,10 +175,9 @@ const Expenses = () => {
         const expense = expenses.find(e => e.id === id);
         if (expense) {
             try {
-                const { error } = await supabase.from('expenses').delete().eq('id', id);
-                if (error) throw error;
+                const res = await deleteExpense(id);
+                if (!res.success) throw new Error(res.error);
                 if (expense.bankId) await updateBankBalance(expense.bankId, expense.amount, 'income', `Eliminación Gasto: ${expense.description}`);
-                setExpenses(expenses.filter(e => e.id !== id));
             } catch (err) {
                 alert("Error al eliminar el gasto: " + err.message);
             }

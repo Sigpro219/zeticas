@@ -1,12 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { FileText, AlertTriangle, Clock, AlertCircle, ChevronDown, ChevronUp, DollarSign, Search, Filter, Settings, Plus, Trash2, X, Download, Eye, TrendingUp, ShieldCheck } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
-import { supabase } from '../lib/supabase';
+// supabase import removed
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 const Cartera = () => {
-    const { banks, orders, updateBankBalance } = useBusiness();
+    const { banks, orders, updateBankBalance, updateOrder } = useBusiness();
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedInvoice, setSelectedInvoice] = useState(null);
@@ -125,7 +125,7 @@ const Cartera = () => {
         if (!selectedBank) return alert("Selecciona un banco");
 
         try {
-            await supabase.from('orders').update({ status: 'Pagado', payment_bank_id: selectedBank.id }).eq('order_number', selectedInvoice.orderId);
+            await updateOrder(selectedInvoice.orderId, { status: 'Pagado', payment_bank_id: selectedBank.id });
             await updateBankBalance(selectedBank.id, amount, 'income', `Pago Recibido - Factura ${selectedInvoice.id}`, selectedInvoice.orderId);
             setIsPaymentModalOpen(false);
             setSelectedInvoice(null);

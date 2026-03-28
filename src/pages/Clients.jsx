@@ -7,7 +7,6 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useBusiness } from '../context/BusinessContext';
-import { supabase } from '../lib/supabase';
 
 /* ── constants ────────────────────────────────────────────────────────── */
 const EMPTY = {
@@ -32,23 +31,30 @@ const lbl = {
 
 /* ═══════════════════════════════════════════════════════════════════════ */
 const Clients = () => {
-    const { orders, clients, refreshData } = useBusiness();
+    const { orders, clients, refreshData, addClient, updateClient } = useBusiness();
 
     const [searchTerm, setSearchTerm] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [modal, setModal] = useState(null);   // null | { mode:'create'|'edit', data:{} }
-    const [deleteTarget, setDeleteTarget] = useState(null);
     const [duplicatesModal, setDuplicatesModal] = useState({ isOpen: false, newClients: [], duplicatedClients: [] });
+    const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+    const [showArchived, setShowArchived] = useState(false);
 
     /* ── helpers ─────────────────────────────────────────────────────── */
     const q = searchTerm.toLowerCase();
-    const filtered = clients.filter(c =>
-        (c.name || '').toLowerCase().includes(q) ||
-        (c.nit || '').toLowerCase().includes(q) ||
-        (c.city || '').toLowerCase().includes(q) ||
-        (c.email || '').toLowerCase().includes(q) ||
-        (c.contactName || '').toLowerCase().includes(q)
-    );
+    const filtered = clients.filter(c => {
+        const matchesSearch = (
+            (c.name || '').toLowerCase().includes(q) ||
+            (c.nit || '').toLowerCase().includes(q) ||
+            (c.city || '').toLowerCase().includes(q) ||
+            (c.email || '').toLowerCase().includes(q) ||
+            (c.phone || '').toLowerCase().includes(q) ||
+            (c.contactName || '').toLowerCase().includes(q)
+        );
+        const isArchived = c.status === 'Archived';
+        if (showArchived) return matchesSearch && isArchived;
+        return matchesSearch && !isArchived;
+    });
 
     // Count orders per client (linked)
     const orderCountFor = (c) =>
@@ -78,13 +84,12 @@ const Clients = () => {
         };
         try {
             if (modal.mode === 'create') {
-                const { error } = await supabase.from('clients').insert([payload]);
-                if (error) throw error;
+                const res = await addClient(payload);
+                if (!res.success) throw new Error(res.error);
             } else {
-                const { error } = await supabase.from('clients').update(payload).eq('id', d.id);
-                if (error) throw error;
+                const res = await updateClient(d.id, payload);
+                if (!res.success) throw new Error(res.error);
             }
-            await refreshData();
             closeModal();
         } catch (err) {
             alert('Error al guardar: ' + err.message);
@@ -93,24 +98,23 @@ const Clients = () => {
         }
     };
 
-    /* ── delete ──────────────────────────────────────────────────────── */
-    const requestDelete = (c) => setDeleteTarget(c);
-    const cancelDelete = () => setDeleteTarget(null);
-    const confirmDelete = async () => {
-        if (!deleteTarget) return;
-        const hasOrders = orders.some(o => o.client_id === deleteTarget.id || o.client === deleteTarget.name);
-        if (hasOrders) {
-            alert('Este cliente tiene pedidos asociados. Solo puede ser Inactivado.');
-            setDeleteTarget(null);
-            return;
-        }
-        try {
-            await supabase.from('clients').delete().eq('id', deleteTarget.id);
-            await refreshData();
-        } catch (err) {
-            alert('Error al eliminar: ' + err.message);
-        } finally {
-            setDeleteTarget(null);
+    /* ── archive ─────────────────────────────────────────────────────── */
+    const toggleArchive = async (c) => {
+        const isCurrentlyArchived = c.status === 'Archived';
+        const confirmMsg = isCurrentlyArchived 
+            ? `¿Deseas restaurar a ${c.name}?` 
+            : `¿Estás seguro de archivar a ${c.name}? No aparecerá en el directorio activo.`;
+        
+        if (window.confirm(confirmMsg)) {
+            setIsSaving(true);
+            try {
+                const res = await updateClient(c.id, { status: isCurrentlyArchived ? 'Active' : 'Archived' });
+                if (!res.success) throw new Error(res.error);
+            } catch (err) {
+                alert('Error al procesar: ' + err.message);
+            } finally {
+                setIsSaving(false);
+            }
         }
     };
 
@@ -170,10 +174,12 @@ const Clients = () => {
     const persistClients = async (list) => {
         setIsSaving(true);
         try {
-            const { error } = await supabase.from('clients').insert(list);
-            if (error) throw error;
-            await refreshData();
-            alert(`✅ ${list.length} cliente(s) importados correctamente.`);
+            // Bulk insert in Firestore (simple loop or batch, but context has addClient for single)
+            // For bulk, let's keep it simple for now as per "small steps"
+            for (const c of list) {
+                await addClient(c);
+            }
+            alert(`✅ ${list.length} cliente(s) procesados.`);
         } catch (err) {
             alert('Error al guardar: ' + err.message);
         } finally {
@@ -250,16 +256,25 @@ const Clients = () => {
                         <RefreshCw size={17} color="#64748b" />
                     </button>
 
-                    {/* Download template */}
-                    <button onClick={downloadTemplate} style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', padding: '0.6rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer' }}>
-                        <Download size={15} /> Plantilla
+                    {/* Archive toggle */}
+                    <button 
+                        onClick={() => setShowArchived(!showArchived)}
+                        style={{ 
+                            display: 'flex', alignItems: 'center', gap: '0.45rem', padding: '0.6rem 1rem', borderRadius: '12px', 
+                            border: '1px solid #e2e8f0', background: showArchived ? '#64748b' : '#f8fafc', 
+                            color: showArchived ? '#fff' : '#475569', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer' 
+                        }}
+                    >
+                        <ShoppingBag size={15} /> {showArchived ? 'Ver Activos' : 'Ver Archivados'}
                     </button>
 
-                    {/* Import */}
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', padding: '0.6rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', margin: 0 }}>
-                        <Upload size={15} /> Importar Excel
-                        <input type="file" accept=".xlsx,.xls" onChange={handleBulkUpload} style={{ display: 'none' }} />
-                    </label>
+                    {/* Bulk Actions */}
+                    <button 
+                        onClick={() => setIsBulkModalOpen(true)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', padding: '0.6rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer' }}
+                    >
+                        <RefreshCw size={15} /> Carga Masiva
+                    </button>
 
                     {/* New client */}
                     <button onClick={openCreate} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1.25rem', borderRadius: '12px', border: 'none', background: 'var(--color-primary)', color: '#fff', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(26,54,54,0.18)' }}>
@@ -293,10 +308,10 @@ const Clients = () => {
                                 <SubBadge sub={c.subType} />
                                 <span style={{
                                     padding: '3px 10px', borderRadius: '20px', fontSize: '0.65rem', fontWeight: 700,
-                                    background: c.status === 'Active' ? '#dcfce7' : '#f1f5f9',
-                                    color: c.status === 'Active' ? '#166534' : '#64748b'
+                                    background: c.status === 'Archived' ? '#f1f5f9' : (c.status === 'Active' ? '#dcfce7' : '#fef2f2'),
+                                    color: c.status === 'Archived' ? '#64748b' : (c.status === 'Active' ? '#166534' : '#991b1b')
                                 }}>
-                                    {c.status === 'Active' ? 'Activo' : 'Inactivo'}
+                                    {c.status === 'Archived' ? 'Archivado' : (c.status === 'Active' ? 'Activo' : 'Inactivo')}
                                 </span>
                             </div>
 
@@ -358,15 +373,15 @@ const Clients = () => {
                                 >
                                     <Edit2 size={15} />
                                 </button>
-                                {/* Delete */}
+                                {/* Archive Toggle */}
                                 <button
-                                    onClick={() => requestDelete(c)}
-                                    title="Eliminar cliente"
-                                    style={{ padding: '0.55rem', border: '1px solid #fca5a5', borderRadius: '12px', background: '#fff', cursor: 'pointer', color: '#ef4444', display: 'flex', alignItems: 'center', transition: 'all 0.15s' }}
-                                    onMouseEnter={e => { e.currentTarget.style.background = '#fee2e2'; }}
-                                    onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}
+                                    onClick={() => toggleArchive(c)}
+                                    title={c.status === 'Archived' ? 'Restaurar cliente' : 'Archivar cliente'}
+                                    style={{ padding: '0.55rem', border: '1px solid #e2e8f0', borderRadius: '12px', background: '#fff', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', transition: 'all 0.15s' }}
+                                    onMouseEnter={e => { e.currentTarget.style.background = c.status === 'Archived' ? '#dcfce7' : '#fee2e2'; e.currentTarget.style.color = c.status === 'Archived' ? '#166534' : '#ef4444'; }}
+                                    onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.color = '#64748b'; }}
                                 >
-                                    <Trash2 size={15} />
+                                    <Download size={15} style={{ transform: c.status === 'Archived' ? 'rotate(180deg)' : 'none' }} />
                                 </button>
                             </div>
                         </div>
@@ -471,25 +486,50 @@ const Clients = () => {
                 </div>
             )}
 
-            {/* ── DELETE CONFIRM MODAL ────────────────────────────────────── */}
-            {deleteTarget && (
+            {/* ── BATCH LOAD MODAL ────────────────────────────────────────── */}
+            {isBulkModalOpen && (
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4000, padding: '1rem' }}>
-                    <div style={{ background: '#fff', borderRadius: '20px', padding: '2rem', width: '100%', maxWidth: '420px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', textAlign: 'center' }}>
-                        <AlertTriangle size={48} color="#ef4444" style={{ margin: '0 auto 1rem' }} />
-                        <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.2rem', fontWeight: 800, color: '#1e293b' }}>¿Eliminar cliente?</h3>
-                        <p style={{ color: '#64748b', marginBottom: '0.75rem', fontSize: '0.9rem' }}>Esta acción no se puede deshacer.</p>
-                        <div style={{ background: '#fef2f2', borderRadius: '12px', padding: '0.9rem', marginBottom: '1.5rem', border: '1px solid #fecaca' }}>
-                            <p style={{ margin: 0, fontWeight: 800, color: '#991b1b' }}>{deleteTarget.name}</p>
-                            {deleteTarget.nit && <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: '#dc2626' }}>NIT: {deleteTarget.nit}</p>}
+                    <div style={{ background: '#fff', borderRadius: '25px', padding: '2.5rem', width: '100%', maxWidth: '500px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', position: 'relative' }}>
+                        <button onClick={() => setIsBulkModalOpen(false)} style={{ position: 'absolute', top: '20px', right: '20px', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={24} /></button>
+                        
+                        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+                            <div style={{ width: '60px', height: '60px', background: '#f0f9ff', color: '#0369a1', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
+                                <Upload size={30} />
+                            </div>
+                            <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.4rem', fontWeight: 800 }}>Carga Masiva de Clientes</h3>
+                            <p style={{ color: '#64748b', fontSize: '0.9rem', lineHeight: 1.5 }}>
+                                Importa tu base de datos de clientes rápidamente usando una plantilla de Excel.
+                            </p>
                         </div>
-                        <div style={{ display: 'flex', gap: '0.75rem' }}>
-                            <button onClick={cancelDelete} style={{ flex: 1, padding: '0.75rem', borderRadius: '10px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', fontWeight: 600, cursor: 'pointer' }}>
-                                Cancelar
-                            </button>
-                            <button onClick={confirmDelete} style={{ flex: 1, padding: '0.75rem', borderRadius: '10px', border: 'none', background: '#ef4444', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>
-                                Sí, eliminar
-                            </button>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            {/* Step 1: Download */}
+                            <div style={{ padding: '1.25rem', background: '#f8fafc', borderRadius: '18px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <div>
+                                    <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#1e293b' }}>1. Descargar Plantilla</div>
+                                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Obtén el formato correcto</div>
+                                </div>
+                                <button onClick={downloadTemplate} style={{ padding: '0.6rem 1rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <Download size={14} /> Descargar
+                                </button>
+                            </div>
+
+                            {/* Step 2: Upload */}
+                            <div style={{ padding: '1.25rem', background: '#f0f9ff', borderRadius: '18px', border: '1px solid #bae6fd' }}>
+                                <div style={{ marginBottom: '1rem' }}>
+                                    <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0369a1' }}>2. Subir Excel Diligenciado</div>
+                                    <div style={{ fontSize: '0.75rem', color: '#0369a1', opacity: 0.8 }}>Selecciona tu archivo .xlsx</div>
+                                </div>
+                                <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.8rem', padding: '1rem', background: '#0369a1', color: '#fff', borderRadius: '12px', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem', transition: 'all 0.2s' }}>
+                                    <Upload size={18} /> SELECCIONAR ARCHIVO
+                                    <input type="file" accept=".xlsx,.xls" onChange={(e) => { handleBulkUpload(e); setIsBulkModalOpen(false); }} style={{ display: 'none' }} />
+                                </label>
+                            </div>
                         </div>
+
+                        <button onClick={() => setIsBulkModalOpen(false)} style={{ width: '100%', padding: '1rem', marginTop: '1.5rem', border: 'none', background: 'transparent', color: '#94a3b8', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}>
+                            Cerrar
+                        </button>
                     </div>
                 </div>
             )}

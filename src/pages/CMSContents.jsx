@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Layout, Type, MessageSquare, CheckCircle, Globe, Truck, Users, Briefcase, Bookmark } from 'lucide-react';
-import { useBusiness } from '../context/BusinessContext';
+import { Save, Layout, Type, MessageSquare, CheckCircle, Globe, Truck, Users, Briefcase, Bookmark, Megaphone, Image as ImageIcon, Camera, UploadCloud } from 'lucide-react';
+import { useBusiness, CAMPAIGN_PRESETS } from '../context/BusinessContext';
+import { storage } from '../lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
-const CMSField = ({ label, type, section, fieldKey, initialValue, onSave }) => {
+const CMSField = ({ label, type, section, fieldKey, initialValue, onSave, options = [] }) => {
     const [localValue, setLocalValue] = useState(initialValue || '');
     const [hasChanged, setHasChanged] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
 
     useEffect(() => {
         setLocalValue(initialValue || '');
@@ -22,43 +25,125 @@ const CMSField = ({ label, type, section, fieldKey, initialValue, onSave }) => {
         }
     };
 
+    const handleToggle = () => {
+        const newValue = !localValue;
+        setLocalValue(newValue);
+        onSave(fieldKey, newValue);
+    };
+
+    const handleSelect = (val) => {
+        setLocalValue(val);
+        onSave(fieldKey, val);
+    };
+
+    const handleImageUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        setIsUploading(true);
+        try {
+            const storageRef = ref(storage, `site_assets/${section}/${fieldKey}_${Date.now()}`);
+            await uploadBytes(storageRef, file);
+            const downloadURL = await getDownloadURL(storageRef);
+            setLocalValue(downloadURL);
+            onSave(fieldKey, downloadURL);
+        } catch (error) {
+            console.error("Error uploading image:", error);
+            alert("No se pudo subir la imagen. Verifica tu conexión.");
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
     return (
-        <div style={{ marginBottom: '2rem' }}>
-            <label style={{ display: 'block', fontWeight: '800', color: '#1e293b', marginBottom: '0.8rem', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                {label}
-            </label>
-            <div style={{ display: 'flex', gap: '1rem' }}>
-                {type === 'textarea' ? (
-                    <textarea
-                        value={localValue}
-                        onChange={(e) => handleChange(e.target.value)}
-                        onBlur={handleBlur}
-                        style={{
-                            flex: 1, padding: '1.2rem', borderRadius: '16px', border: '1px solid #e2e8f0',
-                            background: '#f8fafc', fontSize: '1rem', color: '#334155', fontWeight: '600',
-                            fontFamily: 'inherit', minHeight: '120px', resize: 'vertical', outline: 'none', transition: 'all 0.3s'
-                        }}
-                    />
-                ) : (
-                    <input
-                        type="text"
-                        value={localValue}
-                        onChange={(e) => handleChange(e.target.value)}
-                        onBlur={handleBlur}
-                        style={{
-                            flex: 1, padding: '1.2rem', borderRadius: '16px', border: '1px solid #e2e8f0',
-                            background: '#f8fafc', fontSize: '1rem', color: '#334155', fontWeight: '600',
-                            outline: 'none', transition: 'all 0.3s'
-                        }}
-                    />
+        <div style={{ marginBottom: '2.5rem', background: '#fff', padding: '1.5rem', borderRadius: '24px', border: '1px solid #f1f5f9' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <label style={{ fontWeight: '900', color: '#004B50', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                    {label}
+                </label>
+                {type === 'toggle' && (
+                    <div 
+                        onClick={handleToggle}
+                        style={{ width: '44px', height: '24px', borderRadius: '12px', background: localValue ? '#004B50' : '#e2e8f0', cursor: 'pointer', position: 'relative', transition: 'all 0.3s' }}
+                    >
+                        <div style={{ width: '18px', height: '18px', borderRadius: '50%', background: '#fff', position: 'absolute', top: '3px', left: localValue ? '23px' : '3px', transition: 'all 0.3s' }} />
+                    </div>
                 )}
             </div>
+            
+            {type === 'textarea' && (
+                <textarea
+                    value={localValue}
+                    onChange={(e) => handleChange(e.target.value)}
+                    onBlur={handleBlur}
+                    style={{
+                        width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0',
+                        background: '#f8fafc', fontSize: '0.95rem', color: '#1e293b', fontWeight: '500',
+                        minHeight: '100px', resize: 'vertical', outline: 'none'
+                    }}
+                />
+            )}
+            
+            {type === 'text' && (
+                <input
+                    type="text"
+                    value={localValue}
+                    onChange={(e) => handleChange(e.target.value)}
+                    onBlur={handleBlur}
+                    style={{
+                        width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0',
+                        background: '#f8fafc', fontSize: '0.95rem', color: '#1e293b', fontWeight: '500', outline: 'none'
+                    }}
+                />
+            )}
+
+            {type === 'select' && (
+                <select
+                    value={localValue}
+                    onChange={(e) => handleSelect(e.target.value)}
+                    style={{
+                        width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0',
+                        background: '#f8fafc', fontSize: '0.95rem', color: '#1e293b', fontWeight: '500', outline: 'none'
+                    }}
+                >
+                    <option value="">Seleccionar...</option>
+                    {options.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                </select>
+            )}
+
+            {type === 'image' && (
+                <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
+                    <div style={{ width: '100px', height: '100px', borderRadius: '20px', background: '#f1f5f9', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px dashed #cbd5e1' }}>
+                        {localValue ? (
+                            <img src={localValue} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                            <ImageIcon size={30} color="#94a3b8" />
+                        )}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                        <label style={{ 
+                            display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '0.8rem 1.5rem', 
+                            background: '#004B50', color: '#fff', borderRadius: '14px', fontSize: '0.85rem', 
+                            fontWeight: '700', cursor: isUploading ? 'not-allowed' : 'pointer', transition: 'all 0.3s'
+                        }}>
+                             {isUploading ? <div className="spinner-small" /> : <UploadCloud size={18} />}
+                             {isUploading ? 'Subiendo...' : 'Subir Imagen'}
+                             <input type="file" onChange={handleImageUpload} style={{ display: 'none' }} disabled={isUploading} accept="image/*" />
+                        </label>
+                        <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '10px' }}>
+                            Sube una fotografía de alta calidad (JPG, PNG). El sistema generará una URL segura automáticamente.
+                        </p>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
 
 const CMSContents = () => {
-    const { siteContent, updateSiteContent } = useBusiness();
+    const { siteContent, updateSiteContent, items } = useBusiness();
     const [activeTab, setActiveTab] = useState('hero');
     const [isSaving, setIsSaving] = useState(false);
     const [lastStatus, setLastStatus] = useState('saved'); // 'saved', 'saving', 'error'
@@ -67,12 +152,7 @@ const CMSContents = () => {
         { id: 'hero', label: 'Hero / Inicio', icon: <Layout size={18} /> },
         { id: 'philosophy', label: 'Filosofía', icon: <Type size={18} /> },
         { id: 'support', label: 'Apoyo & Soporte', icon: <MessageSquare size={18} /> },
-        { id: 'catering', label: 'Catering ZETAmóvil', icon: <Truck size={18} /> },
-        { id: 'consulting', label: 'Consultoría CZ', icon: <Briefcase size={18} /> },
-        { id: 'knowledge', label: 'Conocimiento', icon: <CheckCircle size={18} /> },
-        { id: 'impact', label: 'Impacto Comunitario', icon: <Globe size={18} /> },
-        { id: 'allies', label: 'Aliados / Ubicaciones', icon: <Users size={18} /> },
-        { id: 'extra', label: 'Citas y Frases', icon: <Bookmark size={18} /> },
+        { id: 'campaign', label: 'Campaña de Temporada', icon: <Megaphone size={18} /> },
     ];
 
     const handleSave = async (key, value) => {
@@ -105,33 +185,26 @@ const CMSContents = () => {
             { key: 'subtitle', label: 'Sinergias de Vida', type: 'text' },
             { key: 'description', label: 'Descripción Ecosistema', type: 'textarea' },
         ],
-        catering: [
-            { key: 'top_text', label: 'Cintillo Superior', type: 'text' },
-            { key: 'title', label: 'Título del Banner', type: 'text' },
-            { key: 'description', label: 'Cuerpo del Mensaje (Párrafo)', type: 'textarea' },
-            { key: 'cta_text', label: 'Texto Botón Catering', type: 'text' },
-        ],
-        consulting: [
-            { key: 'title', label: 'Título Consultoría', type: 'text' },
-            { key: 'description', label: 'Descripción General', type: 'textarea' },
-        ],
-        knowledge: [
-            { key: 'title', label: 'Título Sección', type: 'text' },
-        ],
-        impact: [
-            { key: 'title', label: 'Título Sección', type: 'text' },
-            { key: 'subtitle', label: 'Alcance / Subtítulo', type: 'text' },
-        ],
-        allies: [
-            { key: 'title', label: 'Título Sección', type: 'text' },
-            { key: 'description', label: 'Subtítulo / Intro Aliados', type: 'textarea' },
-        ],
-        extra: [
-            { key: 'hero_quote', label: 'Cita Inicial (Hero)', type: 'textarea' },
-            { key: 'hero_desc', label: 'Intro Zeticas (Hero)', type: 'textarea' },
-            { key: 'quote_yarumo', label: 'Cita Yarumo (Pensamiento)', type: 'textarea' },
-            { key: 'quote_tronco', label: 'Cita Tronco (Nutrición)', type: 'textarea' },
-            { key: 'quote_colab', label: 'Cita Colaboración (Gris)', type: 'textarea' },
+        campaign: [
+            { key: 'active', label: 'Campaña Activa (Switch)', type: 'toggle' },
+            { 
+                key: 'preset', 
+                label: 'Elegir Plantilla de Temporada', 
+                type: 'select', 
+                options: Object.values(CAMPAIGN_PRESETS).map(p => ({ value: p.id, label: p.name })).concat([{ value: 'custom', label: 'Personalizado' }])
+            },
+            { 
+                key: 'promo_sku_id', 
+                label: 'Producto Estrella (Ancheta/Kit)', 
+                type: 'select',
+                options: items.filter(i => i.category === 'Producto Terminado').map(i => ({ value: i.id, label: i.name }))
+            },
+            { key: 'modal_title', label: 'Título del Modal de Bienvenida', type: 'text' },
+            { key: 'modal_subtitle', label: 'Subtítulo del Modal', type: 'textarea' },
+            { key: 'modal_cta', label: 'Texto Botón (CTA)', type: 'text' },
+            { key: 'hero_image_override', label: 'Foto del Hero (Subida)', type: 'image' },
+            { key: 'hero_title', label: 'Título Hero (Campaña)', type: 'text' },
+            { key: 'hero_subtitle', label: 'Subtítulo Hero (Campaña)', type: 'textarea' },
         ]
     };
 
