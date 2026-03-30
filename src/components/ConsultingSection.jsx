@@ -12,7 +12,7 @@ const ConsultingSection = () => {
     return (
         <section className="consulting whitespace-xl" style={{ 
             backgroundColor: '#ffffff',
-            padding: isMobile ? '6rem 0' : '10.8rem 0 8rem'
+            padding: isMobile ? '6rem 0' : '8rem 0'
         }}>
             <div className="container" style={{
                 display: 'flex',

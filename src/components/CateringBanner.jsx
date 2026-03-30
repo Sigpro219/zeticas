@@ -13,7 +13,7 @@ const CateringBanner = () => {
         <section className="catering-banner relative overflow-hidden botanical-bg" style={{
             '--bg-filter': 'rgba(0, 77, 77, 0.5)', // Petroleum Blue institutional
             '--bg-pattern-filter': 'grayscale(1) opacity(0.2)',
-            padding: isMobile ? '8rem 0 6rem' : '12rem 0 8rem',
+            padding: isMobile ? '6rem 0' : '8rem 0',
             position: 'relative'
         }}>
             {/* Top White Invasion Waves (From Section 2: White) */}
