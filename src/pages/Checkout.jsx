@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useBusiness } from '../context/BusinessContext';
@@ -121,7 +121,6 @@ const Checkout = () => {
                 const checkoutId = resDraft.success ? resDraft.id : null;
 
                 const finalRedirectionUrl = window.location.origin;
-                const signaturePayload = `${orderId}${amountStr}${currency}${secretKey}`;
                 console.log("Bold Integrity Debug (v5 - Origin Only):", {
                     payload: `${orderId}${amountStr}${currency}${secretKey ? "PRESENT" : "MISSING"}`,
                     redirectionUrl: finalRedirectionUrl
@@ -149,7 +148,7 @@ const Checkout = () => {
         }
     };
 
-    const handleSuccess = async (chkID = null) => {
+    const handleSuccess = useCallback(async (chkID = null) => {
         let draft = null;
 
         // 1. Try to get from Firestore Draft (Most reliable)
@@ -249,11 +248,27 @@ const Checkout = () => {
         await addOrder(newOrder);
         localStorage.removeItem('zeticas_pending_checkout');
 
+        // WhatsApp Notification (Production vs Sandbox)
+        const isSandbox = shipSettings.bold_mode === 'sandbox';
+        const camilaPhone = siteContent?.web_shipping?.contact_phone || "3144336525";
+        const testPhone = "3507744178";
+        
+        const targetPhone = isSandbox ? testPhone : camilaPhone;
+        const cleanPhone = targetPhone.replace(/\D/g, '');
+        const finalPhone = cleanPhone.startsWith('57') ? cleanPhone : `57${cleanPhone}`;
+        
+        const itemsText = cartToUse.map(p => `• ${p.nombre || p.name} x${p.quantity}`).join('%0A');
+        const modeTitle = isSandbox ? "*PRUEBA SANDBOX ZETICAS*" : "*NUEVA COMPRA ZETICAS (PRODUCCIÓN)*";
+        const message = `${modeTitle}%0A%0A*Cliente:* ${dataToUse.nombreCompleto}%0A*Teléfono:* ${dataToUse.telefono}%0A*Ubicación:* ${dataToUse.ciudad}, ${dataToUse.direccion}%0A*Total:* $${finalTotalToUse.toLocaleString('es-CO')}%0A%0A*Detalle del Pedido:*%0A${itemsText}`;
+        
+        const whatsappUrl = `https://api.whatsapp.com/send?phone=${finalPhone}&text=${message}`;
+        window.open(whatsappUrl, '_blank');
+
         setStep(3);
         setTimeout(() => {
             clearCart();
         }, 500);
-    };
+    }, [formData, cart, finalTotal, addOrder, addClient, clients, siteContent, getWebCheckout, updateWebCheckoutStatus, clearCart, shipSettings.bold_mode]);
 
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
@@ -270,7 +285,7 @@ const Checkout = () => {
                 window.history.replaceState({}, document.title, window.location.pathname);
             }
         }
-    }, []);
+    }, [handleSuccess]);
 
     const handlePaymentSubmit = (e) => {
         e.preventDefault();

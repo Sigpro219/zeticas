@@ -103,7 +103,7 @@ const Hero = () => {
                     textAlign: isMobile ? 'center' : 'left'
                 }}>
                     <div style={{
-                        padding: isMobile ? '2rem 1.25rem' : '4rem',
+                        padding: isMobile ? '2rem 1.25rem' : '2.5rem 3rem',
                         background: 'rgba(243, 124, 121, 0.88)',
                         backdropFilter: 'blur(20px)',
                         WebkitBackdropFilter: 'blur(20px)',
@@ -113,13 +113,13 @@ const Hero = () => {
                         <span className="font-serif" style={{ textTransform: 'uppercase', letterSpacing: '0.2em', fontSize: '0.75rem', fontWeight: 'bold', color: 'rgba(255,255,255,0.95)', display: 'block' }}>
                             {content.top_text || 'Sabana de Bogotá • Colombia'}
                         </span>
-                        <h1 className="hero-text" style={{ margin: '1rem 0', fontSize: isMobile ? '2.5rem' : '5rem', color: '#fff', lineHeight: '1', fontWeight: '800' }}>
+                        <h1 className="hero-text" style={{ margin: '0.5rem 0', fontSize: isMobile ? '2.5rem' : '4rem', color: '#fff', lineHeight: '1', fontWeight: '800' }}>
                             {content.title || 'Zeticas'}
                         </h1>
-                        <p style={{ maxWidth: '430px', margin: isMobile ? '0 auto 2rem' : '0 0 3rem', color: '#fff', fontSize: '1.2rem', lineHeight: '1.6' }}>
+                        <p style={{ maxWidth: '430px', margin: isMobile ? '0 auto 1.5rem' : '0 0 2rem', color: '#fff', fontSize: '1.1rem', lineHeight: '1.5' }}>
                             {content.description || 'Conservas premium y consultoría con propósito.'}
                         </p>
-                        <Link to="/tienda" className="btn" style={{ background: '#025357', color: '#fff', padding: isMobile ? '0.8rem 1.8rem' : '1.2rem 2.8rem', fontWeight: '800', textDecoration: 'none', borderRadius: '50px' }}>
+                        <Link to="/tienda" className="btn" style={{ background: '#025357', color: '#fff', padding: isMobile ? '0.8rem 1.8rem' : '1rem 2.2rem', fontWeight: '800', textDecoration: 'none', borderRadius: '50px' }}>
                             {content.cta_text || 'Explorar Colección'}
                         </Link>
                     </div>
