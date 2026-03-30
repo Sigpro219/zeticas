@@ -20,7 +20,8 @@ const Orders = ({ orders }) => {
         updateOrder,
         addPurchase,
         refreshData,
-        clients
+        clients,
+        ownCompany
     } = useBusiness();
 
     // Selection state
@@ -222,34 +223,69 @@ const Orders = ({ orders }) => {
             const requiredRawMaterials = {}; // { materialId: { id, name, requiredQty, ... } }
             const missingRecipes = [];
 
+            // ── Paso 1: Agrupar demanda total por PT en todos los pedidos ──────────────
+            const demandByProduct = {};
             selectedOrderObjects.forEach(order => {
                 order.items.forEach(item => {
-                    const recipe = recipes[item.name];
-                    if (!recipe) {
+                    const pt = items.find(i =>
+                        i.name === item.name ||
+                        i.name?.toLowerCase() === item.name?.toLowerCase()
+                    );
+                    if (!pt) {
                         if (!missingRecipes.includes(item.name)) missingRecipes.push(item.name);
                         return;
                     }
+                    const recipe = recipes[pt.id];
+                    if (!recipe || recipe.length === 0) {
+                        if (!missingRecipes.includes(item.name)) missingRecipes.push(item.name);
+                        return;
+                    }
+                    if (!demandByProduct[pt.id]) {
+                        demandByProduct[pt.id] = { pt, recipe, totalDemand: 0, label: item.name };
+                    }
+                    demandByProduct[pt.id].totalDemand += Number(item.quantity) || 0;
+                });
+            });
 
-                    recipe.forEach(ing => {
-                        // Use ing.id if available, or find it in items by name
-                        const matInfo = items.find(i => i.id === ing.id || i.name === ing.name);
-                        const matId = matInfo?.id || ing.id || `temp-${ing.name}`;
+            // ── Paso 2: Por cada PT, aplicar MRP por lotes y explosionar ingredientes ──
+            Object.values(demandByProduct).forEach(({ pt, recipe, totalDemand, label }) => {
+                // Inventario actual del PT
+                const inventoryPT = Math.max(0, (pt.initial || 0) + (pt.purchases || 0) - (pt.sales || 0));
+                const batchSize = pt.batch_size || 1;
 
-                        if (!requiredRawMaterials[matId]) {
-                            requiredRawMaterials[matId] = {
-                                id: matId,
-                                name: matInfo?.name || ing.name,
-                                requiredQty: 0,
-                                bomBreakdown: [],
-                                currentInv: matInfo ? (matInfo.initial + (matInfo.purchases || 0) - (matInfo.sales || 0)) : 0,
-                                safety: matInfo?.safety || 0,
-                                unit: matInfo?.unit || 'und'
-                            };
-                        }
-                        const qtyEffect = (Number(ing.qty) || 0) * (Number(item.quantity) || 0);
-                        requiredRawMaterials[matId].requiredQty += qtyEffect;
-                        requiredRawMaterials[matId].bomBreakdown.push(`${item.name} (${item.quantity} und) -> ${qtyEffect.toFixed(2)} ${ing.name}`);
-                    });
+                // Demanda neta después de descontar inventario
+                const netDemand = Math.max(0, totalDemand - inventoryPT);
+                const batchesNeeded = netDemand > 0 ? Math.ceil(netDemand / batchSize) : 0;
+                const toProduce = batchesNeeded * batchSize;                    // múltiplo exacto del lote
+                const leftover = toProduce > 0 ? (inventoryPT + toProduce - totalDemand) : inventoryPT;
+
+                // Si el inventario cubre la demanda completa → no producir ni comprar
+                if (batchesNeeded === 0) return;
+
+                recipe.forEach(ing => {
+                    const matInfo = items.find(i => i.id === ing.rm_id || i.id === ing.id || i.name === ing.name);
+                    const matId = matInfo?.id || ing.rm_id || ing.id || `temp-${ing.name}`;
+
+                    if (!requiredRawMaterials[matId]) {
+                        requiredRawMaterials[matId] = {
+                            id: matId,
+                            name: matInfo?.name || ing.name,
+                            requiredQty: 0,
+                            bomBreakdown: [],
+                            currentInv: matInfo ? (matInfo.initial + (matInfo.purchases || 0) - (matInfo.sales || 0)) : 0,
+                            safety: matInfo?.safety || 0,
+                            unit: matInfo?.purchase_unit || matInfo?.unit_measure || matInfo?.unit || ing.unit || 'und'
+                        };
+                    }
+
+                    // La receta define la cantidad POR LOTE → multiplicar por lotes necesarios
+                    const qtyForBatches = Math.round((Number(ing.qty) || 0) * batchesNeeded * 1e6) / 1e6;
+                    requiredRawMaterials[matId].requiredQty = Math.round(
+                        (requiredRawMaterials[matId].requiredQty + qtyForBatches) * 1e6
+                    ) / 1e6;
+                    requiredRawMaterials[matId].bomBreakdown.push(
+                        `${label}: pedido ${totalDemand}, inv PT ${inventoryPT} → ${batchesNeeded} lote(s)×${batchSize} = ${toProduce} (sobrante ${leftover}) → ${qtyForBatches.toFixed(4).replace(/\.?0+$/, '')} ${ing.unit || ''}`
+                    );
                 });
             });
 
@@ -410,13 +446,13 @@ const Orders = ({ orders }) => {
     };
 
     const handleSendWhatsApp = (po) => {
-        const text = `Hola ${po.providerName}, somos ZETICAS SAS. Adjuntamos nuestra orden de compra ${po.id} por un total de $${(po.total || 0).toLocaleString('es-CO')}. Quedamos atentos a confirmación.`;
+        const text = `Hola ${po.providerName}, somos ${ownCompany.name}. Adjuntamos nuestra orden de compra ${po.id} por un total de $${(po.total || 0).toLocaleString('es-CO')}. Quedamos atentos a confirmación.`;
         window.open(`https://wa.me/57${po.providerPhone}?text=${encodeURIComponent(text)}`, '_blank');
     };
 
     const handleSendEmail = (po) => {
-        const subject = `Orden de Compra ZETICAS SAS - ${po.id}`;
-        const body = `Señores ${po.providerName},\n\nAdjuntamos orden de compra ${po.id}.\nTotal a pagar: $${(po.total || 0).toLocaleString('es-CO')}.\n\nPara ver los detalles por favor revisar el sistema o contactarnos.\n\nAtentamente,\nZETICAS SAS`;
+        const subject = `Orden de Compra ${ownCompany.name} - ${po.id}`;
+        const body = `Señores ${po.providerName},\n\nAdjuntamos orden de compra ${po.id}.\nTotal a pagar: $${(po.total || 0).toLocaleString('es-CO')}.\n\nPara ver los detalles por favor revisar el sistema o contactarnos.\n\nAtentamente,\n${ownCompany.name}`;
         window.open(`mailto:${po.providerEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
     };
 
@@ -533,9 +569,9 @@ const Orders = ({ orders }) => {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(10);
         doc.setTextColor(100, 116, 139);
-        doc.text('ZETICAS SAS', 14, 32);
-        doc.text('NIT: 901.321.456-7', 14, 36);
-        doc.text('Bogotá D.C., Colombia', 14, 40);
+        doc.text(ownCompany.name, 14, 32);
+        doc.text(`NIT: ${ownCompany.nit}`, 14, 36);
+        doc.text(`${ownCompany.city || 'Bogotá D.C.'}, Colombia`, 14, 40);
 
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(18);
@@ -1471,7 +1507,7 @@ const Orders = ({ orders }) => {
                                                             No existe en Módulo de Datos Maestros de Productos, Crealo primero
                                                         </div>
                                                     ) : (
-                                                        <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Requerido: <span style={{ fontWeight: 'bold' }}>{item.requiredQty} {item.unit}</span> | Stock: <span style={{ fontWeight: 'bold' }}>{item.currentInv} {item.unit}</span> | Safety: <span style={{ fontWeight: 'bold' }}>{item.safety} {item.unit}</span></div>
+                                                        <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Requerido: <span style={{ fontWeight: 'bold' }}>{parseFloat(item.requiredQty.toFixed(4))} {item.unit}</span> | Stock: <span style={{ fontWeight: 'bold' }}>{parseFloat((item.currentInv || 0).toFixed(4))} {item.unit}</span> | Safety: <span style={{ fontWeight: 'bold' }}>{item.safety} {item.unit}</span></div>
                                                     )}
                                                 </div>
                                             </div>
@@ -1627,6 +1663,18 @@ const Orders = ({ orders }) => {
                                     type="ORDEN DE COMPRA"
                                     docId={po.id}
                                     date={po.date}
+                                    client={{
+                                        name: ownCompany.name,
+                                        detail1: ownCompany.name,
+                                        detail2: `NIT: ${ownCompany.nit}`,
+                                        address: ownCompany.address,
+                                        phone: ownCompany.phone
+                                    }}
+                                    shippingInfo={{
+                                        title: 'Enviar a',
+                                        location: ownCompany.name,
+                                        address: ownCompany.delivery_address || ownCompany.address
+                                    }}
                                     provider={{
                                         name: po.providerName,
                                         nit: providers.find(p => p.id === po.providerId)?.nit,
@@ -1745,9 +1793,9 @@ const Orders = ({ orders }) => {
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem', paddingBottom: '2rem', borderBottom: '2px dashed #e2e8f0' }}>
                                 <div>
                                     <h4 style={{ margin: '0 0 1rem 0', color: '#334155', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Datos Vendedor</h4>
-                                    <div style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '0.2rem' }}>Zeticas S.A.S.</div>
-                                    <div style={{ color: '#64748b', fontSize: '0.9rem' }}>NIT: 901.234.567-8</div>
-                                    <div style={{ color: '#64748b', fontSize: '0.9rem' }}>Bogotá, Colombia</div>
+                                    <div style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '0.2rem' }}>{ownCompany.name}</div>
+                                    <div style={{ color: '#64748b', fontSize: '0.9rem' }}>NIT: {ownCompany.nit}</div>
+                                    <div style={{ color: '#64748b', fontSize: '0.9rem' }}>{ownCompany.city || 'Bogotá'}, Colombia</div>
                                 </div>
                                 <div>
                                     <h4 style={{ margin: '0 0 1rem 0', color: '#334155', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Datos Cliente</h4>

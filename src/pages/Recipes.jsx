@@ -2,6 +2,37 @@ import React, { useState, useMemo } from 'react';
 import { ChefHat, RefreshCw, Plus, Edit3, Trash2, X, PlusCircle, MinusCircle, Save, AlertTriangle, Search } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
 
+// ── Conversión de unidades ──────────────────────────────────────────────
+const WEIGHT_UNITS = ['kg', 'gr', 'g', 'lb'];
+const VOLUME_UNITS = ['lt', 'ml', 'l'];
+
+// Factores a la unidad mínima: peso → gr, volumen → ml
+const TO_BASE = { kg: 1000, gr: 1, g: 1, lb: 453.592, lt: 1000, l: 1000, ml: 1 };
+const FROM_BASE = { kg: 1/1000, gr: 1, g: 1, lb: 1/453.592, lt: 1/1000, l: 1/1000, ml: 1 };
+
+/**
+ * Convierte `qty` desde `inputUnit` a `targetUnit`.
+ * Si las unidades son incompatibles (ej peso vs volumen) devuelve la cantidad sin cambios.
+ */
+const convertQty = (qty, inputUnit, targetUnit) => {
+    const n = Number(qty) || 0;
+    const src = (inputUnit || '').toLowerCase();
+    const tgt = (targetUnit || '').toLowerCase();
+    if (!src || !tgt || src === tgt) return n;
+
+    const srcIsWeight = WEIGHT_UNITS.includes(src);
+    const tgtIsWeight = WEIGHT_UNITS.includes(tgt);
+    const srcIsVol = VOLUME_UNITS.includes(src);
+    const tgtIsVol = VOLUME_UNITS.includes(tgt);
+
+    if ((srcIsWeight && tgtIsWeight) || (srcIsVol && tgtIsVol)) {
+        const base = n * (TO_BASE[src] || 1);
+        return Math.round(base * (FROM_BASE[tgt] || 1) * 1e6) / 1e6;
+    }
+    return n; // familias distintas → sin conversión
+};
+// ──────────────────────────────────────────────────────────────
+
 const Recipes = () => {
     const { items, recipes, recalculatePTCosts, addRecipe, deleteRecipeByProduct, units } = useBusiness();
     
@@ -123,11 +154,14 @@ const Recipes = () => {
         const newIngs = [...formData.ingredients];
         if (field === 'rm_id') {
             const mat = materials.find(m => m.id === value);
+            // Usar la unidad de compra del insumo como unidad por defecto
+            const defaultUnit = mat?.purchase_unit || mat?.unit_measure || mat?.unit || 'und';
             newIngs[index] = {
                 ...newIngs[index],
                 rm_id: value,
                 name: mat?.name || '',
-                unit: mat?.unit || 'und'
+                unit: defaultUnit,
+                _purchaseUnit: defaultUnit // guardar para referencia en el save
             };
         } else {
             newIngs[index][field] = value;
@@ -146,17 +180,26 @@ const Recipes = () => {
             // Delete existing rows for this finished_good_id in Firestore
             await deleteRecipeByProduct(formData.id);
 
-            // Insert new rows
+            // Insert new rows — normalizando a la unidad de compra del insumo
             for (const i of formData.ingredients) {
                 if (i.rm_id && i.qty) {
+                    // Unidad de compra del insumo (fuente de verdad para almacenar)
+                    const mat = materials.find(m => m.id === i.rm_id);
+                    const purchaseUnit = mat?.purchase_unit || mat?.unit_measure || mat?.unit || i.unit;
+
+                    // Convertir la cantidad ingresada a la unidad de compra
+                    const normalizedQty = convertQty(parseFloat(i.qty), i.unit, purchaseUnit);
+
                     await addRecipe({
                         finished_good_id: formData.id,
                         finished_good_name: formData.name,
                         raw_material_id: i.rm_id,
                         raw_material_name: i.name,
                         raw_material_sku: i.sku || i.name,
-                        quantity_required: parseFloat(i.qty),
-                        unit: i.unit,
+                        quantity_required: normalizedQty,      // en purchase_unit
+                        unit: purchaseUnit,                    // unidad de compra del insumo
+                        input_qty: parseFloat(i.qty),          // valor original del usuario
+                        input_unit: i.unit,                    // unidad original del usuario
                         yield_quantity: Number(formData.yield_qty) || 1
                     });
                 }
@@ -432,6 +475,18 @@ const Recipes = () => {
                                                         placeholder="0.00"
                                                         style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem' }}
                                                     />
+                                                    {/* Hint de conversión en tiempo real */}
+                                                    {(() => {
+                                                        const mat = materials.find(m => m.id === ing.rm_id);
+                                                        const pu = mat?.purchase_unit || mat?.unit_measure || mat?.unit;
+                                                        if (!pu || !ing.qty || pu === ing.unit) return null;
+                                                        const conv = convertQty(parseFloat(ing.qty), ing.unit, pu);
+                                                        return (
+                                                            <div style={{ fontSize: '0.65rem', color: '#10b981', fontWeight: '700', marginTop: '2px', paddingLeft: '2px' }}>
+                                                                → se guardará como {conv} {pu}
+                                                            </div>
+                                                        );
+                                                    })()}
                                                 </td>
                                                 <td style={{ padding: '0.5rem' }}>
                                                     <select

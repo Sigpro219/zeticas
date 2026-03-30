@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 
 const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, providers }) => {
-    const { setOrders, banks, updateBankBalance, recalculatePTCosts, receivePurchase, payPurchase } = useBusiness();
+    const { setOrders, banks, updateBankBalance, recalculatePTCosts, receivePurchase, payPurchase, ownCompany } = useBusiness();
     // Local State for BOM Explosion & OC Generation
     const [viewingOC, setViewingOC] = useState(null); // Modal state for OC
     const [invEntryOC, setInvEntryOC] = useState(null);
@@ -117,9 +117,9 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(10);
         doc.setTextColor(100, 116, 139);
-        doc.text('ZETICAS SAS', 14, 32);
-        doc.text('NIT: 901.321.456-7', 14, 36);
-        doc.text('Bogotá D.C., Colombia', 14, 40);
+        doc.text(ownCompany.name, 14, 32);
+        doc.text(`NIT: ${ownCompany.nit}`, 14, 36);
+        doc.text(`${ownCompany.city || 'Bogotá D.C.'}, Colombia`, 14, 40);
 
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(18);
@@ -176,12 +176,11 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
 
         doc.setFontSize(10);
         doc.setTextColor(30, 41, 59);
-        doc.text('Bodega Zeticas', 112, 66);
+        doc.text(ownCompany.delivery_address || ownCompany.address, 112, 66);
         doc.setFontSize(8);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(100, 116, 139);
-        doc.text('Calle 123 #45-67, Zona Industrial', 112, 71);
-        doc.text('Bogotá D.C., Colombia', 112, 76);
+        doc.text(`${ownCompany.city || 'Bogotá D.C.'}, Colombia`, 112, 71);
 
         // 4. Items Table
         const tableColumn = ["DESCRIPCIÓN", "CANTIDAD", "V. UNITARIO", "V. TOTAL"];
@@ -764,10 +763,10 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2.5rem' }}>
                                 <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
                                     <h4 style={{ margin: '0 0 1rem', color: '#94a3b8', fontSize: '0.7rem', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Comprador / Facturar a:</h4>
-                                    <div style={{ fontWeight: '900', fontSize: '1.1rem', color: '#1e293b', marginBottom: '0.4rem' }}>Zeticas S.A.S.</div>
+                                    <div style={{ fontWeight: '900', fontSize: '1.1rem', color: '#1e293b', marginBottom: '0.4rem' }}>{ownCompany.name}</div>
                                     <div style={{ color: '#64748b', fontSize: '0.85rem', lineHeight: '1.6', fontWeight: '600' }}>
-                                        NIT: 901.234.567-8<br />
-                                        Sede Principal: Bogotá, Colombia<br />
+                                        NIT: {ownCompany.nit}<br />
+                                        {ownCompany.address || ''}<br />
                                         Ref. Ventas Relacionadas: <span style={{ color: '#025357' }}>{Array.isArray(viewingOC.relatedOrders) ? viewingOC.relatedOrders.join(', ') : (viewingOC.orderRef || 'N/A')}</span>
                                     </div>
                                 </div>

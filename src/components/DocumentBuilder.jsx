@@ -51,6 +51,7 @@ const DocumentBuilder = ({
                         <strong>{client.detail1}</strong><br />
                         {client.detail2}<br />
                         {client.address}
+                        {client.phone && <><br /><span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Phone size={11} /> {client.phone}</span></>}
                     </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>

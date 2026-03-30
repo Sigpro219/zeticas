@@ -748,14 +748,49 @@ export const BusinessProvider = ({ children }) => {
 
         return Number(value); // Fallback
     }, [unitConversions]);
+    // ── Perfil de la empresa propia (Zeticas) ──────────────────────────────
+    // Busca en providers primero (donde fue creado), luego en clients.
+    // Criterio 1: is_own_company === true (flag explícito)
+    // Criterio 2: nombre contiene 'zeticas' (fallback mientras no se agrega el flag)
+    const ownCompany = useMemo(() => {
+        const fromProviders = providers.find(p =>
+            p.is_own_company === true ||
+            (p.name || '').toLowerCase().includes('zeticas')
+        );
+        if (fromProviders) {
+            return {
+                name:             fromProviders.name,
+                nit:              fromProviders.nit || fromProviders.tax_id || '',
+                address:          fromProviders.address || fromProviders.location || '',
+                delivery_address: fromProviders.delivery_address || fromProviders.address || fromProviders.location || '',
+                email:            fromProviders.email || '',
+                phone:            fromProviders.phone || fromProviders.contact_phone || '',
+                city:             fromProviders.city || (fromProviders.address || '').split(',').pop()?.trim() || 'Bogotá D.C.',
+                contact:          fromProviders.contact_person || fromProviders.contact || '',
+            };
+        }
+        const fromClients = clients.find(c =>
+            c.is_own_company === true ||
+            (c.name || '').toLowerCase().includes('zeticas')
+        );
+        return fromClients || {
+            name:             'Zeticas SAS',
+            nit:              '',
+            address:          '',
+            delivery_address: '',
+            email:            '',
+            phone:            '',
+            city:             'Bogotá D.C.',
+        };
+    }, [providers, clients]);
 
     const value = useMemo(() => ({
-        loading, items, recipes, providers, orders, expenses, purchaseOrders, banks, taxSettings, clients, siteContent, lastUpdate, productionOrders, users, units, unitConversions,
+        loading, items, recipes, providers, orders, expenses, purchaseOrders, banks, taxSettings, clients, siteContent, lastUpdate, productionOrders, users, units, unitConversions, ownCompany,
         refreshData, addClient, addOrder, deleteOrders, updateSiteContent, recalculatePTCosts, updateBankBalance, updateClient, deleteClient,
         addItem, updateItem, deleteItem, addSupplier, updateSupplier, deleteSupplier, updateOrder, addPurchase, addRecipe, deleteRecipeByProduct, saveOdp, addExpense, updateExpense, deleteExpense, addBank, updateBank, deleteBank, receivePurchase, payPurchase, leads, updateLead, addLead, deleteLead,
         addUser, updateUser, deleteUser, consumeMaterials, loadFinishedGoods, saveConversion, convertUnit, saveWebCheckout, getWebCheckout, updateWebCheckoutStatus
     }), [
-        loading, items, recipes, providers, orders, expenses, purchaseOrders, banks, taxSettings, clients, siteContent, lastUpdate, productionOrders, leads, users, units, unitConversions, refreshData,
+        loading, items, recipes, providers, orders, expenses, purchaseOrders, banks, taxSettings, clients, siteContent, lastUpdate, productionOrders, leads, users, units, unitConversions, refreshData, ownCompany,
         addClient, addOrder, deleteOrders, updateSiteContent, recalculatePTCosts, updateBankBalance, updateClient, deleteClient,
         addItem, updateItem, deleteItem, addSupplier, updateSupplier, deleteSupplier, updateOrder, addPurchase, addRecipe, deleteRecipeByProduct, saveOdp, addExpense, updateExpense, deleteExpense, addBank, updateBank, deleteBank, receivePurchase, payPurchase, updateLead, addLead, deleteLead,
         addUser, updateUser, deleteUser, consumeMaterials, loadFinishedGoods, saveConversion, convertUnit, saveWebCheckout, getWebCheckout, updateWebCheckoutStatus
