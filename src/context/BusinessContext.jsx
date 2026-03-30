@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { db } from '../lib/firebase';
-import { collection, query, orderBy, onSnapshot, doc, getDocs, updateDoc, deleteDoc, addDoc, where, increment } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, getDocs, updateDoc, deleteDoc, addDoc, where, increment, setDoc } from 'firebase/firestore';
 import { products as masterProducts } from '../data/products';
 
 export const CAMPAIGN_PRESETS = {
@@ -62,6 +62,8 @@ export const BusinessProvider = ({ children }) => {
     const [siteContent, setSiteContent] = useState({});
     const [leads, setLeads] = useState([]);
     const [users, setUsers] = useState([]);
+    const [units, setUnits] = useState([]);
+    const [unitConversions, setUnitConversions] = useState({});
     const [lastUpdate, setLastUpdate] = useState(null);
 
     const [taxSettings, setTaxSettings] = useState({
@@ -144,15 +146,17 @@ export const BusinessProvider = ({ children }) => {
             const groupedRecipes = {};
             snapshot.docs.forEach(doc => {
                 const r = doc.data();
-                const fgName = r.finished_good_name; 
-                if (!fgName) return;
-                if (!groupedRecipes[fgName]) groupedRecipes[fgName] = [];
-                groupedRecipes[fgName].push({
-                    id: r.raw_material_id, 
+                const fgId = r.finished_good_id; 
+                if (!fgId) return;
+                if (!groupedRecipes[fgId]) groupedRecipes[fgId] = [];
+                groupedRecipes[fgId].push({
+                    rm_id: r.raw_material_id, 
                     name: r.raw_material_name, 
                     sku: r.raw_material_sku, 
                     qty: r.quantity_required,
-                    finished_good_id: r.finished_good_id
+                    unit: r.unit || 'und', 
+                    finished_good_id: r.finished_good_id,
+                    yield_quantity: Number(r.yield_quantity) || 1
                 });
             });
             setRecipes(groupedRecipes);
@@ -223,6 +227,20 @@ export const BusinessProvider = ({ children }) => {
             setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         }, (error) => console.error("Snapshot Users Error:", error));
 
+        const unsubUnits = onSnapshot(collection(db, 'units'), (snapshot) => {
+            setUnits(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        }, (error) => console.error("Snapshot Units Error:", error));
+
+        const unsubConversions = onSnapshot(collection(db, 'unit_conversions'), (snapshot) => {
+            const convs = {};
+            snapshot.docs.forEach(doc => {
+                const data = doc.data();
+                if (!convs[data.from]) convs[data.from] = {};
+                convs[data.from][data.to] = data.factor;
+            });
+            setUnitConversions(convs);
+        }, (error) => console.error("Snapshot Conversions Error:", error));
+
         setLastUpdate(new Date().toLocaleString('es-CO', {
             day: '2-digit', month: '2-digit', year: 'numeric',
             hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
@@ -241,6 +259,8 @@ export const BusinessProvider = ({ children }) => {
             unsubProd();
             unsubLeads();
             unsubUsers();
+            unsubUnits();
+            unsubConversions();
         };
     }, []);
 
@@ -336,19 +356,26 @@ export const BusinessProvider = ({ children }) => {
 
             let totalCost = 0;
             ptRecipe.forEach(ingredient => {
-                const material = materials.find(m => m.id === ingredient.raw_material_id);
+                const material = materials.find(m => m.id === ingredient.rm_id);
                 if (material) {
                     const materialCost = Number(material.price) || 0;
-                    totalCost += ingredient.quantity_required * materialCost;
+                    // Convert recipe quantity to material base unit before multiplying
+                    const convertedQty = convertUnit(ingredient.qty, ingredient.unit, material.unit);
+                    totalCost += convertedQty * materialCost;
                 }
             });
 
-            if (totalCost > 0) {
+            const yieldQty = ptRecipe.length > 0 ? (ptRecipe[0].yield_quantity || 1) : 1;
+            const unitCost = totalCost / yieldQty;
+
+            if (unitCost > 0) {
                 try {
                     const docRef = doc(db, 'products', pt.id);
                     await updateDoc(docRef, {
-                        recipe_cost: totalCost,
-                        automated_cost: totalCost,
+                        recipe_cost: unitCost,
+                        automated_cost: unitCost,
+                        recipe_batch_cost: totalCost, // Keep total batch cost for reference
+                        recipe_yield: yieldQty,
                         last_cost_recalc: new Date().toISOString()
                     });
                 } catch (err) {
@@ -637,16 +664,101 @@ export const BusinessProvider = ({ children }) => {
         }
     }, []);
 
+    const saveWebCheckout = useCallback(async (data) => {
+        try {
+            const docRef = await addDoc(collection(db, 'web_checkouts'), {
+                ...data,
+                created_at: new Date().toISOString(),
+                status: 'pending'
+            });
+            return { success: true, id: docRef.id };
+        } catch (err) {
+            console.error("Error saving web checkout draft:", err);
+            return { success: false, error: err.message };
+        }
+    }, []);
+
+    const getWebCheckout = useCallback(async (checkoutId) => {
+        try {
+            const docRef = doc(db, 'web_checkouts', checkoutId);
+            const snapshot = await getDocs(query(collection(db, 'web_checkouts'), where('__name__', '==', checkoutId)));
+            if (snapshot.empty) return { success: false, error: "Checkout no encontrado" };
+            return { success: true, data: snapshot.docs[0].data() };
+        } catch (err) {
+            console.error("Error getting web checkout draft:", err);
+            return { success: false, error: err.message };
+        }
+    }, []);
+
+    const updateWebCheckoutStatus = useCallback(async (checkoutId, status) => {
+        try {
+            const docRef = doc(db, 'web_checkouts', checkoutId);
+            await updateDoc(docRef, { status: status, updated_at: new Date().toISOString() });
+            return { success: true };
+        } catch (err) {
+            console.error("Error updating web checkout status:", err);
+            return { success: false, error: err.message };
+        }
+    }, []);
+
+    const saveConversion = useCallback(async (from, to, factor) => {
+        try {
+            const id = `${from}_${to}`;
+            await setDoc(doc(db, 'unit_conversions', id), { from, to, factor: Number(factor) });
+            return { success: true };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
+    }, []);
+
+    /**
+     * Universal Unit Converter
+     * Handles: 
+     * 1. Standard SI (kg <-> gr, lt <-> ml)
+     * 2. Custom Conteo -> Weight/Vol (atado -> gr, caja -> kg) based on saved matrix
+     */
+    const convertUnit = useCallback((value, from, to) => {
+        if (!value || from === to) return Number(value);
+        
+        // 1. Check Custom Matrix (Conteo -> Weight/Vol)
+        if (unitConversions[from] && unitConversions[from][to]) {
+            return Number(value) * Number(unitConversions[from][to]);
+        }
+
+        // 2. Automatic SI Multipliers (Standardized Ratios)
+        const siFactors = {
+            'kg_gr': 1000, 'gr_kg': 0.001,
+            'lt_ml': 1000, 'ml_lt': 0.001,
+            'lb_gr': 453.59, 'gr_lb': 1/453.59,
+            'lb_kg': 0.45359, 'kg_lb': 2.20462
+        };
+
+        const key = `${from}_${to}`;
+        if (siFactors[key]) {
+            return Number(value) * siFactors[key];
+        }
+
+        // 3. Recursive check? (e.g. Atado -> KG via Atado -> GR -> KG)
+        if (unitConversions[from] && unitConversions[from]['gr'] && to === 'kg') {
+            return (Number(value) * Number(unitConversions[from]['gr'])) * 0.001;
+        }
+        if (unitConversions[from] && unitConversions[from]['kg'] && to === 'gr') {
+            return (Number(value) * Number(unitConversions[from]['kg'])) * 1000;
+        }
+
+        return Number(value); // Fallback
+    }, [unitConversions]);
+
     const value = useMemo(() => ({
-        loading, items, recipes, providers, orders, expenses, purchaseOrders, banks, taxSettings, clients, siteContent, lastUpdate, productionOrders, users,
+        loading, items, recipes, providers, orders, expenses, purchaseOrders, banks, taxSettings, clients, siteContent, lastUpdate, productionOrders, users, units, unitConversions,
         refreshData, addClient, addOrder, deleteOrders, updateSiteContent, recalculatePTCosts, updateBankBalance, updateClient, deleteClient,
         addItem, updateItem, deleteItem, addSupplier, updateSupplier, deleteSupplier, updateOrder, addPurchase, addRecipe, deleteRecipeByProduct, saveOdp, addExpense, updateExpense, deleteExpense, addBank, updateBank, deleteBank, receivePurchase, payPurchase, leads, updateLead, addLead, deleteLead,
-        addUser, updateUser, deleteUser, consumeMaterials, loadFinishedGoods
+        addUser, updateUser, deleteUser, consumeMaterials, loadFinishedGoods, saveConversion, convertUnit, saveWebCheckout, getWebCheckout, updateWebCheckoutStatus
     }), [
-        loading, items, recipes, providers, orders, expenses, purchaseOrders, banks, taxSettings, clients, siteContent, lastUpdate, productionOrders, leads, users,
+        loading, items, recipes, providers, orders, expenses, purchaseOrders, banks, taxSettings, clients, siteContent, lastUpdate, productionOrders, leads, users, units, unitConversions, refreshData,
         addClient, addOrder, deleteOrders, updateSiteContent, recalculatePTCosts, updateBankBalance, updateClient, deleteClient,
         addItem, updateItem, deleteItem, addSupplier, updateSupplier, deleteSupplier, updateOrder, addPurchase, addRecipe, deleteRecipeByProduct, saveOdp, addExpense, updateExpense, deleteExpense, addBank, updateBank, deleteBank, receivePurchase, payPurchase, updateLead, addLead, deleteLead,
-        addUser, updateUser, deleteUser, consumeMaterials, loadFinishedGoods
+        addUser, updateUser, deleteUser, consumeMaterials, loadFinishedGoods, saveConversion, convertUnit, saveWebCheckout, getWebCheckout, updateWebCheckoutStatus
     ]);
 
     return (

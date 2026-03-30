@@ -54,7 +54,7 @@ const HomeCZ = () => {
             {/* 1. Hero Section */}
             <div id="inicio" style={{ scrollMarginTop: '150px' }}></div>
             <section style={{ 
-                padding: '6rem 5% 10rem', 
+                padding: '5.4rem 5% 9rem', 
                 position: 'relative', 
                 display: 'grid', 
                 gridTemplateColumns: '1fr auto 1fr', 
@@ -66,7 +66,7 @@ const HomeCZ = () => {
                             {extra.hero_quote || '"Los árboles son solo un elemento del bosque, hacen parte de un ecosistema, que aprende, colabora, conecta, se comunica y responde; Nuestro “Yarumo” ancestral, pensativo y reflexivo nos permite ser parte dé ser cada día mejor."'}
                     </p>
                 </div>
-                <div style={{ position: 'relative', width: '280px', display: 'flex', justifyContent: 'center' }}>
+                <div style={{ position: 'relative', width: '336px', display: 'flex', justifyContent: 'center' }}>
                     <img src={yarumoUrl} alt="Yarumo Tree" style={{ width: '100%', height: 'auto', zIndex: 2 }} />
                 </div>
                 <div style={{ textAlign: 'center', padding: '0 2rem' }}>

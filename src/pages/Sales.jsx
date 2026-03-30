@@ -313,7 +313,8 @@ const Orders = ({ orders }) => {
                     id: m.id, // reference to material ID
                     name: m.name,
                     toBuy: m.quantityToBuy,
-                    purchasePrice: m.unitCost
+                    purchasePrice: m.unitCost,
+                    unit: m.unit
                 })),
                 subtotal,
                 iva,
@@ -362,6 +363,7 @@ const Orders = ({ orders }) => {
                         name: i.name,
                         quantity: i.toBuy,
                         unit_cost: i.purchasePrice,
+                        unit: i.unit,
                         total_cost: Number(i.purchasePrice) * Number(i.toBuy)
                     }))
                 };
@@ -766,15 +768,33 @@ const Orders = ({ orders }) => {
                 marginBottom: '1.5rem',
                 background: glassWhite,
                 backdropFilter: 'blur(10px)',
-                padding: '1.5rem 2rem',
+                padding: window.innerWidth < 768 ? '1rem' : '1.5rem 2rem',
                 borderRadius: '24px',
                 border: '1px solid rgba(2, 83, 87, 0.05)',
                 boxShadow: '0 10px 25px rgba(0,0,0,0.01)',
                 animation: 'fadeUp 0.6s ease-out'
             }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
-                    <div style={{ display: 'flex', gap: '1rem' }}>
-                        <div style={{ display: 'flex', background: 'rgba(2, 83, 87, 0.05)', padding: '6px', borderRadius: '22px', border: '1px solid rgba(2, 83, 87, 0.08)' }}>
+                <div style={{ 
+                    display: 'flex', 
+                    flexDirection: window.innerWidth < 1024 ? 'column' : 'row',
+                    justifyContent: 'space-between', 
+                    alignItems: window.innerWidth < 1024 ? 'stretch' : 'center', 
+                    gap: '1.5rem' 
+                }}>
+                    <div style={{ 
+                        display: 'flex', 
+                        flexDirection: window.innerWidth < 500 ? 'column' : 'row',
+                        gap: '1rem' 
+                    }}>
+                        <div style={{ 
+                            display: 'flex', 
+                            background: 'rgba(2, 83, 87, 0.05)', 
+                            padding: '6px', 
+                            borderRadius: '22px', 
+                            border: '1px solid rgba(2, 83, 87, 0.08)',
+                            overflowX: 'auto',
+                            scrollbarWidth: 'none'
+                        }}>
                             {['week', 'month', 'custom'].map(type => (
                                 <button
                                     key={type}
@@ -827,7 +847,11 @@ const Orders = ({ orders }) => {
                         )}
                     </div>
 
-                    <div style={{ display: 'flex', gap: '1.5rem' }}>
+                    <div style={{ 
+                        display: 'flex', 
+                        gap: '1rem',
+                        justifyContent: window.innerWidth < 768 ? 'space-between' : 'flex-end'
+                    }}>
                         <button
                             onClick={async () => {
                                 setIsLoading(true);
@@ -989,8 +1013,15 @@ const Orders = ({ orders }) => {
 
 
             {/* Orders Table Container */}
-            <div style={{ background: '#fff', borderRadius: '24px', border: '1px solid #f1f5f9', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.02)' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <div style={{ 
+                background: '#fff', 
+                borderRadius: '24px', 
+                border: '1px solid #f1f5f9', 
+                boxShadow: '0 10px 30px rgba(0,0,0,0.02)',
+                overflow: 'hidden'
+            }}>
+                <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', minWidth: '1000px', borderCollapse: 'collapse' }}>
                     <thead style={{ background: '#F9FBFA', borderBottom: '1px solid #f1f5f9' }}>
                         <tr>
                             <th style={{ padding: '1.2rem 1.5rem', textAlign: 'left', width: '40px' }}>
@@ -1112,6 +1143,7 @@ const Orders = ({ orders }) => {
                         )}
                     </tbody>
                 </table>
+                </div>
             </div>
 
             {/* Modal for New Order - PT (Producto Terminado) */}

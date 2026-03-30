@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Menu, User, LogOut, LayoutDashboard, Instagram, Mail, Phone, ChevronUp } from 'lucide-react';
+import { ShoppingCart, Menu, User, LogOut, LayoutDashboard, Instagram, Mail, Phone, ChevronUp, Linkedin } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useMediaQuery } from '../hooks/useMediaQuery';
+import { useBusiness } from '../context/BusinessContext';
 
 const logo = '/logo.png';
 const logoCZ = '/assets/logos/logo-cz.png';
@@ -11,7 +12,7 @@ const logoCZ = '/assets/logos/logo-cz.png';
 const deepTeal = "#025357";
 const institutionOcre = "#D6BD98";
 
-const UtilityBar = ({ isConsulting, isMobile }) => (
+const UtilityBar = ({ isConsulting, isMobile, contact }) => (
     <div style={{
         background: isConsulting ? '#f8f9fa' : 'var(--color-utility)',
         padding: isMobile ? '0 1.5rem' : '0 5%',
@@ -28,9 +29,10 @@ const UtilityBar = ({ isConsulting, isMobile }) => (
         <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '0.8rem' : '1.2rem' }}>
                 {!isMobile && <span style={{ opacity: 0.6, fontSize: '0.7rem' }}>CONTACTO</span>}
-                <a href="https://instagram.com" target="_blank" rel="noreferrer" style={{ color: 'inherit', display: 'flex' }}><Instagram size={14} /></a>
-                <a href="https://wa.me/573000000000" target="_blank" rel="noreferrer" style={{ color: 'inherit', display: 'flex' }}><Phone size={14} /></a>
-                <a href="mailto:contacto@zeticas.com" style={{ color: 'inherit', display: 'flex' }}><Mail size={14} /></a>
+                {contact?.instagram && <a href={contact.instagram} target="_blank" rel="noreferrer" style={{ color: 'inherit', display: 'flex' }}><Instagram size={14} /></a>}
+                {contact?.phone && <a href={`https://wa.me/${contact.phone.replace(/\+/g, '')}`} target="_blank" rel="noreferrer" style={{ color: 'inherit', display: 'flex' }}><Phone size={14} /></a>}
+                {contact?.email && <a href={`mailto:${contact.email}`} style={{ color: 'inherit', display: 'flex' }}><Mail size={14} /></a>}
+                {contact?.linkedin && <a href={contact.linkedin} target="_blank" rel="noreferrer" style={{ color: 'inherit', display: 'flex' }}><Linkedin size={14} /></a>}
             </div>
         </div>
         
@@ -314,7 +316,7 @@ const Navbar = ({ isConsulting, isMobile }) => {
     );
 };
 
-const Footer = ({ isConsulting, isMobile }) => (
+const Footer = ({ isConsulting, isMobile, contact }) => (
     <footer style={{ 
         padding: isMobile ? '2.5rem 1.5rem' : '6rem 5%', 
         backgroundColor: isConsulting ? institutionOcre : 'var(--color-primary)', 
@@ -355,8 +357,10 @@ const Footer = ({ isConsulting, isMobile }) => (
                 <p style={{ fontSize: '0.85rem', color: isConsulting ? `${deepTeal}99` : 'rgba(255,255,255,0.7)', marginBottom: '0.4rem' }}>Guasca, Cundinamarca</p>
                 <p style={{ fontSize: '0.85rem', color: isConsulting ? `${deepTeal}99` : 'rgba(255,255,255,0.7)', marginBottom: isMobile ? '1rem' : '1.5rem' }}>Finca Mingalaba</p>
                 <div style={{ display: 'flex', gap: '1.5rem', justifyContent: isMobile ? 'center' : 'flex-start' }}>
-                    <a href="https://instagram.com" style={{ color: isConsulting ? deepTeal : '#fff', opacity: 0.8 }}><Instagram size={18} /></a>
-                    <a href="mailto:contacto@zeticas.com" style={{ color: isConsulting ? deepTeal : '#fff', opacity: 0.8 }}><Mail size={18} /></a>
+                    {contact?.instagram && <a href={contact.instagram} target="_blank" rel="noreferrer" style={{ color: isConsulting ? deepTeal : '#fff', opacity: 0.8 }}><Instagram size={18} /></a>}
+                    {contact?.email && <a href={`mailto:${contact.email}`} style={{ color: isConsulting ? deepTeal : '#fff', opacity: 0.8 }}><Mail size={18} /></a>}
+                    {contact?.phone && <a href={`https://wa.me/${contact.phone.replace(/\+/g, '')}`} target="_blank" rel="noreferrer" style={{ color: isConsulting ? deepTeal : '#fff', opacity: 0.8 }}><Phone size={18} /></a>}
+                    {contact?.linkedin && <a href={contact.linkedin} target="_blank" rel="noreferrer" style={{ color: isConsulting ? deepTeal : '#fff', opacity: 0.8 }}><Linkedin size={18} /></a>}
                 </div>
             </div>
         </div>
@@ -372,16 +376,24 @@ export default function Layout({ children }) {
     const isGestion = location.pathname.toLowerCase().includes('gestion');
     const isMobile = useMediaQuery('(max-width: 992px)');
     
+    const { siteContent } = useBusiness();
+    const contact = siteContent?.web_shipping ? {
+        instagram: siteContent.web_shipping.contact_instagram,
+        email: siteContent.web_shipping.contact_email,
+        phone: siteContent.web_shipping.contact_phone,
+        linkedin: siteContent.web_shipping.contact_linkedin
+    } : null;
+    
     return (
         <div className="layout">
             <header style={{ position: 'fixed', top: 0, width: '100%', zIndex: 1200 }}>
-                {!isGestion && <UtilityBar isMobile={isMobile} isConsulting={isConsulting} />}
+                {!isGestion && <UtilityBar isMobile={isMobile} isConsulting={isConsulting} contact={contact} />}
                 <Navbar isMobile={isMobile} isConsulting={isConsulting} />
             </header>
             <main style={{ paddingTop: isGestion ? (isMobile ? '70px' : '85px') : (isMobile ? '110px' : '125px') }}>
                 {children}
             </main>
-            {!isGestion && <Footer isMobile={isMobile} isConsulting={isConsulting} />}
+            {!isGestion && <Footer isMobile={isMobile} isConsulting={isConsulting} contact={contact} />}
             {!isGestion && <FloatingButtons isMobile={isMobile} />}
         </div>
     );

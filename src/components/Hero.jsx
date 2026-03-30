@@ -21,7 +21,7 @@ const Hero = () => {
         return (
             <section className="hero botanical-bg" style={{
                 '--bg-filter': softPrimary,
-                minHeight: '85vh',
+                minHeight: '75vh',
                 display: 'flex',
                 alignItems: 'center',
                 padding: isMobile ? '6rem 1rem' : '4rem 5%',
@@ -81,10 +81,10 @@ const Hero = () => {
     return (
         <section className="hero botanical-bg" style={{
             '--bg-filter': 'rgba(175, 191, 113, 0.5)',
-            minHeight: isMobile ? 'auto' : '85vh',
+            minHeight: isMobile ? 'auto' : '75vh',
             display: 'flex',
             alignItems: 'center',
-            padding: isMobile ? '5rem 1rem 4rem' : '4rem 0',
+            padding: isMobile ? '3rem 1rem 2rem' : '2rem 0',
             position: 'relative'
         }}>
             <div className="container" style={{
@@ -125,7 +125,7 @@ const Hero = () => {
                     </div>
                 </div>
                 <div className="hero-image" style={{ position: 'relative', zIndex: 10, display: 'flex', justifyContent: 'center' }}>
-                    <img src="/assets/product-jars.png" alt="Zeticas Trio" style={{ width: isMobile ? '65%' : '80%', display: 'block', objectFit: 'contain', mixBlendMode: 'multiply' }} />
+                    <img src="/assets/product-jars.png" alt="Zeticas Trio" style={{ width: isMobile ? '80%' : '96%', display: 'block', objectFit: 'contain', mixBlendMode: 'multiply' }} />
                 </div>
             </div>
             {/* Bottom White Invasion Waves (Always present) */}

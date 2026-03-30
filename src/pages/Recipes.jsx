@@ -1,25 +1,27 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ChefHat, RefreshCw, Plus, Edit3, Trash2, X, PlusCircle, MinusCircle, Save, AlertTriangle, Search } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
 
 const Recipes = () => {
-    const { items, recipes, recalculatePTCosts, addRecipe, deleteRecipeByProduct } = useBusiness();
+    const { items, recipes, recalculatePTCosts, addRecipe, deleteRecipeByProduct, units } = useBusiness();
     
     // Split items into PTs and Materials
-    const pts = useMemo(() => items.filter(i => i.type === 'product' || i.type === 'PT'), [items]);
-    const materials = useMemo(() => items.filter(i => i.type === 'material' || i.type === 'material'), [items]);
+    const pts = useMemo(() => items.filter(i => i.category === 'Producto Terminado'), [items]);
+    // Ingredients can be anything EXCEPT Finished Goods (to avoid circular references)
+    const materials = useMemo(() => items.filter(i => i.category !== 'Producto Terminado'), [items]);
 
     const recipesList = useMemo(() => {
         return pts.map(pt => ({
             id: pt.id,
             name: pt.name,
             yield: 'Batch Producción',
-            ingredients: recipes[pt.name] || [] // Context groups by name
+            ingredients: recipes[pt.id] || [] // Context now groups by ID
         }));
     }, [pts, recipes]);
 
     const [isSaving, setIsSaving] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [doubleConfirm, setDoubleConfirm] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingRecipe, setEditingRecipe] = useState(null);
     const [confirmModal, setConfirmModal] = useState({ show: false, targetId: null, title: '', message: '' });
@@ -29,6 +31,7 @@ const Recipes = () => {
         id: '', // finished_good_id
         name: '',
         yield: 'Batch Producción',
+        yield_qty: 1, // Number of units produced
         ingredients: [{ rm_id: '', name: '', qty: '', unit: '' }]
     });
 
@@ -42,6 +45,7 @@ const Recipes = () => {
     }, [recipesList, searchTerm]);
 
     const handleDeleteClick = (recipe) => {
+        setDoubleConfirm(false);
         setConfirmModal({
             show: true,
             targetId: recipe.id,
@@ -51,11 +55,13 @@ const Recipes = () => {
     };
 
     const executeDeletion = async () => {
+        if (!doubleConfirm) return;
         setIsDeleting(true);
         try {
             const res = await deleteRecipeByProduct(confirmModal.targetId);
             if (!res.success) throw new Error(res.error);
             setConfirmModal({ show: false, targetId: null, title: '', message: '' });
+            setDoubleConfirm(false);
         } catch (err) {
             console.error("Error deleting recipe:", err);
             alert("Error al eliminar la receta. Por favor, reintenta.");
@@ -71,6 +77,7 @@ const Recipes = () => {
                 id: recipe.id,
                 name: recipe.name,
                 yield: recipe.yield || 'Batch Producción',
+                yield_qty: recipe.ingredients[0]?.yield_quantity || 1,
                 ingredients: recipe.ingredients.length > 0
                     ? recipe.ingredients.map(i => ({ ...i }))
                     : [{ rm_id: '', name: '', qty: '', unit: '' }]
@@ -82,6 +89,7 @@ const Recipes = () => {
                 id: '',
                 name: '',
                 yield: 'Batch Producción',
+                yield_qty: 1,
                 ingredients: [{ rm_id: '', name: '', qty: '', unit: '' }]
             });
         }
@@ -116,7 +124,7 @@ const Recipes = () => {
                 ...newIngs[index],
                 rm_id: value,
                 name: mat?.name || '',
-                unit: mat?.unit_measure || 'und'
+                unit: mat?.unit || 'und'
             };
         } else {
             newIngs[index][field] = value;
@@ -144,7 +152,9 @@ const Recipes = () => {
                         raw_material_id: i.rm_id,
                         raw_material_name: i.name,
                         raw_material_sku: i.sku || i.name,
-                        quantity_required: parseFloat(i.qty)
+                        quantity_required: parseFloat(i.qty),
+                        unit: i.unit,
+                        yield_quantity: Number(formData.yield_qty) || 1
                     });
                 }
             }
@@ -179,7 +189,7 @@ const Recipes = () => {
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             style={{
-                                padding: '0.5rem 1rem 0.5rem 2.5rem',
+                                padding: '0.5rem 2.5rem 0.5rem 2.5rem',
                                 borderRadius: '10px',
                                 border: '1px solid #e2e8f0',
                                 outline: 'none',
@@ -187,6 +197,13 @@ const Recipes = () => {
                                 width: '250px'
                             }}
                         />
+                        {searchTerm && (
+                            <X 
+                                size={14} 
+                                style={{ position: 'absolute', right: '0.8rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', cursor: 'pointer' }} 
+                                onClick={() => setSearchTerm('')}
+                            />
+                        )}
                     </div>
                     <button
                         onClick={() => handleOpenModal()}
@@ -209,7 +226,10 @@ const Recipes = () => {
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
                                 <div>
                                     <h3 style={{ fontSize: '1.15rem', fontWeight: '800', color: '#1A3636' }}>{recipe.name}</h3>
-                                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Rendimiento: {recipe.yield}</div>
+                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
+                                        <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{recipe.yield}</div>
+                                        <div style={{ fontSize: '0.75rem', background: '#f1f5f9', padding: '1px 6px', borderRadius: '4px', color: 'var(--color-primary)', fontWeight: 'bold' }}>Yield: {recipe.ingredients[0]?.yield_quantity || 1} Unidades</div>
+                                    </div>
                                 </div>
                                 <Edit3 size={18} color="#94a3b8" style={{ cursor: 'pointer' }} onClick={() => handleOpenModal(recipe)} />
                             </div>
@@ -267,28 +287,63 @@ const Recipes = () => {
                                 <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>PRODUCTO TERMINADO</label>
                                 <select
                                     value={formData.id}
-                                    onChange={(e) => setFormData({ ...formData, id: e.target.value, name: e.target.options[e.target.selectedIndex].text })}
-                                    disabled={!!editingRecipe}
-                                    style={{ width: '100%', padding: '0.8rem', borderRadius: '10px', border: '1px solid #cbd5e1', outline: 'none', background: !!editingRecipe ? '#f8fafc' : '#fff' }}
+                                    onChange={(e) => {
+                                        const selectedId = e.target.value;
+                                        const selectedName = e.target.options[e.target.selectedIndex].text.replace(' (Sin Receta) ⚠️', '');
+                                        setFormData({ ...formData, id: selectedId, name: selectedName });
+                                    }}
+                                    disabled={editingRecipe}
+                                    style={{ width: '100%', padding: '0.8rem', borderRadius: '10px', border: '1px solid #cbd5e1', outline: 'none', background: editingRecipe ? '#f8fafc' : '#fff' }}
                                 >
                                     <option value="">Seleccionar producto...</option>
                                     {recipesList.length > 0 ? (
-                                        recipesList.filter(r => !editingRecipe ? r.ingredients.length === 0 : true).map(p => (
-                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                        recipesList.map(p => (
+                                            <option key={p.id} value={p.id}>
+                                                {p.name}{p.ingredients.length === 0 ? ' (Sin Receta) ⚠️' : ''}
+                                            </option>
                                         ))
                                     ) : (
                                         <option value="" disabled>No existe en Módulo de Datos Maestros de Productos, Crealo primero</option>
                                     )}
                                 </select>
+
+                                {/* Alerta de Receta Existente */}
+                                {!editingRecipe && formData.id && recipes[formData.id] && (
+                                    <div style={{ marginTop: '1rem', padding: '1rem', background: '#ecfdf5', borderRadius: '12px', border: '1px solid #a7f3d0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                                            <AlertTriangle size={20} color="#059669" />
+                                            <div>
+                                                <p style={{ margin: 0, fontSize: '0.85rem', color: '#065f46', fontWeight: '700' }}>Este producto ya tiene una receta.</p>
+                                                <p style={{ margin: 0, fontSize: '0.75rem', color: '#047857' }}>No crees una nueva, edita la existente para evitar duplicados.</p>
+                                            </div>
+                                        </div>
+                                        <button 
+                                            onClick={() => handleOpenModal(recipesList.find(r => r.id === formData.id))}
+                                            style={{ padding: '0.4rem 0.8rem', background: '#059669', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
+                                        >
+                                            Cargar para Editar
+                                        </button>
+                                    </div>
+                                )}
                             </div>
 
                             <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '1rem' }}>
-                                <div style={{ flex: 1 }}>
-                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>RENDIMIENTO BASE</label>
+                                <div style={{ flex: 2 }}>
+                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>RENDIMIENTO BASE (NOMBRE)</label>
                                     <input
                                         type="text"
+                                        placeholder="Ej: Batch Producción"
                                         value={formData.yield}
                                         onChange={(e) => setFormData({ ...formData, yield: e.target.value })}
+                                        style={{ width: '100%', padding: '0.8rem', borderRadius: '10px', border: '1px solid #cbd5e1', outline: 'none' }}
+                                    />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>CANT. UNIDADES</label>
+                                    <input
+                                        type="number"
+                                        value={formData.yield_qty}
+                                        onChange={(e) => setFormData({ ...formData, yield_qty: e.target.value })}
                                         style={{ width: '100%', padding: '0.8rem', borderRadius: '10px', border: '1px solid #cbd5e1', outline: 'none' }}
                                     />
                                 </div>
@@ -339,8 +394,16 @@ const Recipes = () => {
                                                         style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem' }}
                                                     />
                                                 </td>
-                                                <td style={{ padding: '0.5rem', fontSize: '0.85rem', color: '#64748b' }}>
-                                                    {ing.unit}
+                                                <td style={{ padding: '0.5rem' }}>
+                                                    <select
+                                                        value={ing.unit}
+                                                        onChange={(e) => handleIngredientChange(index, 'unit', e.target.value)}
+                                                        style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem', background: '#f8fafc' }}
+                                                    >
+                                                        {(units || []).map(u => (
+                                                            <option key={u.id} value={u.id}>{u.id}</option>
+                                                        ))}
+                                                    </select>
                                                 </td>
                                                 <td style={{ padding: '0.5rem', textAlign: 'center' }}>
                                                     <MinusCircle size={18} color="#fca5a5" style={{ cursor: 'pointer' }} onClick={() => removeIngredientRow(index)} />
@@ -377,7 +440,20 @@ const Recipes = () => {
                                 <AlertTriangle size={32} color="#ef4444" />
                             </div>
                             <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1A3636', marginBottom: '0.8rem' }}>{confirmModal.title}</h3>
-                            <p style={{ fontSize: '0.95rem', color: '#64748b', lineHeight: '1.6', marginBottom: '2rem' }}>{confirmModal.message}</p>
+                            <p style={{ fontSize: '0.95rem', color: '#64748b', lineHeight: '1.6', marginBottom: '1.5rem' }}>{confirmModal.message}</p>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', padding: '1rem', background: '#fff1f2', borderRadius: '12px', marginBottom: '1.5rem', border: '1px solid #ffe4e6' }}>
+                                <input 
+                                    type="checkbox" 
+                                    id="double-confirm-check"
+                                    checked={doubleConfirm}
+                                    onChange={(e) => setDoubleConfirm(e.target.checked)}
+                                    style={{ cursor: 'pointer', width: '20px', height: '20px', accentColor: '#ef4444' }}
+                                />
+                                <label htmlFor="double-confirm-check" style={{ fontSize: '0.85rem', color: '#991b1b', cursor: 'pointer', fontWeight: '600' }}>
+                                    Confirmar que deseo borrar esta receta permanentemente.
+                                </label>
+                            </div>
 
                             <div style={{ display: 'flex', gap: '1rem' }}>
                                 <button
@@ -389,8 +465,24 @@ const Recipes = () => {
                                 </button>
                                 <button
                                     onClick={executeDeletion}
-                                    disabled={isDeleting}
-                                    style={{ flex: 1, padding: '0.6rem', borderRadius: '10px', border: 'none', background: '#ef4444', color: '#fff', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', boxShadow: '0 4px 12px rgba(239, 68, 68, 0.2)', fontSize: '0.85rem' }}
+                                    disabled={isDeleting || !doubleConfirm}
+                                    style={{ 
+                                        flex: 1, 
+                                        padding: '0.6rem', 
+                                        borderRadius: '10px', 
+                                        border: 'none', 
+                                        background: doubleConfirm ? '#ef4444' : '#fca5a5', 
+                                        color: '#fff', 
+                                        fontWeight: '700', 
+                                        cursor: doubleConfirm ? 'pointer' : 'not-allowed', 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        justifyContent: 'center', 
+                                        gap: '0.5rem', 
+                                        boxShadow: doubleConfirm ? '0 4px 12px rgba(239, 68, 68, 0.2)' : 'none', 
+                                        fontSize: '0.85rem',
+                                        transition: 'all 0.2s'
+                                    }}
                                 >
                                     {isDeleting ? 'Eliminando...' : 'Eliminar Ahora'}
                                 </button>

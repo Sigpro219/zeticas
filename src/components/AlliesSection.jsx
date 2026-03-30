@@ -39,7 +39,7 @@ const AlliesSection = () => {
 
     return (
         <section className="allies-section botanical-bg" style={{ 
-            padding: isMobile ? '6rem 0' : '8rem 0',
+            padding: isMobile ? '5.4rem 0' : '7.2rem 0',
             position: 'relative',
             '--bg-filter': 'rgba(243, 124, 121, 0.5)', 
             '--bg-pattern-filter': 'grayscale(1) opacity(0.2)' 
@@ -61,7 +61,7 @@ const AlliesSection = () => {
             </div>
 
             <div className="container" style={{ textAlign: 'center', position: 'relative', zIndex: 1 }}>
-                <h2 className="font-serif" style={{ fontSize: isMobile ? '2.5rem' : '3.5rem', marginBottom: '1rem', color: 'var(--color-primary)' }}>
+                <h2 className="font-serif" style={{ fontSize: isMobile ? '2.5rem' : '3.5rem', marginTop: isMobile ? '1.5rem' : '2.5rem', marginBottom: '1rem', color: 'var(--color-primary)' }}>
                     {content.title || 'Donde Encontrarnos'}
                 </h2>
                 <p style={{ color: '#fff', opacity: 0.9, maxWidth: '600px', margin: isMobile ? '0 auto 3.5rem' : '0 auto 5rem', fontSize: isMobile ? '1.1rem' : '1.2rem', padding: '0 1rem' }}>

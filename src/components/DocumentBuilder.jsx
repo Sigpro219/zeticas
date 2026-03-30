@@ -100,7 +100,7 @@ const DocumentBuilder = ({
                     {items.map((item, idx) => (
                         <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', fontSize: '0.9rem' }}>
                             <td style={{ padding: '1rem 0.8rem', color: '#334155', fontWeight: '500' }}>{item.name}</td>
-                            <td style={{ padding: '1rem 0.8rem', textAlign: 'center', color: '#475569' }}>{item.quantity}</td>
+                            <td style={{ padding: '1rem 0.8rem', textAlign: 'center', color: '#475569' }}>{item.quantity} {item.unit || ''}</td>
                             <td style={{ padding: '1rem 0.8rem', textAlign: 'right', color: '#475569' }}>${(item.unitCost || 0).toLocaleString('es-CO')}</td>
                             <td style={{ padding: '1rem 0.8rem', textAlign: 'right', fontWeight: '600', color: '#0f172a' }}>${((item.totalCost) || (item.quantity * item.unitCost) || 0).toLocaleString('es-CO')}</td>
                         </tr>

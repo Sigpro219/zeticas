@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Truck, MapPin, Anchor, Scale, Calculator, Info, CheckCircle, ChevronDown, ChevronUp, ShieldCheck, Eye, EyeOff } from 'lucide-react';
+import { Save, Truck, MapPin, Anchor, Scale, Calculator, Info, CheckCircle, ChevronDown, ChevronUp, ShieldCheck, Eye, EyeOff, Globe } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
 
 const ShippingField = ({ label, icon, value, onChange, prefix, suffix }) => (
@@ -34,8 +34,10 @@ const ShippingField = ({ label, icon, value, onChange, prefix, suffix }) => (
 );
 
 const ShippingAdmin = () => {
-    const { siteContent, updateSiteContent } = useBusiness();
+    const { siteContent, updateSiteContent, units, unitConversions, saveConversion } = useBusiness();
     const [isSaving, setIsSaving] = useState(false);
+    const [isSavingMatrix, setIsSavingMatrix] = useState(false);
+    const [matrixChanges, setMatrixChanges] = useState({});
 
     const [config, setConfig] = useState({
         tarifa_local: 5400,
@@ -48,7 +50,11 @@ const ShippingAdmin = () => {
         bold_sandbox_identity: '',
         bold_sandbox_secret: '',
         bold_prod_identity: '',
-        bold_prod_secret: ''
+        bold_prod_secret: '',
+        contact_instagram: '',
+        contact_email: '',
+        contact_phone: '',
+        contact_linkedin: ''
     });
 
     const [showKeys, setShowKeys] = useState({
@@ -71,7 +77,11 @@ const ShippingAdmin = () => {
                 bold_sandbox_identity: siteContent.web_shipping.bold_sandbox_identity || '',
                 bold_sandbox_secret: siteContent.web_shipping.bold_sandbox_secret || '',
                 bold_prod_identity: siteContent.web_shipping.bold_prod_identity || '',
-                bold_prod_secret: siteContent.web_shipping.bold_prod_secret || ''
+                bold_prod_secret: siteContent.web_shipping.bold_prod_secret || '',
+                contact_instagram: siteContent.web_shipping.contact_instagram || '',
+                contact_email: siteContent.web_shipping.contact_email || '',
+                contact_phone: siteContent.web_shipping.contact_phone || '',
+                contact_linkedin: siteContent.web_shipping.contact_linkedin || ''
             });
         }
     }, [siteContent.web_shipping]);
@@ -104,11 +114,35 @@ const ShippingAdmin = () => {
     const costRegional = roundedWeight * config.tarifa_regional;
     const costNacional = roundedWeight * config.tarifa_nacional;
 
+    const handleMatrixChange = (from, to, value) => {
+        setMatrixChanges(prev => ({
+            ...prev,
+            [`${from}_${to}`]: value
+        }));
+    };
+
+    const handleSaveConversions = async () => {
+        setIsSavingMatrix(true);
+        try {
+            const promises = Object.entries(matrixChanges).map(([key, val]) => {
+                const [from, to] = key.split('_');
+                return saveConversion(from, to, val);
+            });
+            await Promise.all(promises);
+            setMatrixChanges({});
+            alert("¡Matriz de equivalencias actualizada!");
+        } catch (err) {
+            console.error("Error saving matrix", err);
+            alert("Error al guardar la matriz.");
+        }
+        setIsSavingMatrix(false);
+    };
+
     return (
         <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
                 <div>
-                    <h2 style={{ fontSize: '1.8rem', color: '#023636', margin: 0, fontWeight: '800' }}>Logística Interrapidisimo & E-commerce</h2>
+                    <h2 style={{ fontSize: '1.8rem', color: '#023636', margin: 0, fontWeight: '800' }}>Configuración del Sistema y E-commerce</h2>
                     <p style={{ color: '#64748b', marginTop: '0.4rem', fontWeight: '500' }}>Modelo de cobro por Trayectos y Redondeo de Peso</p>
                 </div>
                 <button 
@@ -342,7 +376,7 @@ const ShippingAdmin = () => {
                     </div>
 
                     <div style={{ background: '#fff', padding: '1.5rem', borderRadius: '24px', border: '1px solid #e2e8f0', display: 'flex', gap: '1.2rem' }}>
-                        <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyCenter: 'center', color: '#ef4444', flexShrink: 0 }}>
+                        <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444', flexShrink: 0 }}>
                             <Info size={24} />
                         </div>
                         <div>
@@ -352,10 +386,185 @@ const ShippingAdmin = () => {
                             </p>
                         </div>
                     </div>
+
+                    {/* NEW: Social & Contact Card */}
+                    <div style={{ background: '#fff', padding: '2rem', borderRadius: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                        <h3 style={{ fontSize: '1.1rem', color: '#023636', marginBottom: '1.5rem', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                            <Globe size={20} color="#D4785A" /> Contacto & Redes Sociales
+                        </h3>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                <label style={{ fontSize: '0.75rem', fontWeight: '800', color: '#475569' }}>INSTAGRAM (URL)</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="https://instagram.com/tu_usuario"
+                                    value={config.contact_instagram || ''} 
+                                    onChange={(e) => updateValue('contact_instagram', e.target.value)}
+                                    style={smallInputStyle}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                <label style={{ fontSize: '0.75rem', fontWeight: '800', color: '#475569' }}>CORREO ELECTRÓNICO</label>
+                                <input 
+                                    type="email" 
+                                    placeholder="contacto@zeticas.com"
+                                    value={config.contact_email || ''} 
+                                    onChange={(e) => updateValue('contact_email', e.target.value)}
+                                    style={smallInputStyle}
+                                />
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                    <label style={{ fontSize: '0.75rem', fontWeight: '800', color: '#475569' }}>WHATSAPP / TELÉFONO</label>
+                                    <input 
+                                        type="text" 
+                                        placeholder="+573000000000"
+                                        value={config.contact_phone || ''} 
+                                        onChange={(e) => updateValue('contact_phone', e.target.value)}
+                                        style={smallInputStyle}
+                                    />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                    <label style={{ fontSize: '0.75rem', fontWeight: '800', color: '#475569' }}>LINKEDIN (URL)</label>
+                                    <input 
+                                        type="text" 
+                                        placeholder="https://linkedin.com/company/..."
+                                        value={config.contact_linkedin || ''} 
+                                        onChange={(e) => updateValue('contact_linkedin', e.target.value)}
+                                        style={smallInputStyle}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Matriz de Equivalencias de Unidades */}
+            <div style={{ marginTop: '3rem', background: '#fff', padding: '2.5rem', borderRadius: '32px', border: '1px solid #e2e8f0', boxShadow: '0 20px 50px rgba(0,0,0,0.03)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                    <div>
+                        <h3 style={{ fontSize: '1.4rem', color: '#023636', margin: 0, fontWeight: '900', display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                            <Scale size={24} color="#D4785A" /> Matriz de Equivalencias de Unidades
+                        </h3>
+                        <p style={{ color: '#64748b', marginTop: '0.4rem', fontWeight: '500', fontSize: '0.85rem' }}>
+                            Define cuánto pesa o mide una unidad de conteo para estandarizar recetas y compras.
+                        </p>
+                    </div>
+                </div>
+
+                <div style={{ overflowX: 'auto', borderRadius: '16px', border: '1px solid #f1f5f9' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                        <thead>
+                            <tr style={{ background: '#f8fafc' }}>
+                                <th style={{ padding: '1.2rem', borderBottom: '2px solid #e2e8f0', width: '220px' }}>
+                                    <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: '900', textTransform: 'uppercase' }}>Unidad de Conteo (Origen)</div>
+                                </th>
+                                {/* Standard Reference Columns */}
+                                {['kg', 'gr', 'lt', 'ml'].map(id => {
+                                    const u = (units || []).find(u => u.id === id);
+                                    if (!u) return null;
+                                    return (
+                                        <th key={u.id} style={{ padding: '1.2rem', borderBottom: '2px solid #e2e8f0', textAlign: 'center', background: '#f0fdf4' }}>
+                                            <div style={{ fontSize: '0.75rem', color: '#166534', fontWeight: '900' }}>{u.name.toUpperCase()}</div>
+                                            <div style={{ fontSize: '0.6rem', color: '#15803d' }}>REF SI</div>
+                                        </th>
+                                    );
+                                })}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {(units || []).filter(u => u.category === 'Conteo').map(rowUnit => (
+                                <tr key={rowUnit.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                    <td style={{ padding: '1.2rem', background: '#fcfcfc' }}>
+                                        <div style={{ fontWeight: '900', color: '#1e293b', fontSize: '0.9rem' }}>{rowUnit.name}</div>
+                                        <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase' }}>{rowUnit.id}</div>
+                                    </td>
+                                    {['kg', 'gr', 'lt', 'ml'].map(id => {
+                                        const colUnit = (units || []).find(u => u.id === id);
+                                        if (!colUnit) return null;
+                                        const isSame = rowUnit.id === colUnit.id;
+                                        const convs = unitConversions || {};
+                                        const currentVal = isSame ? 1 : (matrixChanges[`${rowUnit.id}_${colUnit.id}`] ?? convs[rowUnit.id]?.[colUnit.id] ?? '');
+
+                                        return (
+                                            <td key={colUnit.id} style={{ padding: '0.5rem', textAlign: 'center', background: '#f0fdf420' }}>
+                                                {isSame ? (
+                                                    <div style={{ color: '#16653450', fontWeight: '900', fontSize: '0.8rem' }}>1.0</div>
+                                                ) : (
+                                                    <input
+                                                        type="number"
+                                                        step="any"
+                                                        value={currentVal}
+                                                        onChange={(e) => handleMatrixChange(rowUnit.id, colUnit.id, e.target.value)}
+                                                        placeholder="0.00"
+                                                        style={{
+                                                            width: '85px',
+                                                            padding: '0.6rem',
+                                                            textAlign: 'center',
+                                                            borderRadius: '8px',
+                                                            border: '1px solid #dcfce7',
+                                                            background: currentVal ? '#fff' : 'transparent',
+                                                            fontSize: '0.85rem',
+                                                            fontWeight: '900',
+                                                            color: '#166534',
+                                                            outline: 'none',
+                                                            boxShadow: currentVal ? '0 2px 5px rgba(0,0,0,0.05)' : 'none'
+                                                        }}
+                                                    />
+                                                )}
+                                            </td>
+                                        );
+                                    })}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', padding: '0.8rem 1.2rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                        <Info size={16} color="#64748b" />
+                        <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '500' }}>
+                            Las conversiones de Peso (kg ↔ gr) y Volumen (lt ↔ ml) son <strong>automáticas</strong>.
+                        </span>
+                    </div>
+                    <button
+                        onClick={handleSaveConversions}
+                        disabled={isSavingMatrix}
+                        style={{
+                            padding: '0.8rem 2rem',
+                            background: '#D4785A',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '14px',
+                            fontWeight: '800',
+                            fontSize: '0.85rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.8rem',
+                            boxShadow: '0 10px 20px rgba(212, 120, 90, 0.2)'
+                        }}
+                    >
+                        {isSavingMatrix ? 'Sincronizando...' : <><Save size={18} /> Guardar Matriz de Relación</>}
+                    </button>
                 </div>
             </div>
         </div>
     );
+};
+
+const smallInputStyle = {
+    width: '100%', 
+    padding: '0.8rem', 
+    borderRadius: '10px', 
+    border: '1px solid #e2e8f0', 
+    fontSize: '0.85rem', 
+    background: '#f8fafc',
+    color: '#334155',
+    fontWeight: '600'
 };
 
 export default ShippingAdmin;

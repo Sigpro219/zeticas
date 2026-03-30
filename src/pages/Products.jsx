@@ -44,6 +44,7 @@ const Products = () => {
         cost: '',
         stock: '0',
         unit_measure: 'unidad',
+        purchase_unit: '', // New field for Raw Materials
         type: 'PT',
         barcode_text: '',
         description: '',
@@ -99,6 +100,7 @@ const Products = () => {
         cost: i.avgCost || 0,
         stock: i.initial || 0,
         unit_measure: i.unit_measure || i.unit || 'unidad',
+        purchase_unit: i.purchase_unit || i.unit_measure || i.unit || 'unidad',
         type: i.type === 'product' ? 'PT' : 'MP',
         barcode_text: i.barcode_text || '',
         image_url: i.image_url || '',
@@ -135,7 +137,7 @@ const Products = () => {
         } else {
             setEditingProduct(null);
             setFormData({ 
-                sku: '', name: '', category: 'Producto Terminado', product_type: 'Sal', price: '', cost: '', stock: '0', unit_measure: 'unidad', type: 'PT', barcode_text: '', published: true
+                sku: '', name: '', category: 'Producto Terminado', product_type: 'Sal', price: '', cost: '', stock: '0', unit_measure: 'unidad', purchase_unit: 'unidad', type: 'PT', barcode_text: '', published: true
             });
         }
         setSelectedFile(null);
@@ -179,7 +181,8 @@ const Products = () => {
                 cost: parseFloat(formData.cost) || 0,
                 stock: parseInt(formData.stock) || 0,
                 unit_measure: formData.unit_measure,
-                type: formData.type,
+                purchase_unit: formData.category === 'Materia Prima' ? (formData.purchase_unit || formData.unit_measure) : (formData.unit_measure),
+                type: formData.category === 'Materia Prima' ? 'MP' : 'PT',
                 barcode_text: formData.barcode_text || '',
                 image_url: imageUrl,
                 image_url_2: imageUrl2,
@@ -448,97 +451,134 @@ const Products = () => {
                             position: 'relative' 
                         }}>
                             <button onClick={() => setIsModalOpen(false)} style={{ position: 'absolute', right: '1.5rem', top: '1.5rem', border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={24} /></button>
-                            <h3 style={{ marginBottom: '1.5rem' }}>{editingProduct ? 'Editar SKU' : 'Nuevo SKU'}</h3>
-                            <form onSubmit={handleSave} style={{ display: 'grid', gap: '1.2rem' }}>
+                            <h3 style={{ marginBottom: '1.5rem', color: 'var(--color-primary)', fontWeight: '800' }}>{editingProduct ? 'Editar SKU' : 'Nuevo SKU'}</h3>
+                            <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+                                
+                                {/* 1. CATEGORÍA - PRIMER CAMPO */}
                                 <div>
-                                    <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.4rem', display: 'block' }}>SKU / REFERENCIA</label>
-                                    <input placeholder="Ej: PT-VINAGRETA" value={formData.sku} onChange={(e) => setFormData({ ...formData, sku: e.target.value })} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', outline: 'none' }} />
+                                    <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>CATEGORÍA</label>
+                                    <select 
+                                        value={formData.category} 
+                                        onChange={(e) => setFormData({ ...formData, category: e.target.value, type: e.target.value === 'Materia Prima' ? 'MP' : 'PT' })} 
+                                        style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', background: '#f8fafc', fontWeight: '700', color: 'var(--color-primary)', outline: 'none' }}
+                                    >
+                                        <option value="Producto Terminado">Producto Terminado</option>
+                                        <option value="Materia Prima">Materia Prima</option>
+                                        <option value="Otros">Otros</option>
+                                    </select>
                                 </div>
-                                <div>
-                                    <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.4rem', display: 'block' }}>NOMBRE DEL PRODUCTO</label>
-                                    <input placeholder="Nombre descriptivo" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', outline: 'none' }} />
-                                </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+
+                                {/* 2. Identificación básica */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
                                     <div>
-                                        <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.4rem', display: 'block' }}>CATEGORÍA</label>
-                                        <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', background: '#fff' }}>
-                                            <option value="Producto Terminado">Producto Terminado</option>
-                                            <option value="Materia Prima">Materia Prima</option>
-                                            <option value="Otros">Otros</option>
-                                        </select>
+                                        <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>SKU / REFERENCIA</label>
+                                        <input placeholder="Ej: PT-VINAGRETA" value={formData.sku} onChange={(e) => setFormData({ ...formData, sku: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', outline: 'none', fontWeight: 'bold' }} />
                                     </div>
                                     <div>
-                                        <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.4rem', display: 'block' }}>LÍNEA DE PRODUCTO</label>
-                                        <select value={formData.product_type} onChange={(e) => setFormData({ ...formData, product_type: e.target.value })} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', background: '#fff' }}>
+                                        <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>NOMBRE DEL PRODUCTO</label>
+                                        <input placeholder="Nombre descriptivo" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', outline: 'none', fontWeight: 'bold' }} />
+                                    </div>
+                                </div>
+
+                                {/* 3. Valores financieros */}
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                    <div>
+                                        <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>COSTO / COMPRA</label>
+                                        <input type="number" value={formData.cost} onChange={(e) => setFormData({ ...formData, cost: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', fontWeight: '700' }} />
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>PRECIO VENTA</label>
+                                        <input type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', fontWeight: '700' }} />
+                                    </div>
+                                </div>
+
+                                {/* 4. UNIDADES DE MEDIDA - Lógica Dual para Materia Prima */}
+                                {formData.category === 'Materia Prima' ? (
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                        <div>
+                                            <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>UNIDAD DE COMPRA</label>
+                                            <select 
+                                                value={formData.purchase_unit || formData.unit_measure} 
+                                                onChange={(e) => setFormData({ ...formData, purchase_unit: e.target.value })} 
+                                                style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '2px solid #D4785A', background: '#fff', fontWeight: 'bold' }}
+                                            >
+                                                {finalUnitOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>UNIDAD DE USO / RECETA</label>
+                                            <select 
+                                                value={formData.unit_measure} 
+                                                onChange={(e) => setFormData({ ...formData, unit_measure: e.target.value })} 
+                                                style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', background: '#f8fafc', fontWeight: 'bold' }}
+                                            >
+                                                {finalUnitOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div>
+                                        <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>UNIDAD DE MEDIDA</label>
+                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                            <select value={formData.unit_measure} onChange={(e) => setFormData({ ...formData, unit_measure: e.target.value })} style={{ flex: 1, padding: '1rem', borderRadius: '16px', border: '1px solid #ddd', background: '#fff', fontWeight: 'bold' }}>
+                                                {finalUnitOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                                            </select>
+                                            <button type="button" onClick={() => setShowUnitManager(!showUnitManager)} style={{ padding: '0 1.2rem', borderRadius: '16px', border: '1px solid #ddd', background: '#fff', cursor: 'pointer' }}><Plus size={20} /></button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {showUnitManager && (
+                                    <div style={{ padding: '1.2rem', background: '#f8fafc', borderRadius: '20px', border: '1px solid #e2e8f0', animation: 'fadeIn 0.3s' }}>
+                                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                                            <input placeholder="Nueva unidad" value={newUnitType} onChange={(e) => setNewUnitType(e.target.value)} style={{ flex: 1, padding: '0.6rem', borderRadius: '10px', border: '1px solid #ddd' }} />
+                                            <button type="button" onClick={handleAddUnit} style={{ padding: '0.6rem 1.2rem', background: '#023636', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 'BOLD', cursor: 'pointer' }}>Añadir</button>
+                                        </div>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                            {unitOptions.map(u => (
+                                                <div key={u} style={{ padding: '0.4rem 0.8rem', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
+                                                    {u}
+                                                    <X size={12} style={{ cursor: 'pointer', color: '#ef4444' }} onClick={() => handleRemoveUnit(u)} />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* 5. Clasificación y Etiquetas */}
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                    <div>
+                                        <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>LÍNEA DE PRODUCTO</label>
+                                        <select value={formData.product_type} onChange={(e) => setFormData({ ...formData, product_type: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', background: '#fff', fontWeight: '700' }}>
                                             <option value="Sal">Sal</option>
                                             <option value="Dulce">Dulce</option>
                                             <option value="Insumo">Insumo</option>
                                         </select>
                                     </div>
-                                </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                     <div>
-                                        <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.4rem', display: 'block' }}>COSTO / COMPRA</label>
-                                        <input type="number" value={formData.cost} onChange={(e) => setFormData({ ...formData, cost: e.target.value })} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd' }} />
+                                        <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>EAN / BARRAS</label>
+                                        <input placeholder="Ej: ZT001500" value={formData.barcode_text} onChange={(e) => setFormData({ ...formData, barcode_text: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', outline: 'none' }} />
                                     </div>
-                                    <div>
-                                        <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.4rem', display: 'block' }}>PRECIO VENTA</label>
-                                        <input type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: e.target.value })} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd' }} />
-                                    </div>
-                                </div>
-                                <div>
-                                    <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.4rem', display: 'block' }}>UNIDAD DE MEDIDA</label>
-                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                        <select value={formData.unit_measure} onChange={(e) => setFormData({ ...formData, unit_measure: e.target.value })} style={{ flex: 1, padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', background: '#fff' }}>
-                                            {finalUnitOptions.map(u => <option key={u} value={u}>{u}</option>)}
-                                        </select>
-                                        <button type="button" onClick={() => setShowUnitManager(!showUnitManager)} style={{ padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', background: '#fff', cursor: 'pointer' }}><Plus size={20} /></button>
-                                    </div>
-                                    {showUnitManager && (
-                                        <div style={{ marginTop: '1rem', padding: '1rem', background: '#f8f9fa', borderRadius: '12px', border: '1px solid #eee' }}>
-                                            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-                                                <input placeholder="Nueva unidad" value={newUnitType} onChange={(e) => setNewUnitType(e.target.value)} style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: '1px solid #ddd' }} />
-                                                <button type="button" onClick={handleAddUnit} style={{ padding: '0.5rem 1rem', background: '#023636', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Añadir</button>
-                                            </div>
-                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                                {unitOptions.map(u => (
-                                                    <div key={u} style={{ padding: '0.3rem 0.6rem', background: '#fff', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>{u}<X size={12} style={{ cursor: 'pointer', color: '#fca5a5' }} onClick={() => handleRemoveUnit(u)} /></div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                                <div>
-                                    <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.4rem', display: 'block' }}>TEXTO CÓDIGO DE BARRAS / ETIQUETA</label>
-                                    <input placeholder="Ej: ZT001500" value={formData.barcode_text} onChange={(e) => setFormData({ ...formData, barcode_text: e.target.value })} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', outline: 'none' }} />
                                 </div>
 
+                                {/* 6. Campos Pro (Producto Terminado) */}
                                 {formData.category === 'Producto Terminado' && (
-                                    <div style={{ display: 'grid', gap: '1.2rem' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
                                         <div>
-                                            <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.4rem', display: 'block' }}>DESCRIPCIÓN COMERCIAL (TIENDA)</label>
+                                            <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>DESCRIPCIÓN COMERCIAL (TIENDA)</label>
                                             <textarea 
                                                 rows="3"
-                                                placeholder="Ej: Mermelada gourmet endulzada con stevia, ideal para quesos..." 
+                                                placeholder="Ej: Mermelada gourmet endulzada con stevia..." 
                                                 value={formData.description} 
                                                 onChange={(e) => setFormData({ ...formData, description: e.target.value })} 
-                                                style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', outline: 'none', fontFamily: 'inherit' }} 
-                                            />
-                                        </div>
-                                        <div>
-                                            <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', marginBottom: '0.4rem', display: 'block' }}>BENEFICIOS / NOTAS</label>
-                                            <input 
-                                                placeholder="Ej: Antioxidante, Sin azúcar añadida" 
-                                                value={formData.benefits} 
-                                                onChange={(e) => setFormData({ ...formData, benefits: e.target.value })} 
-                                                style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #ddd', outline: 'none' }} 
+                                                style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', outline: 'none', fontFamily: 'inherit' }} 
                                             />
                                         </div>
 
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f0fdf4', padding: '1rem', borderRadius: '16px', border: '1px solid #bcf0da' }}>
                                             <div>
-                                                <span style={{ fontSize: '0.85rem', fontWeight: '800', color: '#004B50', display: 'block' }}>Publicar en Tienda</span>
-                                                <span style={{ fontSize: '0.7rem', color: '#666' }}>Si está desactivado, el producto no aparecerá en el catálogo público.</span>
+                                                <span style={{ fontSize: '0.8rem', fontWeight: '800', color: '#025357', display: 'block' }}>Publicar en Tienda</span>
+                                                <span style={{ fontSize: '0.65rem', color: '#64748b' }}>¿Mostrar este producto en el catálogo digital?</span>
                                             </div>
                                             <div 
                                                 onClick={() => setFormData({ ...formData, published: !formData.published })}
@@ -567,37 +607,36 @@ const Products = () => {
                                         </div>
 
                                         <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
-                                            <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#023636', marginBottom: '0.8rem', display: 'block', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                                Galería de Imágenes (Tienda)
+                                            <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.8rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                                Galería de Imágenes
                                             </label>
                                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                                {/* Image 1 */}
-                                                <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center', background: '#fff', padding: '0.5rem', borderRadius: '12px', border: '1px solid #eee' }}>
-                                                    <div style={{ width: '50px', height: '50px', borderRadius: '8px', border: '1px dashed #cbd5e1', overflow: 'hidden', background: '#f8f9fa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', background: '#fff', padding: '0.5rem', borderRadius: '12px', border: '1px solid #eee' }}>
+                                                    <div style={{ width: '40px', height: '40px', borderRadius: '8px', border: '1px dashed #cbd5e1', overflow: 'hidden', background: '#f8f9fa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                                         {previewUrl || formData.image_url ? <img src={previewUrl || formData.image_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Image size={18} color="#94a3b8" />}
                                                     </div>
                                                     <div style={{ flex: 1 }}>
                                                         <input type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} id="img-1" />
-                                                        <label htmlFor="img-1" style={{ fontSize: '0.6rem', fontWeight: 'bold', cursor: 'pointer', color: '#475569', textDecoration: 'underline' }}>Principal</label>
+                                                        <label htmlFor="img-1" style={{ fontSize: '0.55rem', fontWeight: '900', cursor: 'pointer', color: 'var(--color-primary)', textDecoration: 'underline' }}>Principal</label>
                                                     </div>
                                                 </div>
-                                                {/* Image 2 */}
-                                                <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center', background: '#fff', padding: '0.5rem', borderRadius: '12px', border: '1px solid #eee' }}>
-                                                    <div style={{ width: '50px', height: '50px', borderRadius: '8px', border: '1px dashed #cbd5e1', overflow: 'hidden', background: '#f8f9fa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', background: '#fff', padding: '0.5rem', borderRadius: '12px', border: '1px solid #eee' }}>
+                                                    <div style={{ width: '40px', height: '40px', borderRadius: '8px', border: '1px dashed #cbd5e1', overflow: 'hidden', background: '#f8f9fa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                                         {previewUrl2 || formData.image_url_2 ? <img src={previewUrl2 || formData.image_url_2} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Image size={18} color="#94a3b8" />}
                                                     </div>
                                                     <div style={{ flex: 1 }}>
                                                         <input type="file" accept="image/*" onChange={handleFileChange2} style={{ display: 'none' }} id="img-2" />
-                                                        <label htmlFor="img-2" style={{ fontSize: '0.6rem', fontWeight: 'bold', cursor: 'pointer', color: '#475569', textDecoration: 'underline' }}>Secundaria</label>
+                                                        <label htmlFor="img-2" style={{ fontSize: '0.55rem', fontWeight: '900', cursor: 'pointer', color: 'var(--color-primary)', textDecoration: 'underline' }}>Secundaria</label>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
-
                                     </div>
                                 )}
 
-                                <button type="submit" disabled={isSaving} style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', padding: '1rem', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' }}>{isSaving ? 'Guardando...' : editingProduct ? 'Actualizar Producto' : 'Guardar SKU'}</button>
+                                <button type="submit" disabled={isSaving} style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', padding: '1.2rem', borderRadius: '16px', fontWeight: '900', cursor: 'pointer', marginTop: '1rem', transition: 'all 0.3s' }}>
+                                    {isSaving ? 'Guardando...' : editingProduct ? 'ACTUALIZAR PRODUCTO' : 'REGISTRAR NUEVO SKU'}
+                                </button>
                             </form>
                         </div>
                     </div>

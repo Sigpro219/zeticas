@@ -8,7 +8,7 @@ import CryptoJS from 'crypto-js';
 
 const Checkout = () => {
     const { cart, cartTotal, clearCart } = useCart();
-    const { addOrder, addClient, clients, siteContent } = useBusiness();
+    const { addOrder, addClient, clients, siteContent, saveWebCheckout, getWebCheckout, updateWebCheckoutStatus } = useBusiness();
     const navigate = useNavigate();
     const [step, setStep] = useState(1); // 1: Info, 2: Payment, 3: Success
     const [formData, setFormData] = useState({
@@ -76,8 +76,9 @@ const Checkout = () => {
     const shippingCost = getShippingCost();
     const finalTotal = cartTotal + shippingCost;
     const missingForFree = Math.max(0, shipSettings.threshold_free - cartTotal);
+    const isFormValid = formData.nombreCompleto.trim() && formData.direccion.trim() && formData.ciudad.trim() && formData.telefono.trim();
 
-    const handleBoldCheckout = () => {
+    const handleBoldCheckout = async () => {
         const isSandbox = shipSettings.bold_mode === 'sandbox';
         const apiKey = isSandbox ? shipSettings.bold_sandbox_identity : shipSettings.bold_prod_identity;
         const secretKey = isSandbox ? shipSettings.bold_sandbox_secret : shipSettings.bold_prod_secret;
@@ -99,6 +100,33 @@ const Checkout = () => {
 
         try {
             if (window.BoldCheckout) {
+                // 1. Save data to Firestore Draft first
+                const draftData = {
+                    formData,
+                    cart: cart.map(p => ({
+                        id: p.id,
+                        nombre: p.nombre,
+                        quantity: p.quantity,
+                        precio: p.precio
+                    })),
+                    totals: {
+                        subtotal: cartTotal,
+                        shipping: shippingCost,
+                        total: finalTotal
+                    },
+                    orderId: orderId
+                };
+
+                const resDraft = await saveWebCheckout(draftData);
+                const checkoutId = resDraft.success ? resDraft.id : null;
+
+                const finalRedirectionUrl = window.location.origin;
+                const signaturePayload = `${orderId}${amountStr}${currency}${secretKey}`;
+                console.log("Bold Integrity Debug (v5 - Origin Only):", {
+                    payload: `${orderId}${amountStr}${currency}${secretKey ? "PRESENT" : "MISSING"}`,
+                    redirectionUrl: finalRedirectionUrl
+                });
+
                 const checkout = new window.BoldCheckout({
                     orderId: orderId,
                     currency: currency,
@@ -106,10 +134,11 @@ const Checkout = () => {
                     apiKey: apiKey,
                     integritySignature: integritySignature,
                     description: `Compra Zeticas - ${formData.nombreCompleto}`,
-                    redirectionUrl: window.location.origin + '/checkout?status=success'
+                    redirectionUrl: finalRedirectionUrl
                 });
-                // Save formData temporarily since Bold redirect will refresh the page
-                localStorage.setItem('zeticas_pending_checkout', JSON.stringify(formData));
+
+                // Fail-safe backup in localStorage including the checkoutId
+                localStorage.setItem('zeticas_pending_checkout', JSON.stringify({ ...formData, checkoutId }));
                 checkout.open();
             } else {
                 alert("Error: La librería de Bold no ha cargado correctamente. Recarga la página.");
@@ -120,25 +149,59 @@ const Checkout = () => {
         }
     };
 
-    const handleSuccess = async () => {
-        // Recover formData if lost after redirect
+    const handleSuccess = async (chkID = null) => {
+        let draft = null;
+
+        // 1. Try to get from Firestore Draft (Most reliable)
+        if (chkID) {
+            const resDraft = await getWebCheckout(chkID);
+            if (resDraft.success) {
+                draft = resDraft.data;
+                console.log("Draft recovered from Firestore:", draft);
+                // Mark as paid in web_checkouts collection
+                await updateWebCheckoutStatus(chkID, 'paid');
+            }
+        }
+
+        // 2. Fallback to LocalStorage + State
         let dataToUse = formData;
         const savedData = localStorage.getItem('zeticas_pending_checkout');
-        if ((!dataToUse.nombreCompleto || dataToUse.nombreCompleto === '') && savedData) {
-            dataToUse = JSON.parse(savedData);
+        const localDraft = savedData ? JSON.parse(savedData) : null;
+
+        if (draft) {
+            dataToUse = draft.formData;
+        } else if (localDraft) {
+            dataToUse = localDraft;
+            // If we don't have draft from DB but have localDraft with checkoutId, use that ID
+            if (!chkID && localDraft.checkoutId) {
+                console.log("Recovering checkoutId from localStorage...");
+                const resDraft = await getWebCheckout(localDraft.checkoutId);
+                if (resDraft.success) {
+                    draft = resDraft.data;
+                    dataToUse = draft.formData;
+                    // Also mark as paid if we just found it
+                    await updateWebCheckoutStatus(localDraft.checkoutId, 'paid');
+                }
+            }
+        }
+
+        if (!dataToUse.nombreCompleto) {
+            console.error("Critical: No client data found in state, localStorage or Firestore.");
+            // Do not proceed without at least basic data
+            // return; 
         }
 
         const clientId = dataToUse.telefono || Date.now().toString();
         const clientData = {
-            name: dataToUse.nombreCompleto,
+            name: dataToUse.nombreCompleto || "Cliente Web",
             idType: 'CC',
             nit: clientId,
             source: 'Web',
-            address: dataToUse.direccion,
-            location: dataToUse.ciudad,
-            phone: dataToUse.telefono,
+            address: dataToUse.direccion || "",
+            location: dataToUse.ciudad || "",
+            phone: dataToUse.telefono || "",
             email: 'No registrado',
-            contactName: dataToUse.nombreCompleto,
+            contactName: dataToUse.nombreCompleto || "Cliente Web",
             contactRole: 'Comprador Web',
             type: 'Natural',
             subType: 'B2C',
@@ -159,24 +222,27 @@ const Checkout = () => {
             console.error("Error persisting web client:", err);
         }
 
+        const finalTotalToUse = draft ? draft.totals.total : finalTotal;
+        const cartToUse = draft ? draft.cart : cart;
+
         const newOrder = {
             order_number: `WEB-${Math.floor(1000 + Math.random() * 8999)}`,
-            client: dataToUse.nombreCompleto,
+            client: dataToUse.nombreCompleto || "Cliente Web",
             clientId: finalClientId,
-            amount: finalTotal,
-            total_amount: finalTotal,
+            amount: finalTotalToUse,
+            total_amount: finalTotalToUse,
             date: new Date().toISOString().split('T')[0],
             status: 'Pagado',
             paymentStatus: 'Pagado',
             source: 'Pagina WEB',
-            shipping_address: dataToUse.direccion,
-            shipping_city: dataToUse.ciudad,
-            shipping_phone: dataToUse.telefono,
-            items: cart.map(p => ({
+            shipping_address: dataToUse.direccion || "",
+            shipping_city: dataToUse.ciudad || "",
+            shipping_phone: dataToUse.telefono || "",
+            items: cartToUse.map(p => ({
                 id: p.id,
-                name: p.nombre,
+                name: p.nombre || p.name,
                 quantity: p.quantity,
-                price: p.precio
+                price: p.precio || p.price
             }))
         };
 
@@ -191,8 +257,18 @@ const Checkout = () => {
 
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
-        if (params.get('status') === 'success') {
-            handleSuccess();
+        const boldStatus = params.get('status');
+        const transactionId = params.get('id');
+        
+        // Listen for Bold's standard callback parameters or our own flag
+        if (boldStatus || transactionId) {
+            console.log("Detected return from Bold:", { status: boldStatus, id: transactionId });
+            if (boldStatus === 'approved' || boldStatus === 'successful' || boldStatus === 'success') {
+                const chkID = params.get('chkID'); 
+                handleSuccess(chkID);
+                // Clean URL to prevent re-processing
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
         }
     }, []);
 
@@ -313,11 +389,18 @@ const Checkout = () => {
                                     </div>
                                     <button
                                         type="button"
+                                        disabled={!isFormValid}
                                         onClick={() => setStep(2)}
                                         className="btn btn-primary"
-                                        style={{ width: '100%', padding: '1.2rem' }}
+                                        style={{ 
+                                            width: '100%', 
+                                            padding: '1.2rem',
+                                            opacity: isFormValid ? 1 : 0.4,
+                                            cursor: isFormValid ? 'pointer' : 'not-allowed',
+                                            filter: isFormValid ? 'none' : 'grayscale(1)'
+                                        }}
                                     >
-                                        CONTINUAR AL PAGO
+                                        {isFormValid ? 'CONTINUAR AL PAGO' : 'COMPLETA LOS DATOS PARA PAGAR'}
                                     </button>
                                 </div>
                             ) : (
