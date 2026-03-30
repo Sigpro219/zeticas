@@ -6,7 +6,7 @@ const PhilosophySection = () => {
     
     return (
         <section className="philosophy-section" style={{ 
-            padding: isMobile ? '6rem 0' : '10.8rem 0',
+            padding: isMobile ? '4rem 0' : '6rem 0',
             backgroundColor: '#ffffff', // Clean white background
             position: 'relative',
             overflow: 'hidden'

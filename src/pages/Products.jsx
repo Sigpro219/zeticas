@@ -6,7 +6,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../lib/firebase';
 
 const Products = () => {
-    const { items, refreshData, loading, recalculatePTCosts, addItem, updateItem, deleteItem } = useBusiness();
+    const { items, refreshData, loading, recalculatePTCosts, addItem, updateItem, deleteItem, units } = useBusiness();
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('Todos');
     const [selectedLineFilter, setSelectedLineFilter] = useState('Todos');
@@ -51,6 +51,7 @@ const Products = () => {
         benefits: '',
         image_url: '',
         image_url_2: '',
+        batch_size: 1,  // Tamaño del lote de producción (frascos por batch)
         published: true // Default to true for new PT products
     });
 
@@ -86,9 +87,13 @@ const Products = () => {
 
     const finalUnitOptions = useMemo(() => {
         const set = new Set(unitOptions);
+        // Incluir unidades guardadas en Firestore (colección 'units')
+        units.forEach(u => { if (u.name) set.add(u.name.toLowerCase().trim()); });
+        // Asegurar que el valor actual del form siempre esté disponible
         if (formData.unit_measure) set.add(formData.unit_measure);
-        return Array.from(set);
-    }, [unitOptions, formData.unit_measure]);
+        if (formData.purchase_unit) set.add(formData.purchase_unit);
+        return Array.from(set).sort();
+    }, [unitOptions, units, formData.unit_measure, formData.purchase_unit]);
 
     const productsList = items.map(i => ({
         id: i.id,
@@ -107,6 +112,7 @@ const Products = () => {
         image_url_2: i.image_url_2 || '',
         description: i.description || '',
         benefits: i.benefits || '',
+        batch_size: i.batch_size || 1,   // ← tamaño del lote de producción
         published: i.published !== undefined ? i.published : true
     }));
 
@@ -137,7 +143,7 @@ const Products = () => {
         } else {
             setEditingProduct(null);
             setFormData({ 
-                sku: '', name: '', category: 'Producto Terminado', product_type: 'Sal', price: '', cost: '', stock: '0', unit_measure: 'unidad', purchase_unit: 'unidad', type: 'PT', barcode_text: '', published: true
+                sku: '', name: '', category: 'Producto Terminado', product_type: 'Sal', price: '', cost: '', stock: '0', unit_measure: 'unidad', purchase_unit: 'unidad', type: 'PT', barcode_text: '', batch_size: 1, published: true
             });
         }
         setSelectedFile(null);
@@ -188,14 +194,18 @@ const Products = () => {
                 image_url_2: imageUrl2,
                 description: formData.description || '',
                 benefits: formData.benefits || '',
+                // Firestore no acepta undefined — solo incluir batch_size en Producto Terminado
+                ...(formData.category === 'Producto Terminado' && { batch_size: parseInt(formData.batch_size) || 1 }),
                 published: formData.published !== undefined ? formData.published : true
             };
 
 
             if (editingProduct) {
-                await updateItem(editingProduct.id, productData);
+                const result = await updateItem(editingProduct.id, productData);
+                if (!result?.success) throw new Error(result?.error || 'Error al actualizar el producto');
             } else {
-                await addItem(productData);
+                const result = await addItem(productData);
+                if (!result?.success) throw new Error(result?.error || 'Error al crear el producto');
             }
 
             if (productData.type === 'MP') {
@@ -564,6 +574,24 @@ const Products = () => {
                                 {/* 6. Campos Pro (Producto Terminado) */}
                                 {formData.category === 'Producto Terminado' && (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+
+                                        {/* TAMAÑO DEL LOTE */}
+                                        <div style={{ background: '#f0fdf4', padding: '1rem', borderRadius: '16px', border: '1px solid #bbf7d0' }}>
+                                            <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#166534', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                                🧴 Tamaño del Lote (frascos / batch)
+                                            </label>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    value={formData.batch_size}
+                                                    onChange={(e) => setFormData({ ...formData, batch_size: e.target.value })}
+                                                    style={{ width: '100px', padding: '0.8rem', borderRadius: '12px', border: '2px solid #16a34a', fontWeight: '900', fontSize: '1.1rem', textAlign: 'center', outline: 'none', color: '#166534' }}
+                                                />
+                                                <span style={{ fontSize: '0.8rem', color: '#64748b' }}>unidades producidas por lote de producción</span>
+                                            </div>
+                                        </div>
+
                                         <div>
                                             <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>DESCRIPCIÓN COMERCIAL (TIENDA)</label>
                                             <textarea 

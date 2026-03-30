@@ -329,7 +329,17 @@ const Checkout = () => {
                         </div>
                     )}
 
-                    <button onClick={() => navigate('/')} className="btn btn-primary" style={{ padding: '1.2rem 3rem' }}>
+                    <button 
+                        onClick={() => navigate('/')} 
+                        className="btn btn-primary" 
+                        style={{ 
+                            padding: '1.2rem 3rem', 
+                            display: 'inline-flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center',
+                            margin: '0 auto' 
+                        }}
+                    >
                         Volver al Inicio
                     </button>
                     <p style={{ marginTop: '2rem', fontSize: '0.75rem', color: '#94a3b8', fontWeight: 'bold' }}>

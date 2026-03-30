@@ -145,7 +145,15 @@ const Production = () => {
                 ? (product.initial || 0) + (product.purchases || 0) - (product.sales || 0)
                 : 0;
             const safetyStock = product?.safety || 0;
-            const calculatedQty = Math.max(0, group.totalRequested - inventoryPT + safetyStock);
+
+            // ── MRP por lotes mínimos ────────────────────────────────
+            const batchSize = product?.batch_size || 1;
+            const netDemand = Math.max(0, group.totalRequested - inventoryPT + safetyStock);
+            const batchesNeeded = netDemand > 0 ? Math.ceil(netDemand / batchSize) : 0;
+            const calculatedQty = batchesNeeded * batchSize;  // siempre múltiplo del lote
+            const leftoverToInventory = calculatedQty > 0 ? (inventoryPT + calculatedQty - group.totalRequested) : 0;
+            // ────────────────────────────────────────────────────────
+
             const settings = odpSettings[group.sku] || {};
 
             const finalQty = settings.customQty !== undefined ? settings.customQty : calculatedQty;
@@ -175,6 +183,9 @@ const Production = () => {
                 odpId: settings.odpId || `ODP-${(index + 1).toString().padStart(3, '0')}`,
                 inventoryPT,
                 safetyStock,
+                batchSize,
+                batchesNeeded,
+                leftoverToInventory,
                 calculatedQty,
                 finalQty,
                 settings,
@@ -182,7 +193,9 @@ const Production = () => {
                 efficiency,
                 waste,
                 waste_percent: waste_percent || '0.0',
-                calcBreakdown: !product ? 'No encontrado' : `Req:${group.totalRequested} - Inv:${inventoryPT} + Min:${safetyStock} = ${calculatedQty}`
+                calcBreakdown: !product
+                    ? 'No encontrado'
+                    : `Req:${group.totalRequested} - Inv:${inventoryPT} = ${netDemand} neto | ${batchesNeeded} lote(s) × ${batchSize} = ${calculatedQty} uds | Sobrante: ${leftoverToInventory}`
             };
         });
     }, [pendingOrders, items, odpSettings]);
@@ -279,9 +292,14 @@ const Production = () => {
             const recipeList = recipes[sku] || [];
             const odp = odpQueue.find(o => o.sku === sku);
             if (recipeList.length > 0 && odp) {
+                // ── Cálculo MRP por lotes mínimos ──────────────────
+                const product = items.find(i => i.name === sku);
+                const batchSize = product?.batch_size || recipeList[0]?.yield_quantity || 1;
+                const batchesNeeded = batchSize > 0 ? Math.ceil(Number(odp.finalQty) / batchSize) : Number(odp.finalQty);
+                // ────────────────────────────────────────────────────
                 const materialsWithQty = recipeList.map(r => ({
                     ...r,
-                    qtyToConsume: Number(r.qty) * Number(odp.finalQty)
+                    qtyToConsume: Number(r.qty) * batchesNeeded  // qty por lote × número de lotes
                 }));
                 setMpConfModal({ show: true, odp, materials: materialsWithQty });
                 return; // Stop here until confirmed

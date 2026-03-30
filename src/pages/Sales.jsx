@@ -51,11 +51,13 @@ const Orders = ({ orders }) => {
     const [isDeleting, setIsDeleting] = useState(false);
     const [confirmModal, setConfirmModal] = useState({
         show: false,
-        type: 'single', // 'single', 'bulk', 'viewed', 'item'
+        step: 1,          // 1 = primera advertencia, 2 = confirmación final
+        type: 'single',   // 'single', 'bulk', 'viewed', 'item'
         target: null,
         title: '',
         message: ''
     });
+    const [confirmText, setConfirmText] = useState('');
 
     // Available Products (PT) - Sync with context items
     const availableProducts = useMemo(() => {
@@ -123,6 +125,7 @@ const Orders = ({ orders }) => {
     const handleDeleteOrder = (id) => {
         setConfirmModal({
             show: true,
+            step: 1,
             type: 'single',
             target: id,
             title: '¿Eliminar Pedido?',
@@ -134,6 +137,7 @@ const Orders = ({ orders }) => {
         if (!selectedOrders.length) return;
         setConfirmModal({
             show: true,
+            step: 1,
             type: 'bulk',
             target: selectedOrders,
             title: '¿Eliminar Pedidos Seleccionados?',
@@ -508,6 +512,7 @@ const Orders = ({ orders }) => {
     const handleDeleteViewedOrder = () => {
         setConfirmModal({
             show: true,
+            step: 1,
             type: 'viewed',
             target: viewingOrder.id,
             title: '¿Eliminar Pedido Actual?',
@@ -1678,14 +1683,49 @@ const Orders = ({ orders }) => {
 
             {/* Viewing/Editing Specific Order Modal */}
             {viewingOrder && (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '2rem' }}>
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '2rem' }}>
                     <div style={{ background: '#fff', width: '100%', maxWidth: '800px', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
                         <div style={{ padding: '1.5rem 2rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                                 <FileText size={24} color="var(--color-primary)" />
                                 <div>
                                     <h3 style={{ margin: 0, color: '#0f172a', fontSize: '1.25rem' }}>NOTA DE PEDIDO: {viewingOrder.id}</h3>
-                                    <div style={{ color: '#64748b', fontSize: '0.85rem' }}>Fecha: {viewingOrder.date} &nbsp; | &nbsp; Origen: {viewingOrder.source}</div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.3rem', flexWrap: 'wrap' }}>
+                                        <span style={{ color: '#64748b', fontSize: '0.85rem' }}>Fecha: {viewingOrder.date} &nbsp;|&nbsp; Origen: {viewingOrder.source}</span>
+                                        <select
+                                            value={viewingOrder.status || 'Pendiente'}
+                                            onChange={(e) => setViewingOrder({ ...viewingOrder, status: e.target.value })}
+                                            style={{
+                                                padding: '3px 10px',
+                                                borderRadius: '20px',
+                                                border: '1.5px solid',
+                                                fontSize: '0.75rem',
+                                                fontWeight: '800',
+                                                cursor: 'pointer',
+                                                outline: 'none',
+                                                appearance: 'none',
+                                                paddingRight: '24px',
+                                                backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%2364748b\' stroke-width=\'2\'%3E%3Cpath d=\'M6 9l6 6 6-6\'/%3E%3C/svg%3E")',
+                                                backgroundRepeat: 'no-repeat',
+                                                backgroundPosition: 'right 6px center',
+                                                ...(
+                                                    viewingOrder.status === 'Pagado' || viewingOrder.status === 'Entregado'
+                                                        ? { background: 'rgba(22,163,74,0.08)', color: '#16a34a', borderColor: '#16a34a' }
+                                                        : viewingOrder.status === 'Pendiente' || viewingOrder.status === 'PENDIENTE'
+                                                            ? { background: 'rgba(214,189,152,0.15)', color: '#B8A07E', borderColor: '#B8A07E' }
+                                                            : viewingOrder.status === 'En Producción'
+                                                                ? { background: 'rgba(234,88,12,0.08)', color: '#ea580c', borderColor: '#ea580c' }
+                                                                : viewingOrder.status === 'En Compras'
+                                                                    ? { background: 'rgba(37,99,235,0.08)', color: '#2563eb', borderColor: '#2563eb' }
+                                                                    : { background: 'rgba(2,83,87,0.05)', color: '#023636', borderColor: '#023636' }
+                                                )
+                                            }}
+                                        >
+                                            {['Pendiente', 'En Compras', 'En Producción', 'Listo para Despacho', 'Despachado', 'Pagado', 'Entregado', 'Cancelado'].map(s => (
+                                                <option key={s} value={s}>{s}</option>
+                                            ))}
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -1711,16 +1751,38 @@ const Orders = ({ orders }) => {
                                 </div>
                                 <div>
                                     <h4 style={{ margin: '0 0 1rem 0', color: '#334155', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Datos Cliente</h4>
-                                    <div style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '0.2rem' }}>{viewingOrder.client || 'Consumidor Final'}</div>
-                                    <div style={{ color: '#64748b', fontSize: '0.9rem' }}>
-                                        {((clients || []).find(c => c.id === viewingOrder.clientId || c.name === viewingOrder.client)?.nit) || 'NIT: Por confirmar'}
+                                    {/* Nombre */}
+                                    <div style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '0.4rem' }}>
+                                        {viewingOrder.client || 'Consumidor Final'}
                                     </div>
-                                    <div style={{ color: '#64748b', fontSize: '0.9rem' }}>
-                                        {viewingOrder.shipping_address || ((clients || []).find(c => c.id === viewingOrder.clientId || c.name === viewingOrder.client)?.address) || 'Dirección: Por confirmar'}
-                                    </div>
-                                    {viewingOrder.shipping_phone && (
-                                        <div style={{ color: '#64748b', fontSize: '0.9rem' }}>Tel: {viewingOrder.shipping_phone}</div>
+                                    {/* Identificación: NIT del cliente CRM, o ID de pedido web */}
+                                    {(() => {
+                                        const clientRecord = (clients || []).find(c => c.id === viewingOrder.clientId || c.name === viewingOrder.client);
+                                        const nit = clientRecord?.nit;
+                                        // Solo mostrar NIT si es un valor real (no un teléfono de 10 dígitos)
+                                        const isRealNit = nit && !/^\d{10}$/.test(nit.replace(/\D/g, ''));
+                                        if (isRealNit) return <div style={{ color: '#64748b', fontSize: '0.9rem' }}>{nit}</div>;
+                                        if (viewingOrder.customer_id) return <div style={{ color: '#64748b', fontSize: '0.9rem' }}>ID: {viewingOrder.customer_id}</div>;
+                                        return <div style={{ color: '#94a3b8', fontSize: '0.85rem', fontStyle: 'italic' }}>Identificación no registrada</div>;
+                                    })()}
+                                    {/* Dirección */}
+                                    {(viewingOrder.shipping_address || (clients || []).find(c => c.id === viewingOrder.clientId || c.name === viewingOrder.client)?.address) && (
+                                        <div style={{ color: '#64748b', fontSize: '0.9rem', marginTop: '0.2rem' }}>
+                                            {viewingOrder.shipping_address || (clients || []).find(c => c.id === viewingOrder.clientId || c.name === viewingOrder.client)?.address}
+                                        </div>
                                     )}
+                                    {/* Municipio / Ciudad */}
+                                    {(viewingOrder.shipping_city || (clients || []).find(c => c.id === viewingOrder.clientId || c.name === viewingOrder.client)?.city) && (
+                                        <div style={{ color: '#64748b', fontSize: '0.9rem' }}>
+                                            {viewingOrder.shipping_city || (clients || []).find(c => c.id === viewingOrder.clientId || c.name === viewingOrder.client)?.city}
+                                        </div>
+                                    )}
+                                    {/* Teléfono — una sola vez, priorizando shipping_phone */}
+                                    {(() => {
+                                        const phone = viewingOrder.shipping_phone
+                                            || (clients || []).find(c => c.id === viewingOrder.clientId || c.name === viewingOrder.client)?.phone;
+                                        return phone ? <div style={{ color: '#64748b', fontSize: '0.9rem', marginTop: '0.2rem' }}>Tel: {phone}</div> : null;
+                                    })()}
                                 </div>
                             </div>
 
@@ -1760,6 +1822,7 @@ const Orders = ({ orders }) => {
                                                     <button
                                                         onClick={() => setConfirmModal({
                                                             show: true,
+                                                            step: 1,
                                                             type: 'item',
                                                             target: { index },
                                                             title: '¿Quitar Producto?',
@@ -1860,34 +1923,85 @@ const Orders = ({ orders }) => {
                 </div>
             )}
 
-            {/* Custom Confirmation Modal */}
+            {/* Custom Confirmation Modal — 2 pasos */}
             {confirmModal.show && (
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '1rem' }}>
-                    <div style={{ background: '#fff', borderRadius: '24px', width: '100%', maxWidth: '450px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', animation: 'modalSlideUp 0.3s ease-out' }}>
-                        <div style={{ padding: '2rem', textAlign: 'center' }}>
-                            <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem', border: '1px solid #fee2e2' }}>
-                                <AlertTriangle size={32} color="#ef4444" />
-                            </div>
-                            <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1A3636', marginBottom: '0.8rem' }}>{confirmModal.title}</h3>
-                            <p style={{ fontSize: '0.95rem', color: '#64748b', lineHeight: '1.6', marginBottom: '2rem' }}>{confirmModal.message}</p>
+                    <div style={{ background: '#fff', borderRadius: '24px', width: '100%', maxWidth: '460px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', animation: 'modalSlideUp 0.3s ease-out' }}>
 
-                            <div style={{ display: 'flex', gap: '1rem' }}>
-                                <button
-                                    onClick={() => setConfirmModal({ ...confirmModal, show: false })}
-                                    disabled={isDeleting}
-                                    style={{ flex: 1, padding: '0.9rem', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontWeight: '700', cursor: 'pointer', transition: 'all 0.2s' }}
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    onClick={executeDeletion}
-                                    disabled={isDeleting}
-                                    style={{ flex: 1, padding: '0.9rem', borderRadius: '12px', border: 'none', background: '#ef4444', color: '#fff', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(239, 68, 68, 0.2)' }}
-                                >
-                                    {isDeleting ? 'Eliminando...' : 'Eliminar Ahora'}
-                                </button>
+                        {/* ── PASO 1: Advertencia inicial ── */}
+                        {confirmModal.step === 1 && (
+                            <div style={{ padding: '2rem', textAlign: 'center' }}>
+                                <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem', border: '1px solid #fed7aa' }}>
+                                    <AlertTriangle size={32} color="#ea580c" />
+                                </div>
+                                <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1A3636', marginBottom: '0.8rem' }}>{confirmModal.title}</h3>
+                                <p style={{ fontSize: '0.95rem', color: '#64748b', lineHeight: '1.6', marginBottom: '2rem' }}>{confirmModal.message}</p>
+                                <div style={{ display: 'flex', gap: '1rem' }}>
+                                    <button
+                                        onClick={() => { setConfirmModal({ ...confirmModal, show: false, step: 1 }); setConfirmText(''); }}
+                                        style={{ flex: 1, padding: '0.9rem', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontWeight: '700', cursor: 'pointer' }}
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        onClick={() => setConfirmModal({ ...confirmModal, step: 2 })}
+                                        style={{ flex: 1, padding: '0.9rem', borderRadius: '12px', border: 'none', background: '#ea580c', color: '#fff', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                                    >
+                                        Sí, continuar →
+                                    </button>
+                                </div>
                             </div>
-                        </div>
+                        )}
+
+                        {/* ── PASO 2: Confirmación final — escribir ELIMINAR ── */}
+                        {confirmModal.step === 2 && (
+                            <div style={{ padding: '2rem', textAlign: 'center' }}>
+                                <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.2rem', border: '2px solid #fca5a5' }}>
+                                    <AlertTriangle size={32} color="#ef4444" />
+                                </div>
+                                <h3 style={{ fontSize: '1.15rem', fontWeight: '900', color: '#ef4444', marginBottom: '0.5rem' }}>⚠️ Confirmación final</h3>
+                                <p style={{ fontSize: '0.9rem', color: '#64748b', lineHeight: '1.6', marginBottom: '1.5rem' }}>
+                                    Esta acción es <strong>permanente e irreversible</strong>.<br />
+                                    Para confirmar, escribe <strong style={{ color: '#ef4444' }}>ELIMINAR</strong> en el campo de abajo.
+                                </p>
+                                <input
+                                    type="text"
+                                    value={confirmText}
+                                    onChange={(e) => setConfirmText(e.target.value)}
+                                    placeholder="Escribe ELIMINAR para confirmar"
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.9rem 1rem',
+                                        borderRadius: '12px',
+                                        border: `2px solid ${confirmText === 'ELIMINAR' ? '#ef4444' : '#e2e8f0'}`,
+                                        fontSize: '0.95rem',
+                                        fontWeight: '700',
+                                        textAlign: 'center',
+                                        outline: 'none',
+                                        marginBottom: '1.5rem',
+                                        color: '#1e293b',
+                                        transition: 'border-color 0.2s',
+                                        letterSpacing: '1px'
+                                    }}
+                                    autoFocus
+                                />
+                                <div style={{ display: 'flex', gap: '1rem' }}>
+                                    <button
+                                        onClick={() => { setConfirmModal({ ...confirmModal, step: 1 }); setConfirmText(''); }}
+                                        style={{ flex: 1, padding: '0.9rem', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontWeight: '700', cursor: 'pointer' }}
+                                    >
+                                        ← Atrás
+                                    </button>
+                                    <button
+                                        onClick={() => { if (confirmText === 'ELIMINAR') { executeDeletion(); setConfirmText(''); } }}
+                                        disabled={confirmText !== 'ELIMINAR' || isDeleting}
+                                        style={{ flex: 1, padding: '0.9rem', borderRadius: '12px', border: 'none', background: confirmText === 'ELIMINAR' ? '#ef4444' : '#e2e8f0', color: confirmText === 'ELIMINAR' ? '#fff' : '#94a3b8', fontWeight: '700', cursor: confirmText === 'ELIMINAR' ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', transition: 'all 0.3s', boxShadow: confirmText === 'ELIMINAR' ? '0 4px 12px rgba(239,68,68,0.3)' : 'none' }}
+                                    >
+                                        {isDeleting ? 'Eliminando...' : '🗑 Eliminar definitivamente'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

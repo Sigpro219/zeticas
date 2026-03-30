@@ -14,8 +14,9 @@ const Recipes = () => {
         return pts.map(pt => ({
             id: pt.id,
             name: pt.name,
+            batch_size: pt.batch_size || 1,  // tamaño del lote desde el SKU
             yield: 'Batch Producción',
-            ingredients: recipes[pt.id] || [] // Context now groups by ID
+            ingredients: recipes[pt.id] || []
         }));
     }, [pts, recipes]);
 
@@ -73,17 +74,19 @@ const Recipes = () => {
     const handleOpenModal = (recipe = null) => {
         if (recipe) {
             setEditingRecipe(recipe);
+            // ← usar batch_size del producto (fuente de verdad), no yield_quantity del ingrediente
+            const pt = pts.find(p => p.id === recipe.id);
+            const batchSize = pt?.batch_size || recipe.batch_size || recipe.ingredients[0]?.yield_quantity || 1;
             setFormData({
                 id: recipe.id,
                 name: recipe.name,
                 yield: recipe.yield || 'Batch Producción',
-                yield_qty: recipe.ingredients[0]?.yield_quantity || 1,
+                yield_qty: batchSize,
                 ingredients: recipe.ingredients.length > 0
                     ? recipe.ingredients.map(i => ({ ...i }))
                     : [{ rm_id: '', name: '', qty: '', unit: '' }]
             });
         } else {
-            // New recipe usually tied to an existing PT that doesn't have one
             setEditingRecipe(null);
             setFormData({
                 id: '',
@@ -228,7 +231,19 @@ const Recipes = () => {
                                     <h3 style={{ fontSize: '1.15rem', fontWeight: '800', color: '#1A3636' }}>{recipe.name}</h3>
                                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
                                         <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{recipe.yield}</div>
-                                        <div style={{ fontSize: '0.75rem', background: '#f1f5f9', padding: '1px 6px', borderRadius: '4px', color: 'var(--color-primary)', fontWeight: 'bold' }}>Yield: {recipe.ingredients[0]?.yield_quantity || 1} Unidades</div>
+                                        <div style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            fontSize: '0.75rem',
+                                            background: '#dcfce7',
+                                            padding: '2px 8px',
+                                            borderRadius: '6px',
+                                            color: '#166534',
+                                            fontWeight: '800'
+                                        }}>
+                                            🧴 {recipe.batch_size} frascos / lote
+                                        </div>
                                     </div>
                                 </div>
                                 <Edit3 size={18} color="#94a3b8" style={{ cursor: 'pointer' }} onClick={() => handleOpenModal(recipe)} />
@@ -272,80 +287,104 @@ const Recipes = () => {
 
             {/* Modal de Gestión de BOM */}
             {isModalOpen && (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '1rem' }}>
                     <div style={{ background: '#fff', borderRadius: '24px', width: '100%', maxWidth: '700px', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
                         <div style={{ padding: '1.5rem 2rem', background: 'var(--color-primary)', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div>
                                 <h3 style={{ margin: 0, fontSize: '1.3rem', fontWeight: '800' }}>{editingRecipe ? 'Editar Receta' : 'Nueva Receta'}</h3>
-                                <p style={{ margin: '4px 0 0', opacity: 0.8, fontSize: '0.85rem' }}>{formData.name || 'Selecciona un producto terminado'}</p>
+                                <p style={{ margin: '4px 0 0', opacity: 0.95, fontSize: '1.1rem', fontWeight: '700' }}>{formData.name || 'Selecciona un producto terminado'}</p>
                             </div>
                             <X size={24} style={{ cursor: 'pointer' }} onClick={handleCloseModal} />
                         </div>
 
                         <div style={{ padding: '2rem', overflowY: 'auto', flex: 1 }}>
-                            <div style={{ marginBottom: '1.5rem' }}>
-                                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>PRODUCTO TERMINADO</label>
-                                <select
-                                    value={formData.id}
-                                    onChange={(e) => {
-                                        const selectedId = e.target.value;
-                                        const selectedName = e.target.options[e.target.selectedIndex].text.replace(' (Sin Receta) ⚠️', '');
-                                        setFormData({ ...formData, id: selectedId, name: selectedName });
-                                    }}
-                                    disabled={editingRecipe}
-                                    style={{ width: '100%', padding: '0.8rem', borderRadius: '10px', border: '1px solid #cbd5e1', outline: 'none', background: editingRecipe ? '#f8fafc' : '#fff' }}
-                                >
-                                    <option value="">Seleccionar producto...</option>
-                                    {recipesList.length > 0 ? (
-                                        recipesList.map(p => (
-                                            <option key={p.id} value={p.id}>
-                                                {p.name}{p.ingredients.length === 0 ? ' (Sin Receta) ⚠️' : ''}
-                                            </option>
-                                        ))
-                                    ) : (
-                                        <option value="" disabled>No existe en Módulo de Datos Maestros de Productos, Crealo primero</option>
-                                    )}
-                                </select>
 
-                                {/* Alerta de Receta Existente */}
-                                {!editingRecipe && formData.id && recipes[formData.id] && (
-                                    <div style={{ marginTop: '1rem', padding: '1rem', background: '#ecfdf5', borderRadius: '12px', border: '1px solid #a7f3d0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-                                            <AlertTriangle size={20} color="#059669" />
-                                            <div>
-                                                <p style={{ margin: 0, fontSize: '0.85rem', color: '#065f46', fontWeight: '700' }}>Este producto ya tiene una receta.</p>
-                                                <p style={{ margin: 0, fontSize: '0.75rem', color: '#047857' }}>No crees una nueva, edita la existente para evitar duplicados.</p>
+                            {/* Selector de producto — solo en modo NUEVA receta */}
+                            {!editingRecipe && (
+                                <div style={{ marginBottom: '1.5rem' }}>
+                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>PRODUCTO TERMINADO</label>
+                                    <select
+                                        value={formData.id}
+                                        onChange={(e) => {
+                                            const selectedId = e.target.value;
+                                            const selectedPT = pts.find(p => p.id === selectedId);
+                                            const selectedName = selectedPT?.name || e.target.options[e.target.selectedIndex].text.replace(' (Sin Receta) ⚠️', '');
+                                            setFormData({
+                                                ...formData,
+                                                id: selectedId,
+                                                name: selectedName,
+                                                yield_qty: selectedPT?.batch_size || 1
+                                            });
+                                        }}
+                                        style={{ width: '100%', padding: '0.8rem', borderRadius: '10px', border: '1px solid #cbd5e1', outline: 'none', background: '#fff' }}
+                                    >
+                                        <option value="">Seleccionar producto...</option>
+                                        {recipesList.length > 0 ? (
+                                            recipesList.map(p => (
+                                                <option key={p.id} value={p.id}>
+                                                    {p.name}{p.ingredients.length === 0 ? ' (Sin Receta) ⚠️' : ''}
+                                                </option>
+                                            ))
+                                        ) : (
+                                            <option value="" disabled>No existe en Módulo de Datos Maestros de Productos, Crealo primero</option>
+                                        )}
+                                    </select>
+
+                                    {/* Alerta de Receta Existente */}
+                                    {formData.id && recipes[formData.id] && (
+                                        <div style={{ marginTop: '1rem', padding: '1rem', background: '#ecfdf5', borderRadius: '12px', border: '1px solid #a7f3d0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                                                <AlertTriangle size={20} color="#059669" />
+                                                <div>
+                                                    <p style={{ margin: 0, fontSize: '0.85rem', color: '#065f46', fontWeight: '700' }}>Este producto ya tiene una receta.</p>
+                                                    <p style={{ margin: 0, fontSize: '0.75rem', color: '#047857' }}>No crees una nueva, edita la existente para evitar duplicados.</p>
+                                                </div>
                                             </div>
+                                            <button
+                                                onClick={() => handleOpenModal(recipesList.find(r => r.id === formData.id))}
+                                                style={{ padding: '0.4rem 0.8rem', background: '#059669', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
+                                            >
+                                                Cargar para Editar
+                                            </button>
                                         </div>
-                                        <button 
-                                            onClick={() => handleOpenModal(recipesList.find(r => r.id === formData.id))}
-                                            style={{ padding: '0.4rem 0.8rem', background: '#059669', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
-                                        >
-                                            Cargar para Editar
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-
-                            <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '1rem' }}>
-                                <div style={{ flex: 2 }}>
-                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>RENDIMIENTO BASE (NOMBRE)</label>
-                                    <input
-                                        type="text"
-                                        placeholder="Ej: Batch Producción"
-                                        value={formData.yield}
-                                        onChange={(e) => setFormData({ ...formData, yield: e.target.value })}
-                                        style={{ width: '100%', padding: '0.8rem', borderRadius: '10px', border: '1px solid #cbd5e1', outline: 'none' }}
-                                    />
+                                    )}
                                 </div>
-                                <div style={{ flex: 1 }}>
-                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>CANT. UNIDADES</label>
-                                    <input
-                                        type="number"
-                                        value={formData.yield_qty}
-                                        onChange={(e) => setFormData({ ...formData, yield_qty: e.target.value })}
-                                        style={{ width: '100%', padding: '0.8rem', borderRadius: '10px', border: '1px solid #cbd5e1', outline: 'none' }}
-                                    />
+                            )}
+
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '1.2rem',
+                                    padding: '0.9rem 1.2rem',
+                                    background: '#f0fdf4',
+                                    borderRadius: '12px',
+                                    border: '1px solid #bbf7d0'
+                                }}>
+                                    {/* Icono de lote */}
+                                    <div style={{
+                                        width: '40px', height: '40px', borderRadius: '10px',
+                                        background: '#dcfce7', display: 'flex', alignItems: 'center',
+                                        justifyContent: 'center', flexShrink: 0, fontSize: '1.2rem'
+                                    }}>
+                                        🧴
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ fontSize: '0.7rem', fontWeight: '900', color: '#166534', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>
+                                            Tamaño de Lote
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.4rem' }}>
+                                            <span style={{ fontSize: '1.6rem', fontWeight: '900', color: '#166534', lineHeight: 1 }}>
+                                                {formData.yield_qty || 1}
+                                            </span>
+                                            <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '600' }}>
+                                                frascos / lote de producción
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div style={{ fontSize: '0.7rem', color: '#64748b', textAlign: 'right', maxWidth: '140px', lineHeight: 1.4 }}>
+                                        🔒 Solo editable desde el formulario del <strong>SKU del producto</strong>
+                                    </div>
                                 </div>
                             </div>
 
