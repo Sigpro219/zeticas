@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useBusiness } from '../context/BusinessContext';
+import DocumentBuilder from '../components/DocumentBuilder';
 // supabase import removed
 import {
     ShoppingCart,
@@ -26,7 +27,7 @@ import {
 } from 'lucide-react';
 
 const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, providers }) => {
-    const { setOrders, banks, updateBankBalance, recalculatePTCosts, receivePurchase, payPurchase, ownCompany } = useBusiness();
+    const { setOrders, banks, updateBankBalance, recalculatePTCosts, receivePurchase, payPurchase, ownCompany, addPurchase, refreshData } = useBusiness();
     // Local State for BOM Explosion & OC Generation
     const [viewingOC, setViewingOC] = useState(null); // Modal state for OC
     const [invEntryOC, setInvEntryOC] = useState(null);
@@ -37,6 +38,81 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
     const [filterType, setFilterType] = useState('month');
     const [customRange, setCustomRange] = useState({ from: '', to: '' });
     const [searchTerm, setSearchTerm] = useState('');
+    const [isCreatingManualOC, setIsCreatingManualOC] = useState(false);
+    const [manualOCData, setManualOCData] = useState({
+        providerId: '',
+        items: [],
+        date: new Date().toISOString().split('T')[0]
+    });
+    const [newItem, setNewItem] = useState({ id: '', quantity: 1, unitCost: 0 });
+
+    const handleAddManualItem = () => {
+        const material = items.find(i => i.id === newItem.id);
+        if (!material) return;
+
+        const existing = manualOCData.items.find(i => i.id === material.id);
+        if (existing) {
+            setManualOCData({
+                ...manualOCData,
+                items: manualOCData.items.map(i => i.id === material.id ? { ...i, quantity: i.quantity + newItem.quantity } : i)
+            });
+        } else {
+            setManualOCData({
+                ...manualOCData,
+                items: [...manualOCData.items, {
+                    id: material.id,
+                    name: material.name,
+                    quantity: newItem.quantity,
+                    unit: material.purchase_unit || material.unit_measure || material.unit || 'und',
+                    unitCost: newItem.unitCost || material.avgCost || 0
+                }]
+            });
+        }
+        setNewItem({ id: '', quantity: 1, unitCost: 0 });
+    };
+
+    const handleSaveManualOC = async () => {
+        if (!manualOCData.providerId || manualOCData.items.length === 0) {
+            alert("Por favor selecciona un proveedor y añade al menos un material.");
+            return;
+        }
+
+        const provider = providers.find(p => p.id === manualOCData.providerId);
+        const subtotal = manualOCData.items.reduce((sum, i) => sum + (i.quantity * i.unitCost), 0);
+        const iva = subtotal * 0.19;
+        const total = subtotal + iva;
+
+        const finalOC = {
+            id: `OC-MANUAL-${Math.floor(1000 + Math.random() * 9000)}`,
+            provider_id: provider.id,
+            provider_name: provider.name,
+            provider_phone: provider.phone || '',
+            provider_email: provider.email || '',
+            status: 'Enviada',
+            payment_status: 'Pendiente',
+            total_amount: total,
+            order_date: manualOCData.date,
+            related_orders: [],
+            items: manualOCData.items.map(i => ({
+                id: i.id,
+                name: i.name,
+                quantity: i.quantity,
+                unit_cost: i.unitCost,
+                unit: i.unit,
+                total_cost: Number(i.unitCost) * Number(i.quantity)
+            }))
+        };
+
+        const res = await addPurchase(finalOC);
+        if (res.success) {
+            alert("Orden de Compra manual creada con éxito.");
+            setIsCreatingManualOC(false);
+            setManualOCData({ providerId: '', items: [], date: new Date().toISOString().split('T')[0] });
+            refreshData();
+        } else {
+            alert("Error al guardar la orden de compra.");
+        }
+    };
 
     // Filtering logic for Purchase Orders
     const filteredPurchaseOrders = useMemo(() => {
@@ -520,36 +596,60 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                         )}
                     </div>
 
-                    <div style={{ flex: 1, position: 'relative', minWidth: '300px' }}>
-                        <Search size={20} style={{ position: 'absolute', left: '1.2rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                        <input
-                            type="text"
-                            placeholder="Busca por Proveedor, OC, Fecha, Valor o Pedido..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
+                    <div style={{ flex: 1, position: 'relative', minWidth: '300px', display: 'flex', gap: '1rem' }}>
+                        <div style={{ position: 'relative', flex: 1 }}>
+                            <Search size={20} style={{ position: 'absolute', left: '1.2rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                            <input
+                                type="text"
+                                placeholder="Busca por Proveedor, OC, Fecha, Valor o Pedido..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                style={{
+                                    width: '100%',
+                                    padding: '1rem 3.5rem 1rem 3.5rem',
+                                    borderRadius: '16px',
+                                    border: '1px solid #f1f5f9',
+                                    outline: 'none',
+                                    fontSize: '0.95rem',
+                                    fontWeight: '600',
+                                    background: '#fcfcfc',
+                                    color: '#1e293b',
+                                    transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
+                                }}
+                                onFocus={(e) => { e.target.style.borderColor = deepTeal; e.target.style.boxShadow = `0 12px 40px ${deepTeal}10`; }}
+                                onBlur={(e) => { e.target.style.borderColor = '#f1f5f9'; e.target.style.boxShadow = 'none'; }}
+                            />
+                            {searchTerm && (
+                                <button 
+                                    onClick={() => setSearchTerm('')}
+                                    style={{ position: 'absolute', right: '1.2rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center' }}
+                                >
+                                    <X size={18} />
+                                </button>
+                            )}
+                        </div>
+                        <button
+                            onClick={() => setIsCreatingManualOC(true)}
                             style={{
-                                width: '100%',
-                                padding: '1rem 3.5rem 1rem 3.5rem',
+                                background: deepTeal,
+                                color: 'white',
+                                padding: '0 1.5rem',
                                 borderRadius: '16px',
-                                border: '1px solid #f1f5f9',
-                                outline: 'none',
-                                fontSize: '0.95rem',
-                                fontWeight: '600',
-                                background: '#fcfcfc',
-                                color: '#1e293b',
-                                transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
+                                border: 'none',
+                                fontWeight: 'bold',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                boxShadow: '0 4px 12px rgba(2, 83, 87, 0.2)',
+                                transition: 'all 0.3s',
+                                whiteSpace: 'nowrap'
                             }}
-                            onFocus={(e) => { e.target.style.borderColor = deepTeal; e.target.style.boxShadow = `0 12px 40px ${deepTeal}10`; }}
-                            onBlur={(e) => { e.target.style.borderColor = '#f1f5f9'; e.target.style.boxShadow = 'none'; }}
-                        />
-                        {searchTerm && (
-                            <button 
-                                onClick={() => setSearchTerm('')}
-                                style={{ position: 'absolute', right: '1.2rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center' }}
-                            >
-                                <X size={18} />
-                            </button>
-                        )}
+                            onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                            onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                        >
+                            <Plus size={18} /> Orden de Compra
+                        </button>
                     </div>
                 </div>
             </div>
@@ -989,7 +1089,211 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                     </div>
                 </div>
             )}
-            {/* Inventory Entry Modal (MP & Insumos) */}
+            {/* MANUAL OC CREATION MODAL */}
+            {isCreatingManualOC && (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(12px)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4000,
+                    padding: '2rem'
+                }}>
+                    <div style={{ 
+                        background: '#f8fafc', width: '100%', maxWidth: '1000px', maxHeight: '90vh', 
+                        borderRadius: '32px', boxShadow: '0 50px 100px -20px rgba(0,0,0,0.5)', 
+                        display: 'flex', flexDirection: 'column', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)'
+                    }}>
+                        {/* Header */}
+                        <div style={{ padding: '1.5rem 2.5rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff' }}>
+                            <div>
+                                <h3 style={{ margin: 0, fontSize: '1.5rem', color: deepTeal, display: 'flex', alignItems: 'center', gap: '0.8rem', fontWeight: '900' }}>
+                                    <ShoppingCart size={28} /> Nueva Orden de Compra Manual
+                                </h3>
+                                <p style={{ margin: '0.3rem 0 0', fontSize: '0.85rem', color: '#64748b' }}>Crea una OC directamente sin explosionar pedidos.</p>
+                            </div>
+                            <button onClick={() => setIsCreatingManualOC(false)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', padding: '0.6rem', cursor: 'pointer', color: '#64748b', display: 'flex' }}><X size={24} /></button>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(350px, 1fr) 1.2fr', flex: 1, overflow: 'hidden' }}>
+                            {/* Left Panel: Selection & Inputs */}
+                            <div style={{ padding: '2rem', borderRight: '1px solid #e2e8f0', overflowY: 'auto', background: '#fff' }}>
+                                
+                                <div style={{ marginBottom: '1.5rem' }}>
+                                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.6rem', letterSpacing: '1px' }}>1. Seleccionar Proveedor</label>
+                                    <select
+                                        value={manualOCData.providerId}
+                                        onChange={(e) => setManualOCData({ ...manualOCData, providerId: e.target.value })}
+                                        style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #f1f5f9', background: '#f8fafc', fontSize: '0.95rem', fontWeight: '700', color: deepTeal, outline: 'none' }}
+                                    >
+                                        <option value="">Buscar proveedor...</option>
+                                        {providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                    </select>
+                                </div>
+
+                                <div style={{ marginBottom: '2rem' }}>
+                                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.6rem', letterSpacing: '1px' }}>2. Agregar Materias Primas / Insumos</label>
+                                    <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '24px', border: '1px dashed #cbd5e1' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                            <select
+                                                value={newItem.id}
+                                                onChange={(e) => {
+                                                    const mat = items.find(i => i.id === e.target.value);
+                                                    setNewItem({ ...newItem, id: e.target.value, unitCost: mat?.avgCost || 0 });
+                                                }}
+                                                style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '0.9rem', fontWeight: '600' }}
+                                            >
+                                                <option value="">Seleccionar material...</option>
+                                                {items.filter(i => i.type !== 'product' && i.type !== 'PT').map(i => (
+                                                    <option key={i.id} value={i.id}>{i.name} ({i.purchase_unit || i.unit || 'und'})</option>
+                                                ))}
+                                            </select>
+                                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                                <div style={{ flex: 1 }}>
+                                                    <span style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: '800' }}>CANTIDAD</span>
+                                                    <input 
+                                                        type="number" 
+                                                        value={newItem.quantity}
+                                                        onChange={(e) => setNewItem({ ...newItem, quantity: parseFloat(e.target.value) || 0 })}
+                                                        style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '1rem', fontWeight: '800', textAlign: 'center' }}
+                                                    />
+                                                </div>
+                                                <div style={{ flex: 1 }}>
+                                                    <span style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: '800' }}>COSTO UNIT ($)</span>
+                                                    <input 
+                                                        type="number" 
+                                                        value={newItem.unitCost}
+                                                        onChange={(e) => setNewItem({ ...newItem, unitCost: parseFloat(e.target.value) || 0 })}
+                                                        style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '1rem', fontWeight: '800', textAlign: 'right' }}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={handleAddManualItem}
+                                                disabled={!newItem.id || newItem.quantity <= 0}
+                                                style={{ 
+                                                    width: '100%', 
+                                                    padding: '1rem', 
+                                                    background: newItem.id ? deepTeal : '#f1f5f9', 
+                                                    color: newItem.id ? '#fff' : '#cbd5e1', 
+                                                    border: 'none', 
+                                                    borderRadius: '16px', 
+                                                    fontWeight: '900', 
+                                                    cursor: newItem.id ? 'pointer' : 'not-allowed',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    gap: '0.5rem',
+                                                    transition: 'all 0.3s'
+                                                }}
+                                            >
+                                                <Plus size={20} /> AGREGAR A LA LISTA
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Items List for Deletion */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                                    {manualOCData.items.map((item, idx) => (
+                                        <div key={idx} style={{ 
+                                            display: 'flex', 
+                                            justifyContent: 'space-between', 
+                                            alignItems: 'center', 
+                                            background: '#f8fafc', 
+                                            padding: '1rem 1.5rem', 
+                                            borderRadius: '16px',
+                                            border: '1px solid #f1f5f9'
+                                        }}>
+                                            <div>
+                                                <div style={{ fontWeight: '800', color: deepTeal, fontSize: '0.9rem' }}>{item.name}</div>
+                                                <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '600' }}>{item.quantity} {item.unit} x ${item.unitCost.toLocaleString()}</div>
+                                            </div>
+                                            <button 
+                                                onClick={() => setManualOCData({ ...manualOCData, items: manualOCData.items.filter((_, i) => i !== idx) })}
+                                                style={{ padding: '0.5rem', background: '#fef2f2', border: 'none', borderRadius: '8px', color: '#ef4444', cursor: 'pointer' }}
+                                            >
+                                                <X size={18} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Right Panel: Live Preview */}
+                            <div style={{ padding: '2rem', background: '#f1f5f9', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                                <div style={{ transform: 'scale(0.95)', transformOrigin: 'top center' }}>
+                                    <DocumentBuilder 
+                                        type="ORDEN DE COMPRA MANUAL"
+                                        docId="BORRADOR-AUTO"
+                                        date={manualOCData.date}
+                                        client={{
+                                             name: ownCompany.name,
+                                             detail1: ownCompany.name,
+                                             detail2: `NIT: ${ownCompany.nit}`,
+                                             address: ownCompany.address,
+                                             phone: ownCompany.phone
+                                        }}
+                                        shippingInfo={{
+                                             title: 'Lugar de Entrega',
+                                             location: ownCompany.name,
+                                             address: ownCompany.delivery_address || ownCompany.address
+                                        }}
+                                        provider={{
+                                             name: providers.find(p => p.id === manualOCData.providerId)?.name || 'Selecciona un proveedor',
+                                             nit: providers.find(p => p.id === manualOCData.providerId)?.nit || '',
+                                             phone: providers.find(p => p.id === manualOCData.providerId)?.phone || '',
+                                             email: providers.find(p => p.id === manualOCData.providerId)?.email || ''
+                                        }}
+                                        items={manualOCData.items.map(i => ({
+                                            name: i.name,
+                                            quantity: i.quantity,
+                                            unit: i.unit,
+                                            unitCost: i.unitCost,
+                                            totalCost: i.quantity * i.unitCost
+                                        }))}
+                                        totals={{
+                                            subtotal: manualOCData.items.reduce((s, i) => s + (i.quantity * i.unitCost), 0),
+                                            taxLabel: 'IVA (19%)',
+                                            taxValue: manualOCData.items.reduce((s, i) => s + (i.quantity * i.unitCost), 0) * 0.19,
+                                            total: manualOCData.items.reduce((s, i) => s + (i.quantity * i.unitCost), 0) * 1.19
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer Actions */}
+                        <div style={{ padding: '1.5rem 2.5rem', background: '#fff', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '1.5rem' }}>
+                            <button
+                                onClick={() => setIsCreatingManualOC(false)}
+                                style={{ padding: '1rem 2.5rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '16px', color: '#64748b', fontWeight: '900', fontSize: '0.9rem', cursor: 'pointer' }}
+                            >
+                                CANCELAR
+                            </button>
+                            <button
+                                onClick={handleSaveManualOC}
+                                disabled={manualOCData.items.length === 0 || !manualOCData.providerId}
+                                style={{ 
+                                    padding: '1rem 3rem', 
+                                    background: (manualOCData.items.length > 0 && manualOCData.providerId) ? '#16a34a' : '#f1f5f9', 
+                                    color: (manualOCData.items.length > 0 && manualOCData.providerId) ? '#fff' : '#cbd5e1', 
+                                    border: 'none', 
+                                    borderRadius: '16px', 
+                                    fontWeight: '900', 
+                                    fontSize: '0.9rem', 
+                                    cursor: (manualOCData.items.length > 0 && manualOCData.providerId) ? 'pointer' : 'not-allowed',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.8rem',
+                                    boxShadow: (manualOCData.items.length > 0 && manualOCData.providerId) ? '0 10px 30px rgba(22,163,74,0.3)' : 'none',
+                                    transition: 'all 0.3s'
+                                }}
+                            >
+                                <CheckCircle size={20} /> GUARDAR Y SINCRONIZAR OC
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             {invEntryOC && (
                 <div style={{
                     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,

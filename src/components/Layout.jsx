@@ -29,19 +29,27 @@ const ensureAbsoluteUrl = (url, type) => {
     return `https://${clean}`;
 };
 
-const UtilityBar = ({ isConsulting, isMobile, contact }) => (
+const UtilityBar = ({ isConsulting, isMobile, contact, scrollY }) => {
+    const threshold = 40;
+    const progress = Math.min(scrollY / threshold, 1);
+    const opacity = 1 - progress;
+    const height = 40 * (1 - progress);
+
+    return (
     <div style={{
         background: isConsulting ? '#f8f9fa' : 'var(--color-utility)',
         padding: isMobile ? '0 1.5rem' : '0 5%',
-        height: '40px',
-        display: 'flex',
+        height: `${height}px`,
+        opacity: opacity,
+        display: progress === 1 ? 'none' : 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         fontSize: '0.75rem',
         fontWeight: '600',
         color: deepTeal,
-        borderBottom: '1px solid rgba(2, 83, 87, 0.08)',
-        zIndex: 1100
+        borderBottom: progress === 1 ? 'none' : '1px solid rgba(2, 83, 87, 0.08)',
+        zIndex: 1100,
+        overflow: 'hidden'
     }}>
         <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '0.8rem' : '1.2rem' }}>
@@ -95,7 +103,8 @@ const UtilityBar = ({ isConsulting, isMobile, contact }) => (
             </div>
         </div>
     </div>
-);
+    );
+};
 
 const Navbar = ({ isConsulting, isMobile }) => {
     const { cartCount } = useCart();
@@ -335,7 +344,7 @@ const Navbar = ({ isConsulting, isMobile }) => {
 
 const Footer = ({ isConsulting, isMobile, contact }) => (
     <footer style={{ 
-        padding: isMobile ? '2.5rem 1.5rem' : '6rem 5%', 
+        padding: isMobile ? '2.5rem 1.5rem 1.5rem' : '6rem 5% 3rem', 
         backgroundColor: isConsulting ? institutionOcre : 'var(--color-primary)', 
         color: isConsulting ? deepTeal : '#fff',
         borderTop: isConsulting ? `1px solid rgba(2, 83, 87, 0.1)` : 'none'
@@ -381,7 +390,7 @@ const Footer = ({ isConsulting, isMobile, contact }) => (
                 </div>
             </div>
         </div>
-        <div style={{ borderTop: isConsulting ? `1px solid rgba(2, 83, 87, 0.1)` : '1px solid rgba(255,255,255,0.1)', marginTop: isMobile ? '2rem' : '3rem', paddingTop: '1.5rem', textAlign: 'center' }}>
+        <div style={{ borderTop: isConsulting ? `1px solid rgba(2, 83, 87, 0.1)` : '1px solid rgba(255,255,255,0.1)', marginTop: isMobile ? '1.5rem' : '2.5rem', paddingTop: '1.2rem', textAlign: 'center' }}>
             <p style={{ fontSize: '0.75rem', color: isConsulting ? deepTeal : 'rgba(255,255,255,0.5)', opacity: 0.6 }}>© 2026 Zeticas. Sabana de Bogotá, Colombia.</p>
         </div>
     </footer>
@@ -392,8 +401,17 @@ export default function Layout({ children }) {
     const isConsulting = location.pathname.toLowerCase().includes('consultoria');
     const isGestion = location.pathname.toLowerCase().includes('gestion');
     const isMobile = useMediaQuery('(max-width: 992px)');
-    
     const { siteContent } = useBusiness();
+    const [scrollY, setScrollY] = useState(0);
+
+    useEffect(() => {
+        const handleScroll = () => {
+            setScrollY(window.scrollY);
+        };
+        window.addEventListener('scroll', handleScroll, { passive: true });
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
+
     const contact = siteContent?.web_shipping ? {
         instagram: siteContent.web_shipping.contact_instagram,
         email: siteContent.web_shipping.contact_email,
@@ -404,7 +422,7 @@ export default function Layout({ children }) {
     return (
         <div className="layout">
             <header style={{ position: 'fixed', top: 0, width: '100%', zIndex: 1200 }}>
-                {!isGestion && <UtilityBar isMobile={isMobile} isConsulting={isConsulting} contact={contact} />}
+                {!isGestion && <UtilityBar isMobile={isMobile} isConsulting={isConsulting} contact={contact} scrollY={scrollY} />}
                 <Navbar isMobile={isMobile} isConsulting={isConsulting} />
             </header>
             <main style={{ paddingTop: isGestion ? (isMobile ? '70px' : '85px') : (isMobile ? '110px' : '125px') }}>

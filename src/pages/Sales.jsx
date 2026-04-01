@@ -1684,6 +1684,7 @@ const Orders = ({ orders }) => {
                                     items={po.items.map(item => ({
                                         name: item.name,
                                         quantity: item.toBuy,
+                                        unit: item.unit,
                                         unitCost: item.purchasePrice,
                                         totalCost: item.toBuy * item.purchasePrice
                                     }))}
@@ -1705,6 +1706,16 @@ const Orders = ({ orders }) => {
                                             icon: <Mail size={18} />, 
                                             onClick: () => handleSendEmail(po), 
                                             background: '#1e293b' 
+                                        },
+                                        { 
+                                            label: 'Eliminar OC', 
+                                            icon: <Trash2 size={18} />, 
+                                            onClick: () => {
+                                                if (window.confirm('¿Estás seguro que quieres eliminar esta Orden de Compra de la previsualización?')) {
+                                                    setPoPreviewList(prev => prev.filter(p => p.id !== po.id));
+                                                }
+                                            }, 
+                                            background: '#ef4444' 
                                         }
                                     ]}
                                 />

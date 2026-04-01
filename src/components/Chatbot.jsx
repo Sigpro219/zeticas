@@ -3,13 +3,21 @@ import { useLocation } from 'react-router-dom';
 import { X, Send, User, Bot, ExternalLink, MessageCircle } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
 
-const WHATSAPP_NUMBER = '573166169353'; // Official Zeticas number
-
 const Chatbot = () => {
-    const { addLead } = useBusiness();
+    const { addLead, ownCompany } = useBusiness();
     const location = useLocation();
     const isGestion = location.pathname.includes('/gestion');
     const [isOpen, setIsOpen] = useState(false);
+
+    // Clean phone number: remove non-digits and ensure 57 prefix if it's a Colombian mobile
+    const getOfficialWhatsApp = () => {
+        let phone = ownCompany?.phone || '3144336525';
+        const digits = phone.replace(/\D/g, '');
+        if (digits.length === 10) return `57${digits}`;
+        return digits;
+    };
+
+    const WHATSAPP_NUMBER = getOfficialWhatsApp();
 
     const [step, setStep] = useState('CHOICE'); // Choice / B2B_FLOW / FAST_HELP
     const [subStep, setSubStep] = useState(0);
