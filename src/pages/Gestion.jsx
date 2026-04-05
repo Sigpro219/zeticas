@@ -56,6 +56,7 @@ import CRM from './CRM';
 import CMSContents from './CMSContents';
 import ShippingAdmin from './ShippingAdmin';
 import UsersAdmin from './UsersAdmin';
+import KanbanModal from '../components/KanbanModal';
 
 const allTabs = [
     'kanban', 'orders', 'purchases', 'shipping', 'cartera', 'expenses', 'reports',
@@ -79,6 +80,7 @@ const Gestion = () => {
 
     const isMobile = useMediaQuery('(max-width: 1024px)');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [isKanbanModalOpen, setIsKanbanModalOpen] = useState(false);
 
     let activeTab = tab || localStorage.getItem('zeticas_last_tab');
     if (!allTabs.includes(activeTab)) {
@@ -276,7 +278,10 @@ const Gestion = () => {
 
                     {/* Kanban as Second Priority */}
                     <button
-                        onClick={() => setActiveTab('kanban')}
+                        onClick={() => {
+                            setActiveTab('kanban');
+                            setIsKanbanModalOpen(true);
+                        }}
                         style={{
                             display: 'flex',
                             alignItems: 'center',
@@ -513,7 +518,13 @@ const Gestion = () => {
 
                 <div style={{ animation: 'fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1)' }}>
                     {activeTab === 'crm' && <CRM />}
-                    {activeTab === 'kanban' && <Kanban orders={orders} items={items} />}
+                    {activeTab === 'kanban' && (
+                        <Kanban 
+                            orders={orders} 
+                            items={items} 
+                            onOpenModal={() => setIsKanbanModalOpen(true)} 
+                        />
+                    )}
                     {activeTab === 'products' && <Products />}
                     {activeTab === 'recipes' && <Recipes />}
                     {activeTab === 'suppliers' && <Suppliers items={items} setItems={setItems} />}
@@ -532,6 +543,13 @@ const Gestion = () => {
                     {activeTab === 'web_shipping' && <ShippingAdmin />}
                     {activeTab === 'users_admin' && <UsersAdmin />}
                 </div>
+
+                <KanbanModal 
+                    isOpen={isKanbanModalOpen} 
+                    onClose={() => setIsKanbanModalOpen(false)} 
+                    orders={orders}
+                    items={items}
+                />
             </main>
 
             <style>{`
