@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { db } from '../lib/firebase';
-import { collection, query, orderBy, onSnapshot, doc, getDocs, updateDoc, deleteDoc, addDoc, where, increment, setDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, getDocs, getDoc, updateDoc, deleteDoc, addDoc, where, increment, setDoc } from 'firebase/firestore';
 import { products as masterProducts } from '../data/products';
 import buildInfo from '../data/build_info.json';
 
@@ -47,7 +47,7 @@ export const CAMPAIGN_PRESETS = {
     }
 };
 
-const BusinessContext = createContext();
+const BusinessContext = createContext({});
 
 export const BusinessProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
@@ -81,6 +81,57 @@ export const BusinessProvider = ({ children }) => {
         }));
     }, []);
 
+    const updateBankBalance = useCallback(async (bankId, amount, type) => {
+        try {
+            const bank = banks.find(b => b.id === bankId);
+            if (!bank) throw new Error("Banco no encontrado");
+            const newBalance = type === 'income' ? (bank.balance || 0) + amount : (bank.balance || 0) - amount;
+            await updateDoc(doc(db, 'banks', bankId), { balance: newBalance });
+            return { success: true };
+        } catch (err) {
+            console.error("Error updating bank balance:", err);
+            return { success: false, error: err.message };
+        }
+    }, [banks]);
+
+    /**
+     * Universal Unit Converter
+     * Handles: 
+     * 1. Standard SI (kg <-> gr, lt <-> ml)
+     * 2. Custom Conteo -> Weight/Vol (atado -> gr, caja -> kg) based on saved matrix
+     */
+    const convertUnit = useCallback((value, from, to) => {
+        if (!value || from === to) return Number(value);
+
+        // 1. Check Custom Matrix (Conteo -> Weight/Vol)
+        if (unitConversions[from] && unitConversions[from][to]) {
+            return Number(value) * Number(unitConversions[from][to]);
+        }
+
+        // 2. Automatic SI Multipliers (Standardized Ratios)
+        const siFactors = {
+            'kg_gr': 1000, 'gr_kg': 0.001,
+            'lt_ml': 1000, 'ml_lt': 0.001,
+            'lb_gr': 500, 'gr_lb': 1 / 500,
+            'lb_kg': 0.5, 'kg_lb': 2
+        };
+
+        const key = `${from}_${to}`;
+        if (siFactors[key]) {
+            return Number(value) * siFactors[key];
+        }
+
+        // 3. Recursive check? (e.g. Atado -> KG via Atado -> GR -> KG)
+        if (unitConversions[from] && unitConversions[from]['gr'] && to === 'kg') {
+            return (Number(value) * Number(unitConversions[from]['gr'])) * 0.001;
+        }
+        if (unitConversions[from] && unitConversions[from]['kg'] && to === 'gr') {
+            return (Number(value) * Number(unitConversions[from]['kg'])) * 1000;
+        }
+
+        return Number(value); // Fallback
+    }, [unitConversions]);
+
     const refreshData = useCallback(async () => {
         // Since we are using onSnapshot, refreshData might be redundant for some collections,
         // but we'll keep it for bulk loads or initial state.
@@ -95,7 +146,7 @@ export const BusinessProvider = ({ children }) => {
                 const p = doc.data();
                 let price = Number(p.price) || 0;
                 const pName = p.name ? String(p.name) : '';
-                
+
                 if (price === 0 && pName) {
                     const normalizedDbName = pName.toLowerCase().replace(/[^a-z0-9]/g, '');
                     const manualMappings = {
@@ -140,7 +191,7 @@ export const BusinessProvider = ({ children }) => {
                 // Safe date parsing for Firestore Timestamps or ISO strings
                 const rawCreatedAt = o.created_at;
                 const isoDate = rawCreatedAt?.toDate ? rawCreatedAt.toDate().toISOString() : (typeof rawCreatedAt === 'string' ? rawCreatedAt : new Date().toISOString());
-                
+
                 return {
                     id: o.order_number || doc.id,
                     dbId: doc.id,
@@ -157,15 +208,15 @@ export const BusinessProvider = ({ children }) => {
             const groupedRecipes = {};
             snapshot.docs.forEach(doc => {
                 const r = doc.data();
-                const fgId = r.finished_good_id; 
+                const fgId = r.finished_good_id;
                 if (!fgId) return;
                 if (!groupedRecipes[fgId]) groupedRecipes[fgId] = [];
                 groupedRecipes[fgId].push({
-                    rm_id: r.raw_material_id, 
-                    name: r.raw_material_name, 
-                    sku: r.raw_material_sku, 
-                    qty: r.quantity_required,
-                    unit: r.unit || 'und', 
+                    rm_id: r.raw_material_id,
+                    name: r.raw_material_name,
+                    sku: r.raw_material_sku,
+                    qty: r.input_qty !== undefined ? r.input_qty : r.quantity_required,
+                    unit: r.input_unit || r.unit || 'und',
                     finished_good_id: r.finished_good_id,
                     yield_quantity: Number(r.yield_quantity) || 1
                 });
@@ -301,6 +352,7 @@ export const BusinessProvider = ({ children }) => {
                 ...order,
                 created_at: new Date().toISOString()
             });
+
             return { success: true, id: docRef.id };
         } catch (err) {
             console.error("Error adding order:", err);
@@ -357,26 +409,25 @@ export const BusinessProvider = ({ children }) => {
     }, []);
 
     const recalculatePTCosts = useCallback(async () => {
+        if (!items || items.length === 0) return;
         console.log("Recalculating PT costs based on BOM...");
-        const ptItems = items.filter(i => i.category === 'Producto Terminado');
-        const materials = items.filter(i => i.category === 'Materia Prima');
-        
+        const ptItems = items.filter(i => i.type === 'product' || i.category === 'Producto Terminado');
+
         const updates = ptItems.map(async (pt) => {
             const ptRecipe = recipes[pt.id] || [];
             if (ptRecipe.length === 0) return;
 
             let totalCost = 0;
             ptRecipe.forEach(ingredient => {
-                const material = materials.find(m => m.id === ingredient.rm_id);
+                const material = items.find(m => m.id === ingredient.rm_id || m.name === ingredient.name);
                 if (material) {
-                    const materialCost = Number(material.price) || 0;
-                    // Convert recipe quantity to material base unit before multiplying
-                    const convertedQty = convertUnit(ingredient.qty, ingredient.unit, material.unit);
+                    const materialCost = Number(material.price || material.cost || material.avgCost) || 0;
+                    const convertedQty = convertUnit(ingredient.qty, ingredient.unit, material.unit_measure || material.unit || material.purchase_unit);
                     totalCost += convertedQty * materialCost;
                 }
             });
 
-            const yieldQty = ptRecipe.length > 0 ? (ptRecipe[0].yield_quantity || 1) : 1;
+            const yieldQty = ptRecipe.length > 0 ? (Number(ptRecipe[0].yield_quantity) || 1) : 1;
             const unitCost = totalCost / yieldQty;
 
             if (unitCost > 0) {
@@ -385,9 +436,10 @@ export const BusinessProvider = ({ children }) => {
                     await updateDoc(docRef, {
                         recipe_cost: unitCost,
                         automated_cost: unitCost,
-                        recipe_batch_cost: totalCost, // Keep total batch cost for reference
+                        recipe_batch_cost: totalCost,
                         recipe_yield: yieldQty,
-                        last_cost_recalc: new Date().toISOString()
+                        last_cost_recalc: new Date().toISOString(),
+                        cost: unitCost
                     });
                 } catch (err) {
                     console.error(`Error updating cost for ${pt.name}:`, err);
@@ -397,7 +449,7 @@ export const BusinessProvider = ({ children }) => {
 
         await Promise.all(updates);
         console.log("PT costs recalculation complete.");
-    }, [items, recipes]);
+    }, [items, recipes, convertUnit]);
 
     const addItem = useCallback(async (data) => {
         try {
@@ -443,7 +495,26 @@ export const BusinessProvider = ({ children }) => {
 
     const updateOrder = useCallback(async (id, data) => {
         try {
-            await updateDoc(doc(db, 'orders', id), data);
+            const orderRef = doc(db, 'orders', id);
+
+            // Si el estado cambia a Finalizado o Entregado, descontamos el stock físico (sales)
+            if (data.status === 'Finalizado' || data.status === 'Entregado' || data.status === 'Cobrado') {
+                const snap = await getDoc(orderRef);
+                if (snap.exists() && snap.data().status !== 'Finalizado' && snap.data().status !== 'Entregado' && snap.data().status !== 'Cobrado') {
+                    const orderData = snap.data();
+                    if (orderData.items) {
+                        for (const item of orderData.items) {
+                            if (item.id) {
+                                await updateDoc(doc(db, 'products', item.id), {
+                                    sales: increment(Number(item.quantity) || 0)
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            await updateDoc(orderRef, data);
             return { success: true };
         } catch (err) { return { success: false, error: err.message }; }
     }, []);
@@ -506,57 +577,198 @@ export const BusinessProvider = ({ children }) => {
 
     const receivePurchase = useCallback(async (poId, receivedItems, relatedOrders) => {
         try {
+            if (!poId) throw new Error("ID de orden de compra no definido.");
+            if (!receivedItems) throw new Error("No hay items para ingresar.");
+
             // 1. Update items inventory and costs
             for (const item of receivedItems) {
-                const q = query(collection(db, 'products'), where('id', '==', item.id));
-                const snapshot = await getDocs(q);
-                if (!snapshot.empty) {
-                    const docSnap = snapshot.docs[0];
+                if (!item.id && !item.name) continue;
+
+                // Find product in Firestore
+                let docSnap = null;
+                let docRef = null;
+                const directRef = doc(db, 'products', item.id || 'none');
+                try {
+                    const ds = await getDoc(directRef);
+                    if (ds.exists()) {
+                        docSnap = ds;
+                        docRef = directRef;
+                    }
+                } catch (e) { }
+
+                if (!docSnap) {
+                    const qName = query(collection(db, 'products'), where('name', '==', String(item.name || '')));
+                    const snapName = await getDocs(qName);
+                    if (!snapName.empty) {
+                        docSnap = snapName.docs[0];
+                        docRef = docSnap.ref;
+                    }
+                }
+
+                if (docSnap && docRef) {
                     const currentData = docSnap.data();
-                    
-                    const currentStock = (currentData.stock || 0) + (currentData.purchases || 0) - (currentData.sales || 0);
-                    const currentTotalValue = currentStock * (currentData.cost || 0);
-                    const purchaseValue = item.toBuy * item.purchasePrice;
+                    const invUnit = (currentData.unit_measure || currentData.unit || 'gr').toLowerCase();
+                    const qtyBuy = Number(item.toBuy || item.quantity || 0);
+                    const purchaseUnitConfig = (currentData.purchase_unit || invUnit).toLowerCase();
+                    const conversionFactor = Number(currentData.conversion_factor || 1);
 
-                    const newTotalQty = currentStock + item.toBuy;
-                    const newAvgCost = newTotalQty > 0 ? (currentTotalValue + purchaseValue) / newTotalQty : (currentData.cost || 0);
+                    // PRIORITY: If buying in the configured purchase unit, use the specific conversion_factor from Master Data
+                    let qtyToAddBase;
+                    if (buyUnit === purchaseUnitConfig) {
+                        qtyToAddBase = qtyBuy * conversionFactor;
+                    } else {
+                        // FALLBACK: Use universal SI or custom matrix converter
+                        qtyToAddBase = convertUnit(qtyBuy, buyUnit, invUnit);
+                    }
 
-                    await updateDoc(docSnap.ref, {
-                        purchases: increment(item.toBuy),
+                    const currentStock = Number(currentData.stock || 0) + Number(currentData.purchases || 0) - Number(currentData.sales || 0);
+                    const currentTotalValue = currentStock * Number(currentData.cost || 0);
+
+                    const purchaseUnitPrice = Number(item.purchasePrice || item.unit_cost || 0);
+                    const lineTotalValue = qtyBuy * purchaseUnitPrice;
+
+                    // The weighted average must remain consistent with the total money spent vs total items in base units
+                    const newTotalQty = currentStock + qtyToAddBase;
+                    const newAvgCost = newTotalQty > 0 ? (currentTotalValue + lineTotalValue) / newTotalQty : Number(currentData.cost || 0);
+
+                    await updateDoc(docRef, {
+                        purchases: increment(qtyToAddBase),
                         cost: Math.round(newAvgCost)
                     });
                 }
             }
 
-            // 2. Update OC status
-            await updateDoc(doc(db, 'purchase_orders', poId), { status: 'Recibida', updated_at: new Date().toISOString() });
+            // 2. Update OC status - Search for the doc to be safe (it might be poId or dbId)
+            let poDocRef = doc(db, 'purchase_orders', poId);
+            let poSnapExists = false;
+            try {
+                const poSnap = await getDoc(poDocRef);
+                poSnapExists = poSnap.exists();
+            } catch (e) { poSnapExists = false; }
+
+            if (!poSnapExists) {
+                // If ID doesn't match a doc ID, search by custom 'id' field
+                const qPo = query(collection(db, 'purchase_orders'), where('id', '==', poId));
+                const poSnaps = await getDocs(qPo);
+                if (!poSnaps.empty) {
+                    poDocRef = poSnaps.docs[0].ref;
+                } else {
+                    throw new Error(`Orden de compra no encontrada en el servidor: ${poId}`);
+                }
+            }
+
+            await updateDoc(poDocRef, {
+                status: 'Recibida',
+                updated_at: new Date().toISOString()
+            });
 
             // 3. Logic to check if all POs for related orders are received
             if (relatedOrders && Array.isArray(relatedOrders)) {
                 for (const orderId of relatedOrders) {
-                    const qPo = query(collection(db, 'purchase_orders'), where('relatedOrders', 'array-contains', orderId));
-                    const poSnaps = await getDocs(qPo);
-                    const allReceived = poSnaps.docs.every(d => d.data().status === 'Recibida');
+                    if (!orderId) continue;
+                    // Try to find if order exists by ID or by original order number
+                    const qOrd = query(collection(db, 'orders'), where('order_number', '==', orderId));
+                    const ordSnaps = await getDocs(qOrd);
+                    const targetOrderDoc = ordSnaps.empty ? doc(db, 'orders', String(orderId)) : ordSnaps.docs[0].ref;
+
+                    // Check all POs related to this order
+                    const qPoRelated = query(collection(db, 'purchase_orders'), where('related_orders', 'array-contains', orderId));
+                    const poSnapsRelated = await getDocs(qPoRelated);
+
+                    // If no POs found by related_orders array, check for simple relatedOrders field (migration compatibility)
+                    let docsToCheck = poSnapsRelated.docs;
+                    if (docsToCheck.length === 0) {
+                        const qPoFallback = query(collection(db, 'purchase_orders'), where('relatedOrders', 'array-contains', orderId));
+                        const poSnapsFallback = await getDocs(qPoFallback);
+                        docsToCheck = poSnapsFallback.docs;
+                    }
+
+                    const allReceived = docsToCheck.length > 0 && docsToCheck.every(d => d.data().status === 'Recibida');
                     if (allReceived) {
-                        await updateDoc(doc(db, 'orders', orderId), { status: 'En Producción' });
+                        try {
+                            await updateDoc(targetOrderDoc, { status: 'En Producción' });
+                        } catch (e) {
+                            console.error(`Error updating order ${orderId} to En Producción:`, e);
+                        }
                     }
                 }
             }
 
             return { success: true };
-        } catch (err) { return { success: false, error: err.message }; }
-    }, []);
+        } catch (err) {
+            console.error("Critical error in receivePurchase:", err);
+            return { success: false, error: err.message };
+        }
+    }, [convertUnit]);
 
-    const payPurchase = useCallback(async (poId, bankId) => {
+    const payPurchase = useCallback(async (poId, bankId, amount, providerName) => {
         try {
-            await updateDoc(doc(db, 'purchase_orders', poId), { 
-                paymentStatus: 'Pagado', 
+            // 1. Identify the OC document. poId might be the Firestore Doc ID (dbId) or the display ID (e.g. OC-8008)
+            let docId = poId;
+            let finalAmount = amount;
+            let finalProvider = providerName;
+
+            // Search by order_number/id field if document doesn't exist directly
+            const directRef = doc(db, 'purchase_orders', poId);
+            const directSnap = await getDoc(directRef).catch(() => null);
+
+            if (!directSnap || !directSnap.exists()) {
+                const q = query(collection(db, 'purchase_orders'), where('id', '==', poId));
+                const snap = await getDocs(q);
+                if (!snap.empty) {
+                    docId = snap.docs[0].id;
+                    const data = snap.docs[0].data();
+                    if (!finalAmount) finalAmount = data.total_amount || data.total_cost || 0;
+                    if (!finalProvider) finalProvider = data.provider_name || data.providerName || 'Proveedor';
+                } else {
+                    // One last try searching by order_number
+                    const q2 = query(collection(db, 'purchase_orders'), where('order_number', '==', poId));
+                    const snap2 = await getDocs(q2);
+                    if (!snap2.empty) {
+                        docId = snap2.docs[0].id;
+                        const data = snap2.docs[0].data();
+                        if (!finalAmount) finalAmount = data.total_amount || data.total_cost || 0;
+                        if (!finalProvider) finalProvider = data.provider_name || data.providerName || 'Proveedor';
+                    }
+                }
+            } else {
+                const data = directSnap.data();
+                if (!finalAmount) finalAmount = data.total_amount || data.total_cost || 0;
+                if (!finalProvider) finalProvider = data.provider_name || data.providerName || 'Proveedor';
+            }
+
+            // 2. Update OC payment status
+            await updateDoc(doc(db, 'purchase_orders', docId), {
+                payment_status: 'Pagado',
+                paymentStatus: 'Pagado',
+                bank_id: bankId,
                 bankId: bankId,
-                updated_at: new Date().toISOString() 
+                updated_at: new Date().toISOString()
             });
+
+            // 3. Create Expense Record (PyG module)
+            await addDoc(collection(db, 'expenses'), {
+                expense_date: new Date().toISOString().split('T')[0],
+                category: 'Materia Prima / Compras',
+                description: `Pago OC ${poId} - ${finalProvider}`,
+                amount: Number(finalAmount),
+                payment_method: 'Transferencia',
+                bank_id: bankId,
+                status: 'Pagado',
+                related_purchase_id: docId,
+                related_oc: poId,
+                created_at: new Date().toISOString()
+            });
+
+            // 4. Update Bank Balance
+            await updateBankBalance(bankId, Number(finalAmount), 'expense');
+
             return { success: true };
-        } catch (err) { return { success: false, error: err.message }; }
-    }, []);
+        } catch (err) {
+            console.error("Error in payPurchase:", err);
+            return { success: false, error: err.message };
+        }
+    }, [updateBankBalance]);
 
     const saveOdp = useCallback(async (sku, payload) => {
         try {
@@ -595,8 +807,8 @@ export const BusinessProvider = ({ children }) => {
 
     const addUser = useCallback(async (data) => {
         try {
-            const docRef = await addDoc(collection(db, 'users'), { 
-                ...data, 
+            const docRef = await addDoc(collection(db, 'users'), {
+                ...data,
                 created_at: new Date().toISOString(),
                 status: data.status || 'Active'
             });
@@ -628,26 +840,15 @@ export const BusinessProvider = ({ children }) => {
         } catch (err) { return { success: false, error: err.message }; }
     }, []);
 
-    const updateBankBalance = useCallback(async (bankId, amount, type) => {
-        try {
-            const bank = banks.find(b => b.id === bankId);
-            if (!bank) throw new Error("Banco no encontrado");
-            const newBalance = type === 'income' ? (bank.balance || 0) + amount : (bank.balance || 0) - amount;
-            await updateDoc(doc(db, 'banks', bankId), { balance: newBalance });
-            return { success: true };
-        } catch (err) {
-            console.error("Error updating bank balance:", err);
-            return { success: false, error: err.message };
-        }
-    }, [banks]);
 
     const consumeMaterials = useCallback(async (materials) => {
         try {
             for (const mat of materials) {
                 // materials expected: { id, qtyToConsume }
+                // Use 'sales' property to record MATERIA PRIMA consumption accurately mapped in Kárdex (Inv. Final)
                 const docRef = doc(db, 'products', mat.id);
                 await updateDoc(docRef, {
-                    initial: increment(-Math.abs(mat.qtyToConsume))
+                    sales: increment(Math.abs(mat.qtyToConsume))
                 });
             }
             return { success: true };
@@ -663,8 +864,9 @@ export const BusinessProvider = ({ children }) => {
             const snapshot = await getDocs(q);
             if (!snapshot.empty) {
                 const docSnap = snapshot.docs[0];
+                // Use 'purchases' property to record PRODUCTO TERMINADO output accurately mapped in Kárdex (Inv. Final)
                 await updateDoc(docSnap.ref, {
-                    initial: increment(quantity)
+                    purchases: increment(quantity)
                 });
                 return { success: true };
             }
@@ -722,43 +924,7 @@ export const BusinessProvider = ({ children }) => {
         }
     }, []);
 
-    /**
-     * Universal Unit Converter
-     * Handles: 
-     * 1. Standard SI (kg <-> gr, lt <-> ml)
-     * 2. Custom Conteo -> Weight/Vol (atado -> gr, caja -> kg) based on saved matrix
-     */
-    const convertUnit = useCallback((value, from, to) => {
-        if (!value || from === to) return Number(value);
-        
-        // 1. Check Custom Matrix (Conteo -> Weight/Vol)
-        if (unitConversions[from] && unitConversions[from][to]) {
-            return Number(value) * Number(unitConversions[from][to]);
-        }
 
-        // 2. Automatic SI Multipliers (Standardized Ratios)
-        const siFactors = {
-            'kg_gr': 1000, 'gr_kg': 0.001,
-            'lt_ml': 1000, 'ml_lt': 0.001,
-            'lb_gr': 453.59, 'gr_lb': 1/453.59,
-            'lb_kg': 0.45359, 'kg_lb': 2.20462
-        };
-
-        const key = `${from}_${to}`;
-        if (siFactors[key]) {
-            return Number(value) * siFactors[key];
-        }
-
-        // 3. Recursive check? (e.g. Atado -> KG via Atado -> GR -> KG)
-        if (unitConversions[from] && unitConversions[from]['gr'] && to === 'kg') {
-            return (Number(value) * Number(unitConversions[from]['gr'])) * 0.001;
-        }
-        if (unitConversions[from] && unitConversions[from]['kg'] && to === 'gr') {
-            return (Number(value) * Number(unitConversions[from]['kg'])) * 1000;
-        }
-
-        return Number(value); // Fallback
-    }, [unitConversions]);
     // ── Perfil de la empresa propia (Zeticas) ──────────────────────────────
     // Busca en providers primero (donde fue creado), luego en clients.
     // Criterio 1: is_own_company === true (flag explícito)
@@ -770,14 +936,14 @@ export const BusinessProvider = ({ children }) => {
         );
         if (fromProviders) {
             return {
-                name:             fromProviders.name,
-                nit:              fromProviders.nit || fromProviders.tax_id || '',
-                address:          fromProviders.address || fromProviders.location || '',
+                name: fromProviders.name,
+                nit: fromProviders.nit || fromProviders.tax_id || '',
+                address: fromProviders.address || fromProviders.location || '',
                 delivery_address: fromProviders.delivery_address || fromProviders.address || fromProviders.location || '',
-                email:            fromProviders.email || '',
-                phone:            fromProviders.phone || fromProviders.contact_phone || '',
-                city:             fromProviders.city || (fromProviders.address || '').split(',').pop()?.trim() || 'Bogotá D.C.',
-                contact:          fromProviders.contact_person || fromProviders.contact || '',
+                email: fromProviders.email || '',
+                phone: fromProviders.phone || fromProviders.contact_phone || '',
+                city: fromProviders.city || (fromProviders.address || '').split(',').pop()?.trim() || 'Bogotá D.C.',
+                contact: fromProviders.contact_person || fromProviders.contact || '',
             };
         }
         const fromClients = clients.find(c =>
@@ -785,24 +951,26 @@ export const BusinessProvider = ({ children }) => {
             (c.name || '').toLowerCase().includes('zeticas')
         );
         return fromClients || {
-            name:             'Zeticas SAS',
-            nit:              '',
-            address:          '',
+            name: 'Zeticas SAS',
+            nit: '',
+            address: '',
             delivery_address: '',
-            email:            '',
-            phone:            '',
-            city:             'Bogotá D.C.',
+            email: '',
+            phone: '',
+            city: 'Bogotá D.C.',
         };
     }, [providers, clients]);
 
     const value = useMemo(() => ({
-        loading, items, recipes, providers, orders, expenses, purchaseOrders, banks, taxSettings, clients, siteContent, lastUpdate, lastPublish: buildInfo.lastPublish, productionOrders, users, units, unitConversions, ownCompany,
+        loading, items, recipes, providers, orders, expenses, purchaseOrders, banks, taxSettings, clients, siteContent, lastUpdate, lastPublish: buildInfo.lastPublish, productionOrders, users, units, unitConversions, ownCompany, leads,
+        setItems, setOrders, setExpenses, setPurchaseOrders, setBanks, setClients, setSiteContent, setProductionOrders, setLeads, setUsers, setUnits, setUnitConversions, setTaxSettings,
         refreshData, addClient, addOrder, deleteOrders, updateSiteContent, recalculatePTCosts, updateBankBalance, updateClient, deleteClient,
-        addItem, updateItem, deleteItem, addSupplier, updateSupplier, deleteSupplier, updateOrder, addPurchase, addRecipe, deleteRecipeByProduct, saveOdp, addExpense, updateExpense, deleteExpense, addBank, updateBank, deleteBank, receivePurchase, payPurchase, leads, updateLead, addLead, deleteLead,
+        addItem, updateItem, deleteItem, addSupplier, updateSupplier, deleteSupplier, updateOrder, addPurchase, addRecipe, deleteRecipeByProduct, saveOdp, addExpense, updateExpense, deleteExpense, addBank, updateBank, deleteBank, receivePurchase, payPurchase, updateLead, addLead, deleteLead,
         addUser, updateUser, deleteUser, consumeMaterials, loadFinishedGoods, saveConversion, convertUnit, saveWebCheckout, getWebCheckout, updateWebCheckoutStatus
     }), [
-        loading, items, recipes, providers, orders, expenses, purchaseOrders, banks, taxSettings, clients, siteContent, lastUpdate, productionOrders, leads, users, units, unitConversions, refreshData, ownCompany,
-        addClient, addOrder, deleteOrders, updateSiteContent, recalculatePTCosts, updateBankBalance, updateClient, deleteClient,
+        loading, items, recipes, providers, orders, expenses, purchaseOrders, banks, taxSettings, clients, siteContent, lastUpdate, productionOrders, leads, users, units, unitConversions, ownCompany,
+        setItems, setOrders, setExpenses, setPurchaseOrders, setBanks, setClients, setSiteContent, setProductionOrders, setLeads, setUsers, setUnits, setUnitConversions, setTaxSettings,
+        refreshData, addClient, addOrder, deleteOrders, updateSiteContent, recalculatePTCosts, updateBankBalance, updateClient, deleteClient,
         addItem, updateItem, deleteItem, addSupplier, updateSupplier, deleteSupplier, updateOrder, addPurchase, addRecipe, deleteRecipeByProduct, saveOdp, addExpense, updateExpense, deleteExpense, addBank, updateBank, deleteBank, receivePurchase, payPurchase, updateLead, addLead, deleteLead,
         addUser, updateUser, deleteUser, consumeMaterials, loadFinishedGoods, saveConversion, convertUnit, saveWebCheckout, getWebCheckout, updateWebCheckoutStatus
     ]);

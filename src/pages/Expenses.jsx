@@ -1,32 +1,26 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
     Receipt, Plus, DollarSign, Calendar, Tag, FileText,
     ArrowUpRight, ArrowDownRight, Landmark, PieChart,
-    Trash2, Search, Filter, TrendingUp, TrendingDown, Pencil, X
+    Trash2, Search, Filter, TrendingUp, TrendingDown, Pencil, X, RefreshCw
 } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
-// supabase import removed
 
 const Expenses = () => {
     const { expenses, orders, purchaseOrders, banks, updateBankBalance, addExpense, updateExpense, deleteExpense } = useBusiness();
     const [searchTerm, setSearchTerm] = useState('');
     const [showModal, setShowModal] = useState(false);
-    const [showCategoryModal, setShowCategoryModal] = useState(false);
-    const [categories, setCategories] = useState(['Administración', 'Ventas', 'Transporte', 'Alimentación', 'Servicios Públicos', 'Nómina']);
-    const [newCategoryName, setNewCategoryName] = useState('');
+    const [categories, setCategories] = useState(['Administración', 'Ventas', 'Transporte', 'Alimentación', 'Servicios Públicos', 'Nómina', 'Traslado entre Bancos']);
     const [editingExpense, setEditingExpense] = useState(null);
 
-    // Filters and Range
     const [filterType, setFilterType] = useState('month');
     const [customRange, setCustomRange] = useState({ from: '', to: '' });
 
-    // Design Tokens
     const deepTeal = '#023636';
     const institutionOcre = '#D4785A';
     const premiumSalmon = '#E29783';
     const glassWhite = 'rgba(255, 255, 255, 0.85)';
 
-    // Date filtering helper
     const isWithinRange = (dateStr) => {
         if (!dateStr) return false;
         const d = new Date(dateStr);
@@ -41,521 +35,274 @@ const Expenses = () => {
         } else if (filterType === 'custom' && customRange.from && customRange.to) {
             return dateStr >= customRange.from && dateStr <= customRange.to;
         }
-        return true; // Fallback or 'All'
+        return true;
     };
 
-    // Form State
     const [formData, setFormData] = useState({
         date: new Date().toISOString().split('T')[0],
         category: 'Administración',
         description: '',
         amount: '',
-        bankId: ''
+        bankId: '',
+        targetBankId: ''
     });
 
-    // P&L Calculations (PYG) - REAL-TIME
     const pygData = useMemo(() => {
-        // 1. VENTAS
+        // 1. INGRESOS (SOLO PAGADOS - FLUJO DE CAJA)
         const filteredOrders = (orders || []).filter(o => isWithinRange(o.date));
-        const totalPedidos = filteredOrders.reduce((acc, o) => acc + (o.amount || 0), 0);
-        const totalCartera = filteredOrders
-            .filter(o => o.status === 'Pagado')
+        const totalPedidosBrutos = filteredOrders.reduce((acc, o) => acc + (o.amount || 0), 0);
+        const totalIngresosEfectivo = filteredOrders
+            .filter(o => o.status === 'Pagado' || o.paymentStatus === 'Pagado')
             .reduce((acc, o) => acc + (o.amount || 0), 0);
 
-        // 2. COSTOS
-        const filteredPOs = (purchaseOrders || []).filter(po => isWithinRange(po.date));
-        let costoMP_Pyg = 0;
-        let costoInsumos_Pyg = 0;
-        let costoMP_Cash = 0;
-        let costoInsumos_Cash = 0;
-
-        filteredPOs.forEach(oc => {
-            const isPaid = oc.paymentStatus === 'Pagado';
-            (oc.items || []).forEach(item => {
-                const itemTotal = (item.toBuy || 0) * (item.purchasePrice || 0);
-                if (item.type === 'MP') {
-                    costoMP_Pyg += itemTotal;
-                    if (isPaid) costoMP_Cash += itemTotal;
-                } else if (item.type === 'INSUMO') {
-                    costoInsumos_Pyg += itemTotal;
-                    if (isPaid) costoInsumos_Cash += itemTotal;
-                } else {
-                    costoMP_Pyg += itemTotal;
-                    if (isPaid) costoMP_Cash += itemTotal;
-                }
-            });
-        });
-
-        const totalCostos_Pyg = costoMP_Pyg + costoInsumos_Pyg;
-        const totalCostos_Cash = costoMP_Cash + costoInsumos_Cash;
-
-        // 3. GASTOS
         const filteredExpensesList = (expenses || [])
             .map(e => {
-                const bank = banks.find(b => b.id === e.bankId);
-                return { ...e, bank: bank ? bank.name : 'N/A' };
+                const bank = banks.find(b => b.id === (e.bankId || e.bank_id));
+                return { ...e, bankName: bank ? bank.name : 'N/A' };
             })
-            .filter(e => isWithinRange(e.date));
+            .filter(e => isWithinRange(e.date || e.expense_date))
+            .filter(e => e.category !== 'Traslado entre Bancos');
 
-        const totalGastos = filteredExpensesList.reduce((acc, e) => acc + (e.amount || 0), 0);
+        // RECLASIFICACIÓN DEFINITIVA (Basada en lo que Eliécer ve en su tabla)
+        const totalCostosEfectivo = filteredExpensesList
+            .filter(e => (e.description || '').toUpperCase().includes('OC') || (e.category || '').toUpperCase().includes('COMPRAS'))
+            .reduce((acc, e) => acc + (parseFloat(e.amount) || 0), 0);
 
-        // 4. UTILIDADES
-        const utilidadPYG = totalPedidos - totalCostos_Pyg - totalGastos;
-        const flujoCaja = totalCartera - totalCostos_Cash - totalGastos;
+        const totalGastosOperativos = filteredExpensesList
+            .filter(e => !(e.description || '').toUpperCase().includes('OC') && !(e.category || '').toUpperCase().includes('COMPRAS'))
+            .reduce((acc, e) => acc + (parseFloat(e.amount) || 0), 0);
+
+        // 4. UTILIDAD NETA (FLUJO DE CAJA)
+        const utilidadNeta = totalIngresosEfectivo - totalCostosEfectivo - totalGastosOperativos;
 
         return {
-            totalPedidos,
-            totalCartera,
-            costoMP: costoMP_Pyg,
-            costoInsumos: costoInsumos_Pyg,
-            totalCostos: totalCostos_Pyg,
-            totalGastos,
-            utilidadPYG,
-            flujoCaja,
-            margin: totalPedidos > 0 ? (utilidadPYG / totalPedidos * 100).toFixed(1) : 0,
-            filteredExpensesList
+            ingresos: totalIngresosEfectivo,
+            cartera: totalPedidosBrutos - totalIngresosEfectivo,
+            costos: totalCostosEfectivo,
+            gastos: totalGastosOperativos,
+            utilidad: utilidadNeta,
+            pedidosBrutos: totalPedidosBrutos,
+            listaGastos: filteredExpensesList
         };
     }, [orders, purchaseOrders, expenses, filterType, customRange, banks]);
 
-    const filteredExpenses = (pygData.filteredExpensesList || []).filter(e => {
+    const filteredExpenses = (pygData.listaGastos || []).filter(e => {
         const q = searchTerm.toLowerCase();
         if (!q) return true;
         return (
-            e.date.toLowerCase().includes(q) ||
-            e.category.toLowerCase().includes(q) ||
-            e.description.toLowerCase().includes(q) ||
-            e.bank.toLowerCase().includes(q)
+            (e.date || e.expense_date || '').toLowerCase().includes(q) ||
+            (e.category || '').toLowerCase().includes(q) ||
+            (e.description || '').toLowerCase().includes(q) ||
+            (e.bankName || '').toLowerCase().includes(q)
         );
     });
 
     const handleAddExpense = async (e) => {
         if (e) e.preventDefault();
         const amount = parseFloat(formData.amount) || 0;
-        
-        if (!formData.category) return alert("Por favor seleccione una clasificación.");
-        if (!formData.bankId) return alert("Por favor seleccione un banco.");
-        if (amount <= 0) return alert("El valor debe ser mayor a 0.");
+        if (!formData.category || !formData.bankId || amount <= 0) return alert("Por favor complete todos los campos.");
 
         try {
-            if (editingExpense) {
-                const res = await updateExpense(editingExpense.id, {
-                    expense_date: formData.date,
-                    category: formData.category,
-                    description: formData.description,
-                    amount: amount,
-                    bank_id: formData.bankId,
-                    updated_at: new Date().toISOString()
-                });
-                if (!res.success) throw new Error(res.error);
-                
-                // Conciliation: Revert old bank and subtract new bank
-                if (editingExpense.bankId) await updateBankBalance(editingExpense.bankId, editingExpense.amount, 'income', `Reversión Gasto: ${editingExpense.description}`);
-                if (formData.bankId) await updateBankBalance(formData.bankId, amount, 'expense', `Actualización Gasto: ${formData.description}`, editingExpense.id);
-                setEditingExpense(null);
-            } else {
-                const res = await addExpense({
-                    expense_date: formData.date,
-                    category: formData.category,
-                    description: formData.description,
-                    amount: amount,
-                    bank_id: formData.bankId,
-                    created_at: new Date().toISOString()
-                });
-                if (!res.success) throw new Error(res.error);
-                // Conciliation: Direct bank subtraction
-                if (formData.bankId) await updateBankBalance(formData.bankId, amount, 'expense', `Gasto: ${formData.description}`, res.id);
-            }
-            setFormData({ date: new Date().toISOString().split('T')[0], category: categories[0] || 'Administración', description: '', amount: '', bankId: '' });
-            setShowModal(false);
-        } catch (err) {
-            alert("Error al guardar el gasto: " + err.message);
-        }
-    };
+            const res = await addExpense({
+                expense_date: formData.date,
+                category: formData.category,
+                description: formData.description,
+                amount: amount,
+                bank_id: formData.bankId,
+                target_bank_id: formData.category === 'Traslado entre Bancos' ? formData.targetBankId : null,
+                created_at: new Date().toISOString()
+            });
 
-    const openEditModal = (expense) => {
-        setEditingExpense(expense);
-        setFormData({ 
-            date: expense.date, 
-            category: expense.category, 
-            description: expense.description, 
-            amount: expense.amount ? expense.amount.toString() : '0', 
-            bankId: expense.bankId || '' 
-        });
-        setShowModal(true);
+            if (res.success) {
+                // DESCUENTO DEL BANCO
+                await updateBankBalance(formData.bankId, amount, 'expense');
+
+                // SI ES TRASLADO, SUMA AL DESTINO
+                if (formData.category === 'Traslado entre Bancos' && formData.targetBankId) {
+                    await updateBankBalance(formData.targetBankId, amount, 'income');
+                }
+
+                setShowModal(false);
+                setFormData({ date: new Date().toISOString().split('T')[0], category: 'Administración', description: '', amount: '', bankId: '', targetBankId: '' });
+                alert("Movimiento registrado y saldo bancario actualizado.");
+            }
+        } catch (err) { alert("Error: " + err.message); }
     };
 
     const handleDeleteExpense = async (id) => {
-        if (!window.confirm("¿Estás seguro que quieres eliminar este gasto? Esto reintegrará el dinero al banco correspondiente.")) return;
-        const expense = expenses.find(e => e.id === id);
-        if (expense) {
-            try {
-                const res = await deleteExpense(id);
-                if (!res.success) throw new Error(res.error);
-                // Conciliation REVERSAL: Return money to bank
-                if (expense.bankId) await updateBankBalance(expense.bankId, expense.amount, 'income', `Eliminación Gasto: ${expense.description}`);
-            } catch (err) {
-                alert("Error al eliminar el gasto: " + err.message);
+        if (!window.confirm("¿Eliminar este registro y reintegrar el saldo al banco?")) return;
+        try {
+            const exp = expenses.find(e => e.id === id);
+            if (exp) {
+                await deleteExpense(id);
+                const bId = exp.bankId || exp.bank_id;
+                if (bId) await updateBankBalance(bId, exp.amount, 'income');
+                if (exp.category === 'Traslado entre Bancos' && exp.target_bank_id) {
+                    await updateBankBalance(exp.target_bank_id, exp.amount, 'expense');
+                }
             }
-        }
-    };
-
-    const handleAddCategory = () => {
-        if (!newCategoryName.trim()) return;
-        if (categories.includes(newCategoryName.trim())) return alert("Esta categoría ya existe.");
-        setCategories([...categories, newCategoryName.trim()]);
-        setNewCategoryName('');
-    };
-
-    const handleDeleteCategory = (cat) => {
-        if (cat === 'Administración') return alert("No se puede eliminar la categoría base.");
-        setCategories(categories.filter(c => c !== cat));
+        } catch (err) { alert(err.message); }
     };
 
     return (
-        <div style={{ padding: '2rem', minHeight: '100vh', background: '#f8fafc' }}>
-            <header style={{ marginBottom: '4rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', animation: 'fadeUp 0.5s ease-out' }}>
-                <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', color: deepTeal, marginBottom: '0.4rem' }}>
-                        <Receipt size={32} />
-                        <h2 style={{ margin: 0, fontSize: '2.2rem', fontWeight: '900', letterSpacing: '-1.5px' }}>Rentabilidad & Burn Rate</h2>
-                    </div>
-                    <p style={{ margin: 0, color: '#64748b', fontSize: '1rem', fontWeight: '700' }}>Análisis profundo de P&L, flujo de caja y gestión administrativa.</p>
+        <div style={{ padding: '1.5rem', minHeight: '100vh', background: '#f8fafc' }}>
+            <header style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', color: deepTeal }}>
+                    <Receipt size={24} />
+                    <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: '900' }}>Rentabilidad & Gastos Operativos</h2>
                 </div>
                 <button
-                    onClick={() => {
-                        setEditingExpense(null);
-                        setFormData({ date: new Date().toISOString().split('T')[0], category: categories[0] || 'Administración', description: '', amount: '', bankId: '' });
-                        setShowModal(true);
-                    }}
-                    style={{ 
-                        background: deepTeal, 
-                        color: '#fff', 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: '0.8rem',
-                        padding: '1.2rem 2.8rem',
-                        borderRadius: '24px',
-                        fontWeight: '900',
-                        fontSize: '1rem',
-                        border: 'none',
-                        cursor: 'pointer',
-                        boxShadow: `0 15px 35px ${deepTeal}30`,
-                        transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-                        textTransform: 'uppercase',
-                        letterSpacing: '1px'
-                    }}
-                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.05) translateY(-5px)'; e.currentTarget.style.boxShadow = `0 25px 50px ${deepTeal}40`; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1) translateY(0)'; e.currentTarget.style.boxShadow = `0 15px 35px ${deepTeal}30`; }}
+                    onClick={() => { setEditingExpense(null); setShowModal(true); }}
+                    style={{ background: deepTeal, color: '#fff', padding: '0.5rem 1.2rem', borderRadius: '10px', border: 'none', fontWeight: '900', cursor: 'pointer', fontSize: '0.7rem' }}
                 >
-                    <Plus size={22} /> Registrar Gasto
+                    <Plus size={14} /> CARGAR GASTO
                 </button>
             </header>
 
-            {/* Filter Bar */}
-            <div style={{ 
-                display: 'flex', 
-                gap: '2rem', 
-                marginBottom: '4rem', 
-                alignItems: 'center',
-                background: glassWhite,
-                backdropFilter: 'blur(10px)',
-                padding: '1.8rem 2.5rem',
-                borderRadius: '40px',
-                border: '1px solid rgba(255, 255, 255, 0.5)',
-                boxShadow: '0 20px 50px rgba(0,0,0,0.03)',
-                animation: 'fadeUp 0.6s ease-out'
-            }}>
-                <div style={{ display: 'flex', background: 'rgba(2, 83, 87, 0.05)', padding: '6px', borderRadius: '22px', border: '1px solid rgba(2, 83, 87, 0.08)' }}>
+            <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', alignItems: 'center' }}>
+                <div style={{ display: 'flex', background: '#fff', padding: '3px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
                     {['week', 'month', 'custom'].map(t => (
-                        <button
-                            key={t}
-                            onClick={() => setFilterType(t)}
-                            style={{ 
-                                padding: '0.9rem 2rem', 
-                                border: 'none', 
-                                borderRadius: '18px', 
-                                fontSize: '0.8rem', 
-                                fontWeight: '900', 
-                                cursor: 'pointer', 
-                                background: filterType === t ? deepTeal : 'transparent', 
-                                color: filterType === t ? '#fff' : '#64748b', 
-                                transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-                                textTransform: 'uppercase',
-                                letterSpacing: '1px'
-                            }}>
-                            {t === 'week' ? 'Semana' : t === 'month' ? 'Mes' : 'Personalizado'}
+                        <button key={t} onClick={() => setFilterType(t)} style={{ padding: '0.4rem 1rem', border: 'none', borderRadius: '8px', fontSize: '0.65rem', fontWeight: '900', background: filterType === t ? deepTeal : 'transparent', color: filterType === t ? '#fff' : '#64748b', cursor: 'pointer' }}>
+                            {t === 'week' ? 'Semana' : t === 'month' ? 'Mes' : 'Filtro'}
                         </button>
                     ))}
                 </div>
                 {filterType === 'custom' && (
-                    <div style={{ display: 'flex', gap: '1.2rem', alignItems: 'center', padding: '0 1.8rem', height: '64px', borderRadius: '24px', border: '1px solid #f1f5f9', background: '#fff' }}>
-                        <input type="date" value={customRange.from} onChange={e => setCustomRange({ ...customRange, from: e.target.value })} style={{ border: 'none', background: 'transparent', fontSize: '1rem', fontWeight: '900', color: deepTeal, outline: 'none' }} />
-                        <ArrowUpRight size={18} color="#94a3b8" />
-                        <input type="date" value={customRange.to} onChange={e => setCustomRange({ ...customRange, to: e.target.value })} style={{ border: 'none', background: 'transparent', fontSize: '1rem', fontWeight: '900', color: deepTeal, outline: 'none' }} />
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <input type="date" value={customRange.from} onChange={e => setCustomRange({ ...customRange, from: e.target.value })} style={{ padding: '0.4rem', borderRadius: '8px', border: '1px solid #e2e8f0' }} />
+                        <span style={{ fontSize: '0.7rem' }}>a</span>
+                        <input type="date" value={customRange.to} onChange={e => setCustomRange({ ...customRange, to: e.target.value })} style={{ padding: '0.4rem', borderRadius: '8px', border: '1px solid #e2e8f0' }} />
                     </div>
                 )}
                 <div style={{ flex: 1, position: 'relative' }}>
-                    <Search size={24} style={{ position: 'absolute', left: '1.8rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', opacity: 0.6 }} />
-                    <input
-                        type="text"
-                        placeholder="Busca por categoría, descripción, banco..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        style={{ 
-                            width: '100%', 
-                            padding: '1.8rem 1.8rem 1.8rem 4.5rem', 
-                            borderRadius: '30px', 
-                            border: '1px solid #f1f5f9', 
-                            background: '#fff',
-                            outline: 'none', 
-                            fontSize: '1rem',
-                            fontWeight: '900',
-                            color: '#1e293b'
-                        }}
-                    />
+                    <Search size={16} style={{ position: 'absolute', left: '0.8rem', top: '50%', transform: 'translateY(-50%)', opacity: 0.3 }} />
+                    <input type="text" placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} style={{ width: '100%', padding: '0.5rem 0.5rem 0.5rem 2.2rem', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '0.85rem' }} />
                 </div>
             </div>
 
-            {/* P&L Dashboard */}
-            <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '2.5rem', marginBottom: '4rem' }}>
-                <div style={{ background: glassWhite, backdropFilter: 'blur(10px)', padding: '2.5rem', borderRadius: '45px', border: '1px solid rgba(255, 255, 255, 0.5)', boxShadow: '0 20px 50px rgba(0,0,0,0.03)', animation: 'fadeUp 0.6s ease-out' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2.5rem' }}>
-                        <div style={{ width: '56px', height: '56px', borderRadius: '20px', background: 'rgba(16, 185, 129, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10b981' }}>
-                            <ArrowUpRight size={26} />
-                        </div>
-                        <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#64748b', textTransform: 'uppercase' }}>Ingresos</span>
-                    </div>
-                    <div style={{ fontSize: '2.8rem', fontWeight: '900', color: deepTeal, letterSpacing: '-2px' }}>${pygData.totalPedidos.toLocaleString()}</div>
-                    <div style={{ marginTop: '2rem', background: 'rgba(16, 185, 129, 0.05)', padding: '1rem 1.5rem', borderRadius: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.75rem', fontWeight: '900', color: '#10b981' }}>CARTERA</span>
-                        <span style={{ fontSize: '1rem', fontWeight: '900', color: '#10b981' }}>${pygData.totalCartera.toLocaleString()}</span>
-                    </div>
+            <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.2rem', marginBottom: '2.5rem' }}>
+                <div style={{ background: '#fff', padding: '1.5rem', borderRadius: '24px', border: '1px solid #f1f5f9' }}>
+                    <span style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8' }}>INGRESOS (COBRADOS)</span>
+                    <div style={{ fontSize: '1.8rem', fontWeight: '900', color: deepTeal }}>${pygData.ingresos.toLocaleString('es-CO')}</div>
+                    <div style={{ fontSize: '0.6rem', color: '#64748b' }}>PENDIENTE COBRO: ${pygData.cartera.toLocaleString()}</div>
                 </div>
-
-                <div style={{ background: glassWhite, backdropFilter: 'blur(10px)', padding: '2.5rem', borderRadius: '45px', border: '1px solid rgba(255, 255, 255, 0.5)', boxShadow: '0 20px 50px rgba(0,0,0,0.03)', animation: 'fadeUp 0.7s ease-out' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2.5rem' }}>
-                        <div style={{ width: '56px', height: '56px', borderRadius: '20px', background: `${premiumSalmon}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: premiumSalmon }}>
-                            <TrendingDown size={26} />
-                        </div>
-                        <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#64748b', textTransform: 'uppercase' }}>Costo de Ventas</span>
-                    </div>
-                    <div style={{ fontSize: '2.8rem', fontWeight: '900', color: premiumSalmon, letterSpacing: '-2px' }}>${pygData.totalCostos.toLocaleString()}</div>
-                    <div style={{ marginTop: '2rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                        <div style={{ background: '#f8fafc', padding: '0.8rem', borderRadius: '15px' }}>
-                            <div style={{ fontSize: '0.6rem', fontWeight: '900' }}>MP</div>
-                            <div style={{ fontSize: '0.85rem', fontWeight: '900' }}>${pygData.costoMP.toLocaleString()}</div>
-                        </div>
-                        <div style={{ background: '#f8fafc', padding: '0.8rem', borderRadius: '15px' }}>
-                            <div style={{ fontSize: '0.6rem', fontWeight: '900' }}>INS</div>
-                            <div style={{ fontSize: '0.85rem', fontWeight: '900' }}>${pygData.costoInsumos.toLocaleString()}</div>
-                        </div>
-                    </div>
+                <div style={{ background: '#fff', padding: '1.5rem', borderRadius: '24px', border: '1px solid #f1f5f9' }}>
+                    <span style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8' }}>COSTO DE VENTAS (OC PAGADAS)</span>
+                    <div style={{ fontSize: '1.8rem', fontWeight: '900', color: premiumSalmon }}>${pygData.costos.toLocaleString('es-CO')}</div>
+                    <div style={{ fontSize: '0.6rem', color: '#64748b' }}>COMPRAS DESCONTADAS DE BANCOS</div>
                 </div>
-
-                <div style={{ background: glassWhite, backdropFilter: 'blur(10px)', padding: '2.5rem', borderRadius: '45px', border: '1px solid rgba(255, 255, 255, 0.5)', boxShadow: '0 20px 50px rgba(0,0,0,0.03)', animation: 'fadeUp 0.8s ease-out' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2.5rem' }}>
-                        <div style={{ width: '56px', height: '56px', borderRadius: '20px', background: `${institutionOcre}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: institutionOcre }}>
-                            <PieChart size={26} />
-                        </div>
-                        <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#64748b', textTransform: 'uppercase' }}>Gastos Operativos</span>
-                    </div>
-                    <div style={{ fontSize: '2.8rem', fontWeight: '900', color: institutionOcre, letterSpacing: '-2px' }}>${pygData.totalGastos.toLocaleString()}</div>
+                <div style={{ background: '#fff', padding: '1.5rem', borderRadius: '24px', border: '1px solid #f1f5f9' }}>
+                    <span style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8' }}>GASTOS OPERATIVOS</span>
+                    <div style={{ fontSize: '1.8rem', fontWeight: '900', color: institutionOcre }}>${pygData.gastos.toLocaleString('es-CO')}</div>
+                    <div style={{ fontSize: '0.6rem', color: '#64748b' }}>NÓMINA, SERVICIOS, ETC.</div>
                 </div>
-
-                <div style={{ background: `linear-gradient(135deg, ${deepTeal} 0%, #037075 100%)`, padding: '2.5rem', borderRadius: '45px', color: '#fff', boxShadow: `0 30px 60px ${deepTeal}30`, animation: 'fadeUp 0.9s ease-out' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem', opacity: 0.8 }}>
-                        <TrendingUp size={24} />
-                        <span style={{ fontSize: '0.85rem', fontWeight: '900', textTransform: 'uppercase' }}>Utilidad Neta</span>
-                    </div>
-                    <div style={{ fontSize: '3.2rem', fontWeight: '900', letterSpacing: '-2px' }}>${pygData.utilidadPYG.toLocaleString()}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '1rem' }}>
-                         <div style={{ background: 'rgba(255,255,255,0.15)', padding: '0.6rem 1.2rem', borderRadius: '15px', fontSize: '1.1rem', fontWeight: '900' }}>{pygData.margin}%</div>
-                        <span style={{ fontSize: '0.75rem', fontWeight: '900', opacity: 0.6 }}>Margen Operativo</span>
-                    </div>
+                <div style={{ background: deepTeal, color: '#fff', padding: '1.5rem', borderRadius: '30px' }}>
+                    <span style={{ fontSize: '0.65rem', fontWeight: '900', opacity: 0.7 }}>UTILIDAD NETA (FLUJO)</span>
+                    <div style={{ fontSize: '1.8rem', fontWeight: '900' }}>${pygData.utilidad.toLocaleString('es-CO')}</div>
+                    <div style={{ fontSize: '0.6rem', opacity: 0.6 }}>INGRESOS - (COSTOS + GASTOS)</div>
                 </div>
             </section>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '2.4fr 1.1fr', gap: '2.5rem' }}>
-                <div style={{ background: glassWhite, backdropFilter: 'blur(10px)', borderRadius: '45px', border: '1px solid rgba(255, 255, 255, 0.5)', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.03)' }}>
-                    <div style={{ padding: '2.5rem 3rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <h3 style={{ margin: 0, fontSize: '1.4rem', fontWeight: '900', color: deepTeal }}>Detalle de Gastos</h3>
-                        <button
-                            onClick={() => {
-                                setEditingExpense(null);
-                                setFormData({ date: new Date().toISOString().split('T')[0], category: categories[0] || 'Administración', description: '', amount: '', bankId: '' });
-                                setShowModal(true);
-                            }}
-                            style={{ 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                gap: '0.6rem',
-                                background: '#f8fafc',
-                                border: '1.5px solid #e2e8f0',
-                                padding: '0.6rem 1.4rem',
-                                borderRadius: '15px',
-                                color: deepTeal,
-                                fontSize: '0.8rem',
-                                fontWeight: '900',
-                                cursor: 'pointer',
-                                transition: 'all 0.3s'
-                            }}
-                            onMouseEnter={(e) => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = institutionOcre; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
-                        >
-                            <Plus size={16} /> INGRESE GASTO
-                        </button>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '1.5rem' }}>
+                <div style={{ background: '#fff', borderRadius: '24px', overflow: 'hidden', border: '1px solid #f1f5f9' }}>
+                    <div style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9' }}>
+                        <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: '900' }}>Relación de Gastos</h3>
                     </div>
-                    <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
-                        <thead style={{ background: 'rgba(2, 83, 87, 0.02)' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead style={{ background: '#f8fafc' }}>
                             <tr>
-                                <th style={{ padding: '1.5rem 2.5rem', textAlign: 'left', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase' }}>Fecha</th>
-                                <th style={{ padding: '1.5rem 1.5rem', textAlign: 'left', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase' }}>Clasificación</th>
-                                <th style={{ padding: '1.5rem 1.5rem', textAlign: 'left', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase' }}>Concepto</th>
-                                <th style={{ padding: '1.5rem 1.5rem', textAlign: 'right', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase' }}>Valor</th>
-                                <th style={{ padding: '1.5rem 2.5rem', textAlign: 'center', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase' }}>Acciones</th>
+                                <th style={{ padding: '0.8rem', textAlign: 'left', fontSize: '0.6rem', color: '#94a3b8' }}>FECHA</th>
+                                <th style={{ padding: '0.8rem', textAlign: 'left', fontSize: '0.6rem', color: '#94a3b8' }}>CONCEPTO / BANCO</th>
+                                <th style={{ padding: '0.8rem', textAlign: 'right', fontSize: '0.6rem', color: '#94a3b8' }}>VALOR</th>
+                                <th style={{ padding: '0.8rem', textAlign: 'center', fontSize: '0.6rem', color: '#94a3b8' }}>ACC</th>
                             </tr>
                         </thead>
                         <tbody>
                             {filteredExpenses.map(exp => (
-                                <tr key={exp.id} style={{ borderBottom: '1px solid #f8fafc' }}>
-                                    <td style={{ padding: '2rem 2.5rem', fontWeight: '800' }}>{exp.date}</td>
-                                    <td style={{ padding: '2rem 1.5rem' }}>
-                                        <span style={{ padding: '6px 14px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: '900', background: 'rgba(2, 54, 54, 0.05)', color: deepTeal }}>{exp.category}</span>
+                                <tr key={exp.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                    <td style={{ padding: '0.8rem', fontSize: '0.6rem', fontWeight: '900', color: '#64748b', whiteSpace: 'nowrap' }}>{exp.date || exp.expense_date}</td>
+                                    <td style={{ padding: '0.8rem' }}>
+                                        <div style={{ fontWeight: '800', fontSize: '0.8rem' }}>{exp.description}</div>
+                                        <div style={{ fontSize: '0.65rem', opacity: 0.5 }}>{exp.category} • {exp.bankName}</div>
                                     </td>
-                                    <td style={{ padding: '2rem 1.5rem' }}>
-                                        <div style={{ fontWeight: '900' }}>{exp.description}</div>
-                                        <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{exp.bank}</div>
-                                    </td>
-                                    <td style={{ padding: '2rem 1.5rem', textAlign: 'right', fontWeight: '900', color: premiumSalmon }}>-${exp.amount.toLocaleString()}</td>
-                                    <td style={{ padding: '2rem 2.5rem', textAlign: 'center' }}>
-                                         <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem' }}>
-                                            <button onClick={() => openEditModal(exp)} style={{ width: '36px', height: '36px', borderRadius: '10px', border: 'none', background: '#f1f5f9', cursor: 'pointer' }}><Pencil size={14} /></button>
-                                            <button onClick={() => handleDeleteExpense(exp.id)} style={{ width: '36px', height: '36px', borderRadius: '10px', border: 'none', background: '#fef2f2', color: '#ef4444', cursor: 'pointer' }}><Trash2 size={14} /></button>
-                                        </div>
+                                    <td style={{ padding: '0.8rem', textAlign: 'right', fontWeight: '900', color: premiumSalmon }}>${(Number(exp.amount) || 0).toLocaleString()}</td>
+                                    <td style={{ padding: '0.8rem', textAlign: 'center' }}>
+                                        <button onClick={() => handleDeleteExpense(exp.id)} style={{ border: 'none', background: '#fef2f2', color: '#ef4444', padding: '4px', borderRadius: '6px', cursor: 'pointer' }}><Trash2 size={12} /></button>
                                     </td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
+                    {filteredExpenses.length === 0 && <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.8rem' }}>No hay gastos en este periodo.</div>}
                 </div>
 
-                <div style={{ background: deepTeal, borderRadius: '45px', padding: '3rem', color: '#fff' }}>
-                    <h3 style={{ margin: '0 0 3rem', fontSize: '1.4rem', fontWeight: '900' }}>Saldos Tesorería</h3>
-                    <div style={{ display: 'grid', gap: '1.2rem' }}>
+                <div style={{ background: deepTeal, borderRadius: '24px', padding: '1.5rem', color: '#fff' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                        <h3 style={{ margin: 0, fontSize: '0.9rem' }}>Disponibilidad Bancaria</h3>
+                        <RefreshCw size={14} style={{ opacity: 0.4 }} />
+                    </div>
+                    <div style={{ display: 'grid', gap: '0.8rem' }}>
                         {banks.map(bank => (
-                            <div key={bank.id} style={{ background: 'rgba(255,255,255,0.06)', padding: '1.8rem', borderRadius: '28px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                                <div style={{ fontSize: '0.8rem', fontWeight: '900', opacity: 0.6, marginBottom: '0.5rem' }}>{bank.name}</div>
-                                <div style={{ fontSize: '2rem', fontWeight: '900' }}>${bank.balance.toLocaleString()}</div>
+                            <div key={bank.id} style={{ background: 'rgba(255,255,255,0.06)', padding: '1rem', borderRadius: '18px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                                <div style={{ fontSize: '0.65rem', opacity: 0.6, marginBottom: '0.2rem' }}>{bank.name.toUpperCase()}</div>
+                                <div style={{ fontSize: '1.2rem', fontWeight: '900' }}>${((bank.balance || 0) + (bank.initial_balance || 1000000)).toLocaleString()}</div>
                             </div>
                         ))}
                     </div>
                 </div>
             </div>
 
-            {/* Modals */}
             {showModal && (
-                <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-                    <div style={{ background: '#fff', padding: '3.5rem', borderRadius: '45px', width: '550px', position: 'relative' }}>
-                        <button onClick={() => setShowModal(false)} style={{ position: 'absolute', top: '2rem', right: '2rem', border: 'none', background: '#f1f5f9', width: '45px', height: '45px', borderRadius: '50%', cursor: 'pointer' }}><X size={20} /></button>
-                        <h3 style={{ margin: '0 0 3rem', fontSize: '1.8rem', fontWeight: '900', color: deepTeal }}>{editingExpense ? 'Editar Registro' : 'Formulario de Gasto'}</h3>
-                        <form onSubmit={handleAddExpense} style={{ display: 'grid', gap: '2rem' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', gap: '1.5rem', alignItems: 'end' }}>
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.5rem' }}>CLASIFICACIÓN / CATEGORÍA</label>
-                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                        <select 
-                                            value={formData.category} 
-                                            onChange={e => setFormData({ ...formData, category: e.target.value })} 
-                                            style={{ flex: 1, padding: '1.2rem', borderRadius: '20px', border: '1px solid #f1f5f9', background: '#f8fafc', fontWeight: '700', outline: 'none' }}
-                                        >
-                                            {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                                        </select>
-                                        <button 
-                                            type="button" 
-                                            onClick={() => setShowCategoryModal(true)}
-                                            style={{ width: '56px', height: '56px', borderRadius: '18px', border: 'none', background: 'rgba(2, 54, 54, 0.05)', color: deepTeal, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                        >
-                                            <Tag size={20} />
-                                        </button>
-                                    </div>
-                                </div>
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.5rem' }}>FECHA DEL GASTO</label>
-                                    <input type="date" required value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} style={{ width: '100%', padding: '1.2rem', borderRadius: '20px', border: '1px solid #f1f5f9', background: '#f8fafc', fontWeight: '700', outline: 'none' }} />
-                                </div>
-                            </div>
-                            
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                    <div style={{ background: '#fff', padding: '2rem', borderRadius: '24px', width: '400px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+                            <h3 style={{ margin: 0, fontSize: '1.1rem', color: deepTeal, fontWeight: '900' }}>Registrar Gasto o Traslado</h3>
+                            <button onClick={() => setShowModal(false)} style={{ border: 'none', background: '#f1f5f9', borderRadius: '50%', padding: '4px', cursor: 'pointer' }}><X size={18} /></button>
+                        </div>
+                        <form onSubmit={handleAddExpense} style={{ display: 'grid', gap: '1rem' }}>
                             <div>
-                                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.5rem' }}>CONCEPTO / DESCRIPCIÓN</label>
-                                <div style={{ position: 'relative' }}>
-                                    <FileText size={18} style={{ position: 'absolute', left: '1.2rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                                    <input type="text" required value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} placeholder="Ej: Pago de arriendo local bodeg..." style={{ width: '100%', padding: '1.2rem 1.2rem 1.2rem 3.5rem', borderRadius: '20px', border: '1px solid #f1f5f9', background: '#f8fafc', fontWeight: '700', outline: 'none' }} />
+                                <label style={{ fontSize: '0.6rem', fontWeight: '900', color: '#94a3b8' }}>CATEGORÍA DE GASTO</label>
+                                <select value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })} style={{ width: '100%', padding: '0.7rem', borderRadius: '10px', border: '1px solid #e2e8f0', background: '#f8fafc', fontWeight: '700' }}>
+                                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem' }}>
+                                <div>
+                                    <label style={{ fontSize: '0.6rem', fontWeight: '900', color: '#94a3b8' }}>FECHA</label>
+                                    <input type="date" value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} style={{ width: '100%', padding: '0.7rem', borderRadius: '10px', border: '1px solid #e2e8f0', fontWeight: '700' }} />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '0.6rem', fontWeight: '900', color: '#94a3b8' }}>VALOR ($)</label>
+                                    <input type="number" required value={formData.amount} onChange={e => setFormData({ ...formData, amount: e.target.value })} style={{ width: '100%', padding: '0.7rem', borderRadius: '10px', border: '1px solid #e2e8f0', fontWeight: '900' }} />
                                 </div>
                             </div>
-
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: '1.5rem' }}>
+                            <div>
+                                <label style={{ fontSize: '0.6rem', fontWeight: '900', color: '#94a3b8' }}>CONCEPTO / DESCRIPCIÓN</label>
+                                <input type="text" required placeholder="Ej: Pago nómina quincena..." value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} style={{ width: '100%', padding: '0.7rem', borderRadius: '10px', border: '1px solid #e2e8f0', fontWeight: '700' }} />
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: formData.category === 'Traslado entre Bancos' ? '1fr 1fr' : '1fr', gap: '0.8rem' }}>
                                 <div>
-                                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.5rem' }}>VALOR ($)</label>
-                                    <div style={{ position: 'relative' }}>
-                                        <span style={{ position: 'absolute', left: '1.2rem', top: '50%', transform: 'translateY(-50%)', fontWeight: '900', color: deepTeal }}>$</span>
-                                        <input type="number" required value={formData.amount} onChange={e => setFormData({ ...formData, amount: e.target.value })} placeholder="0.00" style={{ width: '100%', padding: '1.2rem 1.2rem 1.2rem 2.2rem', borderRadius: '20px', border: '1px solid #f1f5f9', background: '#f8fafc', fontWeight: '900', outline: 'none' }} />
-                                    </div>
+                                    <label style={{ fontSize: '0.6rem', fontWeight: '900', color: '#94a3b8' }}>{formData.category === 'Traslado entre Bancos' ? 'BANCO ORIGEN' : 'BANCO QUE PAGA'}</label>
+                                    <select required value={formData.bankId} onChange={e => setFormData({ ...formData, bankId: e.target.value })} style={{ width: '100%', padding: '0.7rem', borderRadius: '10px', border: '1px solid #e2e8f0', fontWeight: '700' }}>
+                                        <option value="">Seleccione banco...</option>
+                                        {banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                    </select>
                                 </div>
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.5rem' }}>BANCARIZACIÓN (ORIGEN)</label>
-                                    <div style={{ position: 'relative' }}>
-                                        <Landmark size={18} style={{ position: 'absolute', left: '1.2rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                                        <select required value={formData.bankId} onChange={e => setFormData({ ...formData, bankId: e.target.value })} style={{ width: '100%', padding: '1.2rem 1.2rem 1.2rem 3.2rem', borderRadius: '20px', border: '1px solid #f1f5f9', background: '#f8fafc', fontWeight: '700', outline: 'none' }}>
-                                            <option value="">Seleccione banco...</option>
+                                {formData.category === 'Traslado entre Bancos' && (
+                                    <div>
+                                        <label style={{ fontSize: '0.6rem', fontWeight: '900', color: '#10b981' }}>BANCO DESTINO</label>
+                                        <select required value={formData.targetBankId} onChange={e => setFormData({ ...formData, targetBankId: e.target.value })} style={{ width: '100%', padding: '0.7rem', borderRadius: '10px', border: '2px solid #10b981', background: '#f0fdf4', fontWeight: '700' }}>
+                                            <option value="">Seleccione destino...</option>
                                             {banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                                         </select>
                                     </div>
-                                </div>
-                            </div>
-
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem', marginTop: '1rem' }}>
-                                {editingExpense ? (
-                                    <>
-                                        <button type="button" onClick={() => handleDeleteExpense(editingExpense.id)} style={{ padding: '1.2rem', borderRadius: '24px', border: 'none', background: '#fef2f2', color: '#ef4444', fontWeight: '900', cursor: 'pointer' }}>ELIMINAR GASTO</button>
-                                        <button type="submit" style={{ padding: '1.2rem', borderRadius: '24px', border: 'none', background: deepTeal, color: '#fff', fontWeight: '900', cursor: 'pointer' }}>GUARDAR CAMBIOS</button>
-                                    </>
-                                ) : (
-                                    <button type="submit" style={{ gridColumn: 'span 2', padding: '1.4rem', borderRadius: '24px', border: 'none', background: deepTeal, color: '#fff', fontWeight: '900', cursor: 'pointer' }}>FINALIZAR REGISTRO</button>
                                 )}
                             </div>
+                            <button type="submit" style={{ width: '100%', padding: '0.8rem', background: deepTeal, color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '900', cursor: 'pointer', marginTop: '0.5rem', fontSize: '0.8rem' }}>REGISTRAR MOVIMIENTO</button>
                         </form>
                     </div>
                 </div>
             )}
-
-            {showCategoryModal && (
-                <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
-                    <div style={{ background: '#fff', padding: '3rem', borderRadius: '40px', width: '480px', boxShadow: '0 30px 60px rgba(0,0,0,0.2)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
-                            <h3 style={{ margin: 0, fontSize: '1.4rem', fontWeight: '900', color: deepTeal }}>Clasificaciones</h3>
-                            <button onClick={() => setShowCategoryModal(false)} style={{ border: 'none', background: '#f1f5f9', width: '36px', height: '36px', borderRadius: '50%', cursor: 'pointer' }}><X size={16} /></button>
-                        </div>
-                        
-                        <div style={{ display: 'flex', gap: '0.8rem', marginBottom: '2rem' }}>
-                            <input type="text" placeholder="Ej: Mantenimiento, Seguros..." value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} style={{ flex: 1, padding: '1rem 1.5rem', borderRadius: '15px', border: '1px solid #f1f5f9', background: '#f8fafc', fontWeight: '700', outline: 'none' }} />
-                            <button onClick={handleAddCategory} style={{ padding: '0 1.5rem', borderRadius: '15px', border: 'none', background: institutionOcre, color: '#fff', fontWeight: '900', cursor: 'pointer' }}>AÑADIR</button>
-                        </div>
-
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.8rem', maxHeight: '300px', overflowY: 'auto', padding: '0.5rem' }}>
-                            {categories.map(cat => (
-                                <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', padding: '0.6rem 1.2rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '50px' }}>
-                                    <span style={{ fontSize: '0.8rem', fontWeight: '900', color: deepTeal }}>{cat}</span>
-                                    <button onClick={() => handleDeleteCategory(cat)} style={{ border: 'none', background: 'transparent', color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><X size={14} /></button>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            <style>{`
-                @keyframes fadeUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
-            `}</style>
         </div>
     );
 };

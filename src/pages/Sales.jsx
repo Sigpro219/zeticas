@@ -38,6 +38,7 @@ const Orders = ({ orders }) => {
     const [explosionPreview, setExplosionPreview] = useState([]);
     const [poPreviewList, setPoPreviewList] = useState([]);
     const [expandedExplosionItem, setExpandedExplosionItem] = useState(null);
+    const [ptExplosionData, setPtExplosionData] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [productSearchTerm, setProductSearchTerm] = useState('');
     const [newOrder, setNewOrder] = useState({
@@ -220,7 +221,6 @@ const Orders = ({ orders }) => {
             }
 
             const selectedOrderObjects = (orders || []).filter(o => selectedOrders.includes(o.id));
-            const requiredRawMaterials = {}; // { materialId: { id, name, requiredQty, ... } }
             const missingRecipes = [];
 
             // ── Paso 1: Agrupar demanda total por PT en todos los pedidos ──────────────
@@ -247,79 +247,122 @@ const Orders = ({ orders }) => {
                 });
             });
 
-            // ── Paso 2: Por cada PT, aplicar MRP por lotes y explosionar ingredientes ──
-            Object.values(demandByProduct).forEach(({ pt, recipe, totalDemand, label }) => {
-                // Inventario actual del PT
-                const inventoryPT = Math.max(0, (pt.initial || 0) + (pt.purchases || 0) - (pt.sales || 0));
-                const batchSize = pt.batch_size || 1;
-
-                // Demanda neta después de descontar inventario
-                const netDemand = Math.max(0, totalDemand - inventoryPT);
-                const batchesNeeded = netDemand > 0 ? Math.ceil(netDemand / batchSize) : 0;
-                const toProduce = batchesNeeded * batchSize;                    // múltiplo exacto del lote
-                const leftover = toProduce > 0 ? (inventoryPT + toProduce - totalDemand) : inventoryPT;
-
-                // Si el inventario cubre la demanda completa → no producir ni comprar
-                if (batchesNeeded === 0) return;
-
-                recipe.forEach(ing => {
-                    const matInfo = items.find(i => i.id === ing.rm_id || i.id === ing.id || i.name === ing.name);
-                    const matId = matInfo?.id || ing.rm_id || ing.id || `temp-${ing.name}`;
-
-                    if (!requiredRawMaterials[matId]) {
-                        requiredRawMaterials[matId] = {
-                            id: matId,
-                            name: matInfo?.name || ing.name,
-                            requiredQty: 0,
-                            bomBreakdown: [],
-                            currentInv: matInfo ? (matInfo.initial + (matInfo.purchases || 0) - (matInfo.sales || 0)) : 0,
-                            safety: matInfo?.safety || 0,
-                            unit: matInfo?.purchase_unit || matInfo?.unit_measure || matInfo?.unit || ing.unit || 'und'
-                        };
-                    }
-
-                    // La receta define la cantidad POR LOTE → multiplicar por lotes necesarios
-                    const qtyForBatches = Math.round((Number(ing.qty) || 0) * batchesNeeded * 1e6) / 1e6;
-                    requiredRawMaterials[matId].requiredQty = Math.round(
-                        (requiredRawMaterials[matId].requiredQty + qtyForBatches) * 1e6
-                    ) / 1e6;
-                    requiredRawMaterials[matId].bomBreakdown.push(
-                        `${label}: pedido ${totalDemand}, inv PT ${inventoryPT} → ${batchesNeeded} lote(s)×${batchSize} = ${toProduce} (sobrante ${leftover}) → ${qtyForBatches.toFixed(4).replace(/\.?0+$/, '')} ${ing.unit || ''}`
-                    );
-                });
-            });
-
             const uniqueMissing = [...new Set(missingRecipes)].filter(Boolean);
             if (uniqueMissing.length > 0) {
                 alert(`⚠️ Atención: No se han configurado las recetas para los siguientes productos: ${uniqueMissing.join(', ')}. No es posible realizar la explosión de materia prima sin estas fórmulas. Por favor, diríjase al módulo de Recetas y regístrelas para continuar.`);
+                if (Object.keys(demandByProduct).length === 0) return;
             }
 
-            const previewItems = Object.values(requiredRawMaterials).map(mat => {
-                const suggestedBuy = Math.max(0, Math.ceil(mat.requiredQty - mat.currentInv + mat.safety));
-                const matInfo = items.find(i => i.id === mat.id || i.name === mat.name);
+            const ptData = Object.values(demandByProduct).map(({ pt, recipe, totalDemand, label }) => {
+                const initialVal = pt.initial !== undefined ? Number(pt.initial) : (Number(pt.stock) || 0);
+                const inventoryPT = initialVal; // Use exact initial stock mapping
+                const safety = Number(pt.min_stock_level) || Number(pt.safety) || 0;
+                const batchSize = pt.batch_size || 1;
+
+                // Pedidos - Inv + Safety
+                const suggestedProduce = Math.max(0, totalDemand - inventoryPT + safety);
+
                 return {
-                    ...mat,
-                    bomBreakdown: mat.bomBreakdown.join(' | '),
-                    quantityToBuy: suggestedBuy,
-                    unitCost: matInfo?.avgCost || 0,
-                    providerId: '',
-                    providerName: '',
-                    providerPhone: '',
-                    providerEmail: '',
-                    isMissing: !matInfo
+                    ptId: pt.id,
+                    pt,
+                    label,
+                    recipe,
+                    totalDemand,
+                    inventoryPT,
+                    safety,
+                    batchSize,
+                    suggestedProduce,
+                    manualProduce: suggestedProduce
                 };
             });
 
-            if (previewItems.length > 0) {
-                setExplosionPreview(previewItems);
-                setIsExplosionModalOpen(true);
-            } else if (missingRecipes.length === 0) {
-                alert('No se encontraron materiales para explosionar en los pedidos seleccionados.');
-            }
+            setPtExplosionData(ptData);
+            runBOMExplosion(ptData);
+            setIsExplosionModalOpen(true);
         } catch (error) {
             console.error("Error during explosion calculation:", error);
             alert("Ocurrió un error al calcular la explosión. Por favor revisa los datos de los pedidos.");
         }
+    };
+
+    const runBOMExplosion = (pts) => {
+        const requiredRawMaterials = {};
+
+        // ── Paso 2: Por cada PT, aplicar multiplicador exacto y explosionar ingredientes ──
+        pts.forEach(p => {
+            if (p.manualProduce <= 0) return;
+
+            // Multiplicador exacto sobre el tamaño de lote (ej: si lote es 5 y producen 18 => 3.6 veces la receta)
+            const multiplier = p.manualProduce / p.batchSize;
+
+            p.recipe.forEach(ing => {
+                const matInfo = items.find(i => i.id === ing.rm_id || i.id === ing.id || i.name === ing.name);
+                const matId = matInfo?.id || ing.rm_id || ing.id || `temp-${ing.name}`;
+
+                if (!requiredRawMaterials[matId]) {
+                    const convFactor = matInfo?.conversion_factor ? Number(matInfo.conversion_factor) : 1;
+                    const initialUsageVal = matInfo?.initial !== undefined ? Number(matInfo.initial) : (Number(matInfo?.stock) || 0);
+                    requiredRawMaterials[matId] = {
+                        id: matId,
+                        name: matInfo?.name || ing.name,
+                        requiredQtyUsage: 0, // En unidad de uso
+                        bomBreakdown: [],
+                        currentInvUsage: matInfo ? initialUsageVal : 0, // Use exact initial stock mapping
+                        safetyUsage: Number(matInfo?.min_stock_level) || Number(matInfo?.safety) || 0,
+                        unitUse: matInfo?.unit_measure || matInfo?.unit || ing.unit || 'und', // Unidad de uso
+                        unitPurchase: matInfo?.purchase_unit || matInfo?.unit_measure || 'und', // Unidad de compra
+                        conversionFactor: convFactor,
+                        isMissing: !matInfo
+                    };
+                }
+
+                // La receta define la cantidad por lote de PT.
+                const qtyForTotal = Math.round((Number(ing.qty) || 0) * multiplier * 1e6) / 1e6;
+                requiredRawMaterials[matId].requiredQtyUsage += qtyForTotal;
+
+                requiredRawMaterials[matId].bomBreakdown.push(
+                    `${p.label}: prod=${p.manualProduce} / lote=${p.batchSize} (${multiplier.toFixed(2)}x) → req: ${qtyForTotal.toFixed(4).replace(/\.?0+$/, '')} ${ing.unit || ''}`
+                );
+            });
+        });
+
+        // ── Paso 3: Aplicar fórmula para materia prima y convertir a Unidad de Compra ──
+        const previewItems = Object.values(requiredRawMaterials).map(mat => {
+            // Uso Neto Necesario = Max(0,  Requerimiento - Inventario + Seguridad)  (todo en Unidades de USO)
+            const netUsageNeeds = Math.max(0, mat.requiredQtyUsage - mat.currentInvUsage + mat.safetyUsage);
+
+            // Convertir a unidad de compra usando el factor de conversión
+            // Asumiendo que Unidad Compra = Unidad Uso / conversionFactor (ej: kg a gramos => factor 1000)
+            const toBuyExact = netUsageNeeds / mat.conversionFactor;
+            const suggestedBuy = Math.ceil(toBuyExact);
+
+            const matInfo = items.find(i => i.id === mat.id || i.name === mat.name);
+            return {
+                ...mat,
+                requiredQty: parseFloat(mat.requiredQtyUsage.toFixed(4)), // fallback visual compatibility
+                currentInv: parseFloat(mat.currentInvUsage.toFixed(4)), // fallback visual compatibility
+                safety: mat.safetyUsage,
+                unit: mat.unitPurchase,
+                bomBreakdown: mat.bomBreakdown.join(' | '),
+                quantityToBuy: suggestedBuy,
+                exactQuantityToBuy: parseFloat(toBuyExact.toFixed(4)),
+                unitCost: matInfo?.purchase_cost || matInfo?.avgCost || 0, // ensure using purchase_cost
+                providerId: '',
+                providerName: '',
+                providerPhone: '',
+                providerEmail: '',
+            };
+        });
+
+        setExplosionPreview(previewItems);
+    };
+
+    const handleUpdatePtProduction = (ptId, newValue) => {
+        const updatedPts = ptExplosionData.map(pt =>
+            pt.ptId === ptId ? { ...pt, manualProduce: newValue } : pt
+        );
+        setPtExplosionData(updatedPts);
+        runBOMExplosion(updatedPts);
     };
 
     const handleGeneratePOPreviews = () => {
@@ -575,13 +618,13 @@ const Orders = ({ orders }) => {
 
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(18);
-        doc.setTextColor(15, 23, 42); 
+        doc.setTextColor(15, 23, 42);
         doc.text('NOTA DE PEDIDO', 196, 25, { align: 'right' });
-        
+
         doc.setFontSize(14);
         doc.setTextColor(2, 54, 54);
         doc.text(order.id, 196, 33, { align: 'right' });
-        
+
         doc.setFontSize(9);
         doc.setTextColor(100, 116, 139);
         doc.text(`Fecha: ${order.date}`, 196, 39, { align: 'right' });
@@ -662,9 +705,9 @@ const Orders = ({ orders }) => {
         const finalY = doc.lastAutoTable?.finalY || 100;
         const totalAmount = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-        doc.setFillColor(240, 253, 244); 
+        doc.setFillColor(240, 253, 244);
         doc.roundedRect(125, finalY + 10, 71, 12, 2, 2, 'F');
-        
+
         doc.setFontSize(11);
         doc.setTextColor(2, 54, 54);
         doc.text('TOTAL PEDIDO:', 145, finalY + 18, { align: 'right' });
@@ -696,7 +739,7 @@ const Orders = ({ orders }) => {
     };
 
     return (
-        <div className="orders-module" style={{ 
+        <div className="orders-module" style={{
             padding: '0 0.5rem',
             animation: 'fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1)'
         }}>
@@ -706,10 +749,10 @@ const Orders = ({ orders }) => {
             {/* Premium Commerce KPIs */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
                 {/* Total Revenue - Main Card */}
-                <div style={{ 
-                    background: `linear-gradient(135deg, ${deepTeal} 0%, #037075 100%)`, 
-                    padding: '1.5rem 2rem', 
-                    borderRadius: '24px', 
+                <div style={{
+                    background: `linear-gradient(135deg, ${deepTeal} 0%, #037075 100%)`,
+                    padding: '1.5rem 2rem',
+                    borderRadius: '24px',
                     color: '#fff',
                     boxShadow: `0 15px 35px ${deepTeal}25`,
                     position: 'relative',
@@ -720,7 +763,7 @@ const Orders = ({ orders }) => {
                     animation: 'fadeUp 0.6s ease-out'
                 }}>
                     <div style={{ position: 'absolute', right: '-20px', top: '-10px', opacity: 0.1, transform: 'rotate(-10deg)' }}>
-                         <TrendingUp size={240} />
+                        <TrendingUp size={240} />
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '1rem' }}>
                         <div style={{ background: 'rgba(255,255,255,0.15)', padding: '0.4rem', borderRadius: '10px' }}><DollarSign size={16} /></div>
@@ -738,11 +781,11 @@ const Orders = ({ orders }) => {
                 </div>
 
                 {/* Source Breakdown - Glass Effect */}
-                <div style={{ 
+                <div style={{
                     background: glassWhite,
                     backdropFilter: 'blur(10px)',
-                    padding: '1.5rem 2rem', 
-                    borderRadius: '24px', 
+                    padding: '1.5rem 2rem',
+                    borderRadius: '24px',
                     border: '1px solid rgba(2, 83, 87, 0.05)',
                     boxShadow: '0 10px 25px rgba(0,0,0,0.02)',
                     display: 'flex',
@@ -772,11 +815,11 @@ const Orders = ({ orders }) => {
                 </div>
 
                 {/* Cycle Time / Health - High Performance */}
-                <div style={{ 
+                <div style={{
                     background: glassWhite,
                     backdropFilter: 'blur(10px)',
-                    padding: '1.5rem 2rem', 
-                    borderRadius: '24px', 
+                    padding: '1.5rem 2rem',
+                    borderRadius: '24px',
                     border: '1px solid rgba(2, 83, 87, 0.05)',
                     boxShadow: '0 10px 25px rgba(0,0,0,0.02)',
                     display: 'flex',
@@ -785,13 +828,13 @@ const Orders = ({ orders }) => {
                     animation: 'fadeUp 0.8s ease-out'
                 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', marginBottom: '1rem' }}>
-                         <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(2, 54, 54, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: deepTeal }}>
+                        <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(2, 54, 54, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: deepTeal }}>
                             <CheckCircle2 size={18} />
                         </div>
                         <span style={{ fontSize: '0.7rem', fontWeight: '900', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px' }}>Efectividad</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
-                        <div style={{ fontSize: '2.2rem', fontWeight: '900', color: deepTeal, lineHeight: 1 }}>98<span style={{fontSize: '1.2rem', opacity: 0.5}}>%</span></div>
+                        <div style={{ fontSize: '2.2rem', fontWeight: '900', color: deepTeal, lineHeight: 1 }}>98<span style={{ fontSize: '1.2rem', opacity: 0.5 }}>%</span></div>
                     </div>
                     <div style={{ marginTop: '1.5rem', display: 'flex', gap: '0.8rem', background: '#f8fafc', padding: '0.7rem 1.2rem', borderRadius: '14px', width: 'fit-content', border: '1px solid #f1f5f9' }}>
                         <div style={{ fontSize: '0.7rem', fontWeight: '900', color: '#64748b' }}>SLA: <span style={{ color: '#10b981' }}>OK</span></div>
@@ -802,10 +845,10 @@ const Orders = ({ orders }) => {
             </div>
 
             {/* Action Bar & Filter Section - Premium Glass Design */}
-            <div style={{ 
-                display: 'flex', 
-                flexDirection: 'column', 
-                gap: '1.5rem', 
+            <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '1.5rem',
                 marginBottom: '1.5rem',
                 background: glassWhite,
                 backdropFilter: 'blur(10px)',
@@ -815,23 +858,23 @@ const Orders = ({ orders }) => {
                 boxShadow: '0 10px 25px rgba(0,0,0,0.01)',
                 animation: 'fadeUp 0.6s ease-out'
             }}>
-                <div style={{ 
-                    display: 'flex', 
+                <div style={{
+                    display: 'flex',
                     flexDirection: window.innerWidth < 1024 ? 'column' : 'row',
-                    justifyContent: 'space-between', 
-                    alignItems: window.innerWidth < 1024 ? 'stretch' : 'center', 
-                    gap: '1.5rem' 
+                    justifyContent: 'space-between',
+                    alignItems: window.innerWidth < 1024 ? 'stretch' : 'center',
+                    gap: '1.5rem'
                 }}>
-                    <div style={{ 
-                        display: 'flex', 
+                    <div style={{
+                        display: 'flex',
                         flexDirection: window.innerWidth < 500 ? 'column' : 'row',
-                        gap: '1rem' 
+                        gap: '1rem'
                     }}>
-                        <div style={{ 
-                            display: 'flex', 
-                            background: 'rgba(2, 83, 87, 0.05)', 
-                            padding: '6px', 
-                            borderRadius: '22px', 
+                        <div style={{
+                            display: 'flex',
+                            background: 'rgba(2, 83, 87, 0.05)',
+                            padding: '6px',
+                            borderRadius: '22px',
                             border: '1px solid rgba(2, 83, 87, 0.08)',
                             overflowX: 'auto',
                             scrollbarWidth: 'none'
@@ -841,10 +884,10 @@ const Orders = ({ orders }) => {
                                     key={type}
                                     onClick={() => setFilterType(type)}
                                     style={{
-                                        padding: '0.8rem 1.8rem', 
-                                        borderRadius: '14px', 
+                                        padding: '0.8rem 1.8rem',
+                                        borderRadius: '14px',
                                         border: 'none',
-                                        fontSize: '0.75rem', 
+                                        fontSize: '0.75rem',
                                         fontWeight: '900',
                                         cursor: 'pointer',
                                         background: filterType === type ? deepTeal : 'transparent',
@@ -857,16 +900,16 @@ const Orders = ({ orders }) => {
                                 >{type === 'week' ? 'Semana' : type === 'month' ? 'Mes' : 'Personalizado'}</button>
                             ))}
                         </div>
-        
+
                         {filterType === 'custom' && (
-                            <div style={{ 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                gap: '1rem', 
-                                background: '#fcfcfc', 
-                                padding: '0 1.2rem', 
+                            <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '1rem',
+                                background: '#fcfcfc',
+                                padding: '0 1.2rem',
                                 height: '52px',
-                                borderRadius: '16px', 
+                                borderRadius: '16px',
                                 border: '1px solid #f1f5f9',
                                 animation: 'slideInRight 0.4s ease-out',
                                 boxShadow: '0 4px 10px rgba(0,0,0,0.01)'
@@ -888,8 +931,8 @@ const Orders = ({ orders }) => {
                         )}
                     </div>
 
-                    <div style={{ 
-                        display: 'flex', 
+                    <div style={{
+                        display: 'flex',
                         gap: '1rem',
                         justifyContent: window.innerWidth < 768 ? 'space-between' : 'flex-end'
                     }}>
@@ -900,15 +943,15 @@ const Orders = ({ orders }) => {
                                 setIsLoading(false);
                             }}
                             disabled={isLoading}
-                            style={{ 
-                                background: '#fff', 
-                                color: deepTeal, 
+                            style={{
+                                background: '#fff',
+                                color: deepTeal,
                                 width: '52px',
                                 height: '52px',
-                                borderRadius: '16px', 
-                                border: '1px solid #f1f5f9', 
-                                display: 'flex', 
-                                alignItems: 'center', 
+                                borderRadius: '16px',
+                                border: '1px solid #f1f5f9',
+                                display: 'flex',
+                                alignItems: 'center',
                                 justifyContent: 'center',
                                 cursor: 'pointer',
                                 transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
@@ -970,16 +1013,16 @@ const Orders = ({ orders }) => {
                         onBlur={(e) => { e.target.style.borderColor = '#f1f5f9'; e.target.style.boxShadow = 'none'; }}
                     />
                     {searchTerm && (
-                        <button 
+                        <button
                             onClick={() => setSearchTerm('')}
-                            style={{ 
-                                position: 'absolute', 
-                                right: '1.5rem', 
-                                top: '50%', 
-                                transform: 'translateY(-50%)', 
-                                background: 'none', 
-                                border: 'none', 
-                                color: '#94a3b8', 
+                            style={{
+                                position: 'absolute',
+                                right: '1.5rem',
+                                top: '50%',
+                                transform: 'translateY(-50%)',
+                                background: 'none',
+                                border: 'none',
+                                color: '#94a3b8',
                                 cursor: 'pointer',
                                 display: 'flex',
                                 alignItems: 'center'
@@ -992,11 +1035,11 @@ const Orders = ({ orders }) => {
             </div>
 
             {/* Selection Operative Bar - Floating Style */}
-            <div style={{ 
-                background: institutionOcre, 
-                padding: '1.5rem 3rem', 
-                borderRadius: '30px', 
-                alignItems: 'center', 
+            <div style={{
+                background: institutionOcre,
+                padding: '1.5rem 3rem',
+                borderRadius: '30px',
+                alignItems: 'center',
                 justifyContent: 'space-between',
                 boxShadow: `0 20px 40px ${institutionOcre}30`,
                 marginBottom: '2.5rem',
@@ -1012,14 +1055,14 @@ const Orders = ({ orders }) => {
                     <div style={{ fontSize: '1.6rem', fontWeight: '900', color: '#fff', marginTop: '0.3rem' }}>{selectedOrders.length} <span style={{ fontSize: '1rem', opacity: 0.7 }}>PEDIDOS EN COLA</span></div>
                 </div>
                 <div style={{ display: 'flex', gap: '1.2rem' }}>
-                    <button 
+                    <button
                         onClick={handleExplosion}
-                        style={{ 
-                            padding: '1rem 2.2rem', 
-                            background: '#fff', 
-                            color: institutionOcre, 
-                            border: 'none', 
-                            borderRadius: '18px', 
+                        style={{
+                            padding: '1rem 2.2rem',
+                            background: '#fff',
+                            color: institutionOcre,
+                            border: 'none',
+                            borderRadius: '18px',
                             cursor: 'pointer',
                             fontWeight: '900',
                             fontSize: '0.9rem',
@@ -1033,14 +1076,14 @@ const Orders = ({ orders }) => {
                     >
                         <ShoppingCart size={20} /> EXPLOSIONAR MP
                     </button>
-                    <button 
+                    <button
                         onClick={handleBulkDelete}
-                        style={{ 
-                            padding: '1rem', 
-                            background: 'rgba(255,255,255,0.25)', 
-                            color: '#fff', 
-                            border: 'none', 
-                            borderRadius: '18px', 
+                        style={{
+                            padding: '1rem',
+                            background: 'rgba(255,255,255,0.25)',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '18px',
                             cursor: 'pointer',
                             transition: 'all 0.3s ease'
                         }}
@@ -1054,136 +1097,136 @@ const Orders = ({ orders }) => {
 
 
             {/* Orders Table Container */}
-            <div style={{ 
-                background: '#fff', 
-                borderRadius: '24px', 
-                border: '1px solid #f1f5f9', 
+            <div style={{
+                background: '#fff',
+                borderRadius: '24px',
+                border: '1px solid #f1f5f9',
                 boxShadow: '0 10px 30px rgba(0,0,0,0.02)',
                 overflow: 'hidden'
             }}>
                 <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', minWidth: '1000px', borderCollapse: 'collapse' }}>
-                    <thead style={{ background: '#F9FBFA', borderBottom: '1px solid #f1f5f9' }}>
-                        <tr>
-                            <th style={{ padding: '1.2rem 1.5rem', textAlign: 'left', width: '40px' }}>
-                                <input
-                                    type="checkbox"
-                                    onChange={handleSelectAll}
-                                    checked={selectedOrders.length === filteredOrders.length && filteredOrders.length > 0}
-                                    style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: deepTeal }}
-                                />
-                            </th>
-                            <th style={{ padding: '1.2rem 0.5rem', textAlign: 'center', width: '10%', fontWeight: '900', fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>ID</th>
-                            <th style={{ padding: '1.2rem 1.5rem', textAlign: 'left', width: '30%', fontWeight: '900', fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Cliente</th>
-                            <th style={{ padding: '1.2rem 1.5rem', textAlign: 'left', fontWeight: '900', fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Origen</th>
-                            <th style={{ padding: '1.2rem 1.5rem', textAlign: 'left', fontWeight: '900', fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Fecha</th>
-                            <th style={{ padding: '1.2rem 1.5rem', textAlign: 'right', fontWeight: '900', fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Total</th>
-                            <th style={{ padding: '1.2rem 1.5rem', textAlign: 'center', fontWeight: '900', fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Estado</th>
-                            <th style={{ padding: '1.2rem 1.5rem', textAlign: 'center', fontWeight: '900', fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {filteredOrders.length > 0 ? filteredOrders.map(order => (
-                            <tr
-                                key={order.id}
-                                style={{
-                                    borderBottom: '1px solid #f8fafc',
-                                    transition: 'all 0.2s',
-                                    background: selectedOrders.includes(order.id) ? 'rgba(2, 83, 87, 0.03)' : 'transparent',
-                                    cursor: 'pointer'
-                                }}
-                                className="table-row-hover"
-                                onClick={() => setViewingOrder(JSON.parse(JSON.stringify(order)))}
-                            >
-                                <td style={{ padding: '1.2rem 1.5rem' }}>
+                        <thead style={{ background: '#F9FBFA', borderBottom: '1px solid #f1f5f9' }}>
+                            <tr>
+                                <th style={{ padding: '1.2rem 1.5rem', textAlign: 'left', width: '40px' }}>
                                     <input
                                         type="checkbox"
-                                        checked={selectedOrders.includes(order.id)}
-                                        onClick={(e) => e.stopPropagation()}
-                                        onChange={(e) => { e.stopPropagation(); handleSelectOrder(order.id); }}
+                                        onChange={handleSelectAll}
+                                        checked={selectedOrders.length === filteredOrders.length && filteredOrders.length > 0}
                                         style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: deepTeal }}
                                     />
-                                </td>
-                                <td style={{ padding: '1.2rem 0.5rem', textAlign: 'center', fontWeight: '900', fontSize: '0.85rem', color: deepTeal }}>#{order.id}</td>
-                                <td style={{ padding: '1.2rem 1.5rem' }}>
-                                    <div style={{ fontWeight: '800', color: '#1e293b', fontSize: '0.95rem' }}>{order.client}</div>
-                                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '600', marginTop: '2px' }}>
-                                        {order.items?.length || 0} SKUs • {order.items?.reduce((s, i) => s + (i.quantity || 0), 0) || 0} UNIDADES
-                                    </div>
-                                </td>
-                                <td style={{ padding: '1.2rem 1.5rem' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.75rem', fontWeight: '800', color: '#475569', background: '#f8fafc', padding: '6px 12px', borderRadius: '10px', width: 'fit-content', border: '1px solid #f1f5f9' }}>
-                                        {getSourceIcon(order.source)}
-                                        {order.source?.toUpperCase()}
-                                    </div>
-                                </td>
-                                <td style={{ padding: '1.2rem 1.5rem', fontSize: '0.8rem', color: '#64748b', fontWeight: '700' }}>{order.date}</td>
-                                <td style={{ padding: '1.2rem 1.5rem', textAlign: 'right', fontWeight: '900', color: '#0f172a', fontSize: '1rem' }}>${(order.amount || 0).toLocaleString('es-CO')}</td>
-                                <td style={{ padding: '1.2rem 1.5rem', textAlign: 'center' }}>
-                                    <span style={{
-                                        padding: '6px 14px',
-                                        borderRadius: '12px',
-                                        fontSize: '0.65rem',
-                                        fontWeight: '900',
-                                        letterSpacing: '0.5px',
-                                        whiteSpace: 'nowrap',
-                                        display: 'inline-block',
-                                        background: 
-                                            order.status === 'Pagado' || order.status === 'Entregado' ? 'rgba(22, 163, 74, 0.1)' : 
-                                            order.status === 'PENDIENTE' ? 'rgba(214, 189, 152, 0.15)' : 'rgba(2, 83, 87, 0.05)',
-                                        color: 
-                                            order.status === 'Pagado' || order.status === 'Entregado' ? '#16a34a' : 
-                                            order.status === 'PENDIENTE' ? '#B8A07E' : deepTeal,
-                                        border: '1px solid currentColor'
-                                    }}>
-                                        {(order.status || 'PENDIENTE').toUpperCase()}
-                                    </span>
-                                </td>
-                                <td style={{ padding: '1.2rem 1.5rem', textAlign: 'center' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', alignItems: 'center' }}>
-                                        {order.status === 'En Compras' && (
-                                            <button 
-                                                onClick={(e) => { e.stopPropagation(); handleMoveToProduction(order.id); }}
-                                                style={{ 
-                                                    background: deepTeal, 
-                                                    color: '#fff', 
-                                                    border: 'none', 
-                                                    borderRadius: '8px', 
-                                                    padding: '6px 12px', 
-                                                    cursor: 'pointer', 
-                                                    fontSize: '0.65rem', 
-                                                    fontWeight: 'bold', 
-                                                    display: 'flex', 
-                                                    alignItems: 'center', 
-                                                    gap: '0.4rem' 
-                                                }}
-                                                title="Mover a Producción"
+                                </th>
+                                <th style={{ padding: '1.2rem 0.5rem', textAlign: 'center', width: '10%', fontWeight: '900', fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>ID</th>
+                                <th style={{ padding: '1.2rem 1.5rem', textAlign: 'left', width: '30%', fontWeight: '900', fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Cliente</th>
+                                <th style={{ padding: '1.2rem 1.5rem', textAlign: 'left', fontWeight: '900', fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Origen</th>
+                                <th style={{ padding: '1.2rem 1.5rem', textAlign: 'left', fontWeight: '900', fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Fecha</th>
+                                <th style={{ padding: '1.2rem 1.5rem', textAlign: 'right', fontWeight: '900', fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Total</th>
+                                <th style={{ padding: '1.2rem 1.5rem', textAlign: 'center', fontWeight: '900', fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Estado</th>
+                                <th style={{ padding: '1.2rem 1.5rem', textAlign: 'center', fontWeight: '900', fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredOrders.length > 0 ? filteredOrders.map(order => (
+                                <tr
+                                    key={order.id}
+                                    style={{
+                                        borderBottom: '1px solid #f8fafc',
+                                        transition: 'all 0.2s',
+                                        background: selectedOrders.includes(order.id) ? 'rgba(2, 83, 87, 0.03)' : 'transparent',
+                                        cursor: 'pointer'
+                                    }}
+                                    className="table-row-hover"
+                                    onClick={() => setViewingOrder(JSON.parse(JSON.stringify(order)))}
+                                >
+                                    <td style={{ padding: '1.2rem 1.5rem' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedOrders.includes(order.id)}
+                                            onClick={(e) => e.stopPropagation()}
+                                            onChange={(e) => { e.stopPropagation(); handleSelectOrder(order.id); }}
+                                            style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: deepTeal }}
+                                        />
+                                    </td>
+                                    <td style={{ padding: '1.2rem 0.5rem', textAlign: 'center', fontWeight: '900', fontSize: '0.85rem', color: deepTeal }}>#{order.id}</td>
+                                    <td style={{ padding: '1.2rem 1.5rem' }}>
+                                        <div style={{ fontWeight: '800', color: '#1e293b', fontSize: '0.95rem' }}>{order.client}</div>
+                                        <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '600', marginTop: '2px' }}>
+                                            {order.items?.length || 0} SKUs • {order.items?.reduce((s, i) => s + (i.quantity || 0), 0) || 0} UNIDADES
+                                        </div>
+                                    </td>
+                                    <td style={{ padding: '1.2rem 1.5rem' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.75rem', fontWeight: '800', color: '#475569', background: '#f8fafc', padding: '6px 12px', borderRadius: '10px', width: 'fit-content', border: '1px solid #f1f5f9' }}>
+                                            {getSourceIcon(order.source)}
+                                            {order.source?.toUpperCase()}
+                                        </div>
+                                    </td>
+                                    <td style={{ padding: '1.2rem 1.5rem', fontSize: '0.8rem', color: '#64748b', fontWeight: '700' }}>{order.date}</td>
+                                    <td style={{ padding: '1.2rem 1.5rem', textAlign: 'right', fontWeight: '900', color: '#0f172a', fontSize: '1rem' }}>${(order.amount || 0).toLocaleString('es-CO')}</td>
+                                    <td style={{ padding: '1.2rem 1.5rem', textAlign: 'center' }}>
+                                        <span style={{
+                                            padding: '6px 14px',
+                                            borderRadius: '12px',
+                                            fontSize: '0.65rem',
+                                            fontWeight: '900',
+                                            letterSpacing: '0.5px',
+                                            whiteSpace: 'nowrap',
+                                            display: 'inline-block',
+                                            background:
+                                                order.status === 'Pagado' || order.status === 'Entregado' ? 'rgba(22, 163, 74, 0.1)' :
+                                                    order.status === 'PENDIENTE' ? 'rgba(214, 189, 152, 0.15)' : 'rgba(2, 83, 87, 0.05)',
+                                            color:
+                                                order.status === 'Pagado' || order.status === 'Entregado' ? '#16a34a' :
+                                                    order.status === 'PENDIENTE' ? '#B8A07E' : deepTeal,
+                                            border: '1px solid currentColor'
+                                        }}>
+                                            {(order.status || 'PENDIENTE').toUpperCase()}
+                                        </span>
+                                    </td>
+                                    <td style={{ padding: '1.2rem 1.5rem', textAlign: 'center' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', alignItems: 'center' }}>
+                                            {order.status === 'En Compras' && (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleMoveToProduction(order.id); }}
+                                                    style={{
+                                                        background: deepTeal,
+                                                        color: '#fff',
+                                                        border: 'none',
+                                                        borderRadius: '8px',
+                                                        padding: '6px 12px',
+                                                        cursor: 'pointer',
+                                                        fontSize: '0.65rem',
+                                                        fontWeight: 'bold',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '0.4rem'
+                                                    }}
+                                                    title="Mover a Producción"
+                                                >
+                                                    <ChefHat size={14} /> PRODUCCIÓN
+                                                </button>
+                                            )}
+                                            <button onClick={(e) => { e.stopPropagation(); handleDownloadPDF(order); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#cbd5e1' }} title="Descargar"><Download size={20} /></button>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); handleDeleteOrder(order.id); }}
+                                                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'rgba(212, 120, 90, 0.3)' }}
+                                                title="Eliminar"
                                             >
-                                                <ChefHat size={14} /> PRODUCCIÓN
+                                                <Trash2 size={20} />
                                             </button>
-                                        )}
-                                        <button onClick={(e) => { e.stopPropagation(); handleDownloadPDF(order); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#cbd5e1' }} title="Descargar"><Download size={20} /></button>
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); handleDeleteOrder(order.id); }}
-                                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'rgba(212, 120, 90, 0.3)' }}
-                                            title="Eliminar"
-                                        >
-                                            <Trash2 size={20} />
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        )) : (
-                            <tr>
-                                <td colSpan="8" style={{ padding: '6rem', textAlign: 'center', color: '#cbd5e1' }}>
-                                    <div style={{ marginBottom: '1.5rem', opacity: 0.3 }}><ShoppingCart size={60} strokeWidth={1} /></div>
-                                    <div style={{ fontWeight: '800', fontSize: '1.1rem', color: '#94a3b8' }}>SISTEMA VACÍO</div>
-                                    <div style={{ fontSize: '0.85rem', marginTop: '0.5rem' }}>No hay registros comerciales en este periodo.</div>
-                                </td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
+                                        </div>
+                                    </td>
+                                </tr>
+                            )) : (
+                                <tr>
+                                    <td colSpan="8" style={{ padding: '6rem', textAlign: 'center', color: '#cbd5e1' }}>
+                                        <div style={{ marginBottom: '1.5rem', opacity: 0.3 }}><ShoppingCart size={60} strokeWidth={1} /></div>
+                                        <div style={{ fontWeight: '800', fontSize: '1.1rem', color: '#94a3b8' }}>SISTEMA VACÍO</div>
+                                        <div style={{ fontSize: '0.85rem', marginTop: '0.5rem' }}>No hay registros comerciales en este periodo.</div>
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
@@ -1226,10 +1269,10 @@ const Orders = ({ orders }) => {
 
                         {/* Modal Body */}
                         <div style={{ padding: window.innerWidth < 768 ? '1.5rem' : '2.5rem', overflowY: 'auto', flex: 1 }}>
-                            <div style={{ 
-                                display: 'flex', 
+                            <div style={{
+                                display: 'flex',
                                 flexDirection: window.innerWidth < 768 ? 'column' : 'row',
-                                gap: window.innerWidth < 768 ? '1.5rem' : '3rem' 
+                                gap: window.innerWidth < 768 ? '1.5rem' : '3rem'
                             }}>
                                 {/* Left side: Order Info & Items */}
                                 <div style={{ flex: 1.4, animation: 'fadeUp 0.4s ease-out' }}>
@@ -1243,9 +1286,9 @@ const Orders = ({ orders }) => {
                                                     const selectedClientId = e.target.value;
                                                     const client = (clients || []).find(c => String(c.id) === selectedClientId);
                                                     if (client) {
-                                                        setNewOrder({ 
-                                                            ...newOrder, 
-                                                            client: client.name, 
+                                                        setNewOrder({
+                                                            ...newOrder,
+                                                            client: client.name,
                                                             clientId: client.id,
                                                             source: client.source || 'CRM'
                                                         });
@@ -1253,14 +1296,14 @@ const Orders = ({ orders }) => {
                                                         setNewOrder({ ...newOrder, client: '', clientId: '' });
                                                     }
                                                 }}
-                                                style={{ 
-                                                    width: '100%', 
-                                                    padding: '1.1rem 1rem 1.1rem 3rem', 
-                                                    borderRadius: '18px', 
-                                                    border: '1px solid #f1f5f9', 
-                                                    fontSize: '0.95rem', 
+                                                style={{
+                                                    width: '100%',
+                                                    padding: '1.1rem 1rem 1.1rem 3rem',
+                                                    borderRadius: '18px',
+                                                    border: '1px solid #f1f5f9',
+                                                    fontSize: '0.95rem',
                                                     fontWeight: '800',
-                                                    outline: 'none', 
+                                                    outline: 'none',
                                                     background: '#fff',
                                                     color: '#1e293b',
                                                     appearance: 'none',
@@ -1294,13 +1337,13 @@ const Orders = ({ orders }) => {
                                                             <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '600' }}>Precio Unit: <span style={{ color: deepTeal }}>${(item.price || 0).toLocaleString()}</span></div>
                                                         </div>
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                                                            <div style={{ 
-                                                                background: 'rgba(2, 83, 87, 0.05)', 
-                                                                color: deepTeal, 
-                                                                padding: '4px 10px', 
-                                                                borderRadius: '8px', 
-                                                                fontWeight: '900', 
-                                                                fontSize: '0.8rem' 
+                                                            <div style={{
+                                                                background: 'rgba(2, 83, 87, 0.05)',
+                                                                color: deepTeal,
+                                                                padding: '4px 10px',
+                                                                borderRadius: '8px',
+                                                                fontWeight: '900',
+                                                                fontSize: '0.8rem'
                                                             }}>x{item.quantity}</div>
                                                             <div style={{ fontWeight: '900', width: '90px', textAlign: 'right', color: '#0f172a', fontSize: '0.95rem' }}>${(((item.price || 0) * (item.quantity || 0)) || 0).toLocaleString()}</div>
                                                             <button
@@ -1329,9 +1372,9 @@ const Orders = ({ orders }) => {
                                 </div>
 
                                 {/* Right side: Product Catalog */}
-                                <div style={{ 
+                                <div style={{
                                     flex: 1,
-                                    borderLeft: window.innerWidth < 768 ? 'none' : '1px solid rgba(2, 83, 87, 0.05)', 
+                                    borderLeft: window.innerWidth < 768 ? 'none' : '1px solid rgba(2, 83, 87, 0.05)',
                                     paddingLeft: window.innerWidth < 768 ? '0' : '2.5rem',
                                     borderTop: window.innerWidth < 768 ? '1px solid rgba(2, 83, 87, 0.05)' : 'none',
                                     paddingTop: window.innerWidth < 768 ? '1.5rem' : '0'
@@ -1347,12 +1390,12 @@ const Orders = ({ orders }) => {
                                             placeholder="Buscar productos..."
                                             value={productSearchTerm}
                                             onChange={(e) => setProductSearchTerm(e.target.value)}
-                                            style={{ 
-                                                width: '100%', 
-                                                padding: '0.7rem 2.8rem 0.7rem 2.8rem', 
-                                                borderRadius: '12px', 
-                                                border: '1px solid #f1f5f9', 
-                                                fontSize: '0.85rem', 
+                                            style={{
+                                                width: '100%',
+                                                padding: '0.7rem 2.8rem 0.7rem 2.8rem',
+                                                borderRadius: '12px',
+                                                border: '1px solid #f1f5f9',
+                                                fontSize: '0.85rem',
                                                 fontWeight: '800',
                                                 outline: 'none',
                                                 background: '#fcfcfc',
@@ -1360,16 +1403,16 @@ const Orders = ({ orders }) => {
                                             }}
                                         />
                                         {productSearchTerm && (
-                                            <button 
+                                            <button
                                                 onClick={() => setProductSearchTerm('')}
-                                                style={{ 
-                                                    position: 'absolute', 
-                                                    right: '0.8rem', 
-                                                    top: '50%', 
-                                                    transform: 'translateY(-50%)', 
-                                                    background: 'none', 
-                                                    border: 'none', 
-                                                    color: '#cbd5e1', 
+                                                style={{
+                                                    position: 'absolute',
+                                                    right: '0.8rem',
+                                                    top: '50%',
+                                                    transform: 'translateY(-50%)',
+                                                    background: 'none',
+                                                    border: 'none',
+                                                    color: '#cbd5e1',
                                                     cursor: 'pointer',
                                                     display: 'flex',
                                                     alignItems: 'center'
@@ -1389,14 +1432,14 @@ const Orders = ({ orders }) => {
                                                         <span style={{ fontSize: '0.9rem', color: deepTeal, fontWeight: '900' }}>${(prod.price || 0).toLocaleString()}</span>
                                                         <button
                                                             onClick={() => handleAddProductToOrder(prod.id)}
-                                                            style={{ 
-                                                                background: `linear-gradient(135deg, ${deepTeal}, #014346)`, 
-                                                                color: '#fff', 
-                                                                border: 'none', 
-                                                                borderRadius: '10px', 
-                                                                padding: '0.5rem 1rem', 
-                                                                fontSize: '0.7rem', 
-                                                                fontWeight: '900', 
+                                                            style={{
+                                                                background: `linear-gradient(135deg, ${deepTeal}, #014346)`,
+                                                                color: '#fff',
+                                                                border: 'none',
+                                                                borderRadius: '10px',
+                                                                padding: '0.5rem 1rem',
+                                                                fontSize: '0.7rem',
+                                                                fontWeight: '900',
                                                                 cursor: 'pointer',
                                                                 textTransform: 'uppercase',
                                                                 boxShadow: '0 4px 10px rgba(2, 83, 87, 0.1)'
@@ -1428,20 +1471,20 @@ const Orders = ({ orders }) => {
                             </button>
                             <button
                                 onClick={handleSaveOrder}
-                                style={{ 
-                                    padding: '0.8rem 2.5rem', 
-                                    borderRadius: '14px', 
-                                    border: 'none', 
-                                    background: `linear-gradient(135deg, ${deepTeal}, #014346)`, 
-                                    color: '#fff', 
-                                    cursor: 'pointer', 
-                                    fontWeight: '900', 
+                                style={{
+                                    padding: '0.8rem 2.5rem',
+                                    borderRadius: '14px',
+                                    border: 'none',
+                                    background: `linear-gradient(135deg, ${deepTeal}, #014346)`,
+                                    color: '#fff',
+                                    cursor: 'pointer',
+                                    fontWeight: '900',
                                     fontSize: '0.8rem',
-                                    display: 'flex', 
-                                    alignItems: 'center', 
-                                    gap: '0.6rem', 
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.6rem',
                                     textTransform: 'uppercase',
-                                    boxShadow: '0 8px 20px rgba(2, 83, 87, 0.15)' 
+                                    boxShadow: '0 8px 20px rgba(2, 83, 87, 0.15)'
                                 }}
                             >
                                 <Save size={18} /> Procesar Pedido
@@ -1490,6 +1533,56 @@ const Orders = ({ orders }) => {
                         </div>
 
                         <div style={{ padding: '2rem', overflowY: 'auto', flex: 1, background: '#f8fafc' }}>
+                            {/* PT Requirement Adjustments */}
+                            <div style={{ marginBottom: '2rem', background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+                                <div style={{ padding: '1rem 1.5rem', background: '#fef3c7', borderBottom: '1px solid #fde68a', display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                                    <ChefHat size={20} color="#d97706" />
+                                    <h4 style={{ margin: 0, color: '#b45309', fontSize: '1rem', fontWeight: '900' }}>SKUs a Fabricar (Demanda Neta)</h4>
+                                </div>
+                                <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                    {ptExplosionData.map(pt => (
+                                        <div key={pt.ptId} style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 1fr) auto', gap: '2rem', alignItems: 'center', paddingBottom: '1rem', borderBottom: '1px dashed #e2e8f0' }}>
+                                            <div>
+                                                <div style={{ fontWeight: '800', color: '#1e293b', fontSize: '1.05rem', marginBottom: '0.3rem' }}>{pt.label}</div>
+                                                <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                                                    Pedidos (<span style={{ fontWeight: 'bold' }}>{pt.totalDemand}</span>)
+                                                    - Inv (<span style={{ fontWeight: 'bold' }}>{pt.inventoryPT}</span>)
+                                                    + Saf (<span style={{ fontWeight: 'bold' }}>{pt.safety}</span>)
+                                                    = Fórmula (<span style={{ fontWeight: 'bold', color: '#0f172a' }}>{pt.suggestedProduce}</span>)
+                                                    | <span style={{ opacity: 0.8 }}>Lote PT: {pt.batchSize}</span>
+                                                </div>
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem' }}>
+                                                    <label style={{ fontSize: '0.7rem', fontWeight: '800', color: deepTeal, textTransform: 'uppercase' }}>A PRODUCIR</label>
+                                                    <input
+                                                        type="number"
+                                                        value={pt.manualProduce}
+                                                        onChange={(e) => handleUpdatePtProduction(pt.ptId, Number(e.target.value))}
+                                                        style={{
+                                                            width: '100px',
+                                                            padding: '0.6rem',
+                                                            borderRadius: '10px',
+                                                            border: `2px solid ${pt.manualProduce !== pt.suggestedProduce ? '#ea580c' : '#cbd5e1'}`,
+                                                            outline: 'none',
+                                                            textAlign: 'center',
+                                                            fontWeight: '900',
+                                                            fontSize: '1rem',
+                                                            color: pt.manualProduce !== pt.suggestedProduce ? '#ea580c' : '#0f172a'
+                                                        }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div style={{ padding: '0 0 1rem 0' }}>
+                                <h4 style={{ margin: 0, color: '#334155', fontSize: '1rem', fontWeight: '900', letterSpacing: '-0.5px' }}>Materias Primas Requeridas</h4>
+                                <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '4px 0 0 0' }}>Se aplica conversión dinámica a <strong>Unidad de Compra</strong>.</p>
+                            </div>
+
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                 {explosionPreview.map(item => (
                                     <div key={item.id} style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
@@ -1507,7 +1600,19 @@ const Orders = ({ orders }) => {
                                                             No existe en Módulo de Datos Maestros de Productos, Crealo primero
                                                         </div>
                                                     ) : (
-                                                        <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Requerido: <span style={{ fontWeight: 'bold' }}>{parseFloat(item.requiredQty.toFixed(4))} {item.unit}</span> | Stock: <span style={{ fontWeight: 'bold' }}>{parseFloat((item.currentInv || 0).toFixed(4))} {item.unit}</span> | Safety: <span style={{ fontWeight: 'bold' }}>{item.safety} {item.unit}</span></div>
+                                                        <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                                                            Uso Total: <span style={{ fontWeight: 'bold' }}>{parseFloat(item.requiredQtyUsage.toFixed(4))} {item.unitUse}</span> |
+                                                            Inv: <span style={{ fontWeight: 'bold' }}>{parseFloat((item.currentInvUsage || 0).toFixed(4))} {item.unitUse}</span> |
+                                                            Safety: <span style={{ fontWeight: 'bold' }}>{item.safetyUsage} {item.unitUse}</span>
+                                                            <span style={{ fontSize: '1rem', fontWeight: 'bold', color: '#ea580c', marginLeft: '0.8rem' }}>
+                                                                = {Math.max(0, item.requiredQtyUsage - item.currentInvUsage + item.safetyUsage).toFixed(4).replace(/\.?0+$/, '')} {item.unitUse}
+                                                            </span>
+                                                            <div style={{ marginTop: '0.5rem', padding: '0.4rem 0.8rem', background: '#fff7ed', borderRadius: '6px', borderLeft: '4px solid #ea580c', color: '#9a3412', fontWeight: '800' }}>
+                                                                = {item.exactQuantityToBuy} <span style={{ fontSize: '0.75rem', fontWeight: 'normal' }}>{item.unit}</span> a comprar
+                                                                <span style={{ margin: '0 0.5rem', color: '#c2410c' }}>→</span>
+                                                                <span style={{ fontSize: '1.05rem' }}>{item.quantityToBuy}</span> <span style={{ fontSize: '0.75rem', fontWeight: 'normal' }}>{item.unit}</span> (Redondeado)
+                                                            </div>
+                                                        </div>
                                                     )}
                                                 </div>
                                             </div>
@@ -1536,7 +1641,9 @@ const Orders = ({ orders }) => {
                                                             {item.bomBreakdown.split(' | ').map((line, idx) => <div key={idx}>• {line}</div>)}
                                                         </div>
                                                         <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: '#0f172a', fontWeight: 'bold' }}>
-                                                            Total Requerido ({item.requiredQty}) - Inv Final ({item.currentInv}) + Safety ({item.safety}) = <span style={{ color: '#ea580c' }}>Sugerido: {Math.ceil(item.requiredQty - item.currentInv + item.safety)}</span>
+                                                            Sugerido Neto de Uso ({item.requiredQtyUsage.toFixed(4)} - {item.currentInvUsage} + {item.safetyUsage} = <span style={{ color: '#ea580c' }}>{Math.max(0, item.requiredQtyUsage - item.currentInvUsage + item.safetyUsage).toFixed(4)} {item.unitUse}</span>)
+                                                            <br />
+                                                            Conversión: ÷ {item.conversionFactor} = <span style={{ color: '#16a34a' }}>{item.exactQuantityToBuy} {item.unit} a comprar</span>
                                                         </div>
                                                     </div>
 
@@ -1596,18 +1703,18 @@ const Orders = ({ orders }) => {
                                 </button>
                                 <button
                                     onClick={handleGeneratePOPreviews}
-                                    style={{ 
-                                        padding: '0.8rem 2.5rem', 
-                                        borderRadius: '12px', 
-                                        border: 'none', 
-                                        background: (explosionPreview || []).every(i => i.providerId && i.unitCost > 0) ? '#16a34a' : '#ea580c', 
-                                        color: '#fff', 
-                                        cursor: 'pointer', 
-                                        fontWeight: 'bold', 
-                                        display: 'flex', 
-                                        alignItems: 'center', 
-                                        gap: '0.6rem', 
-                                        boxShadow: (explosionPreview || []).every(i => i.providerId && i.unitCost > 0) ? '0 4px 12px rgba(22, 163, 74, 0.3)' : '0 4px 12px rgba(234, 88, 12, 0.3)' 
+                                    style={{
+                                        padding: '0.8rem 2.5rem',
+                                        borderRadius: '12px',
+                                        border: 'none',
+                                        background: (explosionPreview || []).every(i => i.providerId && i.unitCost > 0) ? '#16a34a' : '#ea580c',
+                                        color: '#fff',
+                                        cursor: 'pointer',
+                                        fontWeight: 'bold',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.6rem',
+                                        boxShadow: (explosionPreview || []).every(i => i.providerId && i.unitCost > 0) ? '0 4px 12px rgba(22, 163, 74, 0.3)' : '0 4px 12px rgba(234, 88, 12, 0.3)'
                                     }}
                                 >
                                     <ShoppingCart size={18} /> Previsualizar OC y Enviar
@@ -1658,7 +1765,7 @@ const Orders = ({ orders }) => {
 
                         <div style={{ padding: '2rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                             {poPreviewList.map(po => (
-                                <DocumentBuilder 
+                                <DocumentBuilder
                                     key={po.id}
                                     type="ORDEN DE COMPRA"
                                     docId={po.id}
@@ -1695,27 +1802,27 @@ const Orders = ({ orders }) => {
                                         total: po.total
                                     }}
                                     actions={[
-                                        { 
-                                            label: 'WhatsApp', 
-                                            icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.052 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z" /></svg>, 
-                                            onClick: () => handleSendWhatsApp(po), 
-                                            background: '#25D366' 
+                                        {
+                                            label: 'WhatsApp',
+                                            icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.052 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z" /></svg>,
+                                            onClick: () => handleSendWhatsApp(po),
+                                            background: '#25D366'
                                         },
-                                        { 
-                                            label: 'Correo', 
-                                            icon: <Mail size={18} />, 
-                                            onClick: () => handleSendEmail(po), 
-                                            background: '#1e293b' 
+                                        {
+                                            label: 'Correo',
+                                            icon: <Mail size={18} />,
+                                            onClick: () => handleSendEmail(po),
+                                            background: '#1e293b'
                                         },
-                                        { 
-                                            label: 'Eliminar OC', 
-                                            icon: <Trash2 size={18} />, 
+                                        {
+                                            label: 'Eliminar OC',
+                                            icon: <Trash2 size={18} />,
                                             onClick: () => {
                                                 if (window.confirm('¿Estás seguro que quieres eliminar esta Orden de Compra de la previsualización?')) {
                                                     setPoPreviewList(prev => prev.filter(p => p.id !== po.id));
                                                 }
-                                            }, 
-                                            background: '#ef4444' 
+                                            },
+                                            background: '#ef4444'
                                         }
                                     ]}
                                 />

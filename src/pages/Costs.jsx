@@ -14,27 +14,32 @@ import SkeletonLoader from '../components/SkeletonLoader';
 const Costs = () => {
     const { items, recipes, recalculatePTCosts, loading: contextLoading } = useBusiness();
     const [isRecalculating, setIsRecalculating] = useState(false);
+    const [searchMP, setSearchMP] = useState('');
+    const [searchPT, setSearchPT] = useState('');
 
     const { rawMaterials, products, recipesMap } = useMemo(() => {
         if (!items || !recipes) return { rawMaterials: [], products: [], recipesMap: {} };
 
-        const mps = items.filter(p => p.type === 'MP');
-        const pts = items.filter(p => p.type === 'PT');
+        const mps = items.filter(p => p.type === 'material' || p.type === 'MP' || p.category === 'Materia Prima');
+        const pts = items.filter(p => p.type === 'product' || p.type === 'PT' || p.category === 'Producto Terminado');
 
         const rMap = {};
         const recipeList = Array.isArray(recipes) ? recipes : Object.values(recipes).flat();
-        
+
         recipeList.forEach(r => {
             if (!r) return;
             const finishedGoodId = r.finished_good_id;
             if (!finishedGoodId) return;
             if (!rMap[finishedGoodId]) rMap[finishedGoodId] = [];
-            const mp = items.find(i => i.id === r.raw_material_id || i.name === r.raw_material_name);
+
+            // r tiene 'rm_id', 'name', 'qty', 'unit' gracias al mapeo en BusinessContext
+            const mp = items.find(i => i.id === r.rm_id || i.name === r.name);
+
             rMap[finishedGoodId].push({
-                id: r.raw_material_id || (mp?.id),
-                name: mp?.name || r.raw_material_name || 'Desconocido',
-                qty: r.quantity_required,
-                unit: mp?.unit_measure || mp?.unit || 'unid',
+                id: r.rm_id || (mp?.id),
+                name: mp?.name || r.name || 'Desconocido',
+                qty: r.qty !== undefined ? r.qty : 0,
+                unit: r.unit || mp?.unit_measure || 'unid',
                 cost: mp?.cost || mp?.avgCost || 0
             });
         });
@@ -136,9 +141,17 @@ const Costs = () => {
                     </div>
 
                     <section style={{ marginBottom: '3.5rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '1.5rem' }}>
-                            <Layers size={22} color="var(--color-primary)" />
-                            <h3 style={{ margin: 0, fontSize: '1.3rem', color: '#334155' }}>Analítico Materias Primas / Insumos</h3>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                                <Layers size={22} color="var(--color-primary)" />
+                                <h3 style={{ margin: 0, fontSize: '1.3rem', color: '#334155' }}>Analítico Materias Primas / Insumos</h3>
+                            </div>
+                            <input
+                                placeholder="Buscar Materia Prima..."
+                                value={searchMP}
+                                onChange={(e) => setSearchMP(e.target.value)}
+                                style={{ padding: '0.6rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', minWidth: '250px', outline: 'none', background: '#fff' }}
+                            />
                         </div>
                         <div style={{ background: '#fff', borderRadius: '24px', border: '1px solid #f1f5f9', overflow: 'hidden', maxHeight: '500px', overflowY: 'auto', overflowX: 'auto' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -152,7 +165,7 @@ const Costs = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {rawMaterials.map(mp => {
+                                    {rawMaterials.filter(mp => mp.name?.toLowerCase().includes(searchMP.toLowerCase())).map(mp => {
                                         const stock = mp.stock || 0;
                                         return (
                                             <tr key={mp.id} style={{ borderBottom: '1px solid #f8fafc' }}>
@@ -176,48 +189,92 @@ const Costs = () => {
                     </section>
 
                     <section>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '1.5rem' }}>
-                            <Package size={22} color="var(--color-primary)" />
-                            <h3 style={{ margin: 0, fontSize: '1.3rem', color: '#334155' }}>Explosión de Costos Producto Terminado (PT)</h3>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                                <Package size={22} color="var(--color-primary)" />
+                                <h3 style={{ margin: 0, fontSize: '1.3rem', color: '#334155' }}>Explosión de Costos Producto Terminado (PT)</h3>
+                            </div>
+                            <input
+                                placeholder="Buscar Producto Terminado..."
+                                value={searchPT}
+                                onChange={(e) => setSearchPT(e.target.value)}
+                                style={{ padding: '0.6rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', minWidth: '250px', outline: 'none', background: '#fff' }}
+                            />
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 400px), 1fr))', gap: '1.5rem', marginBottom: '3.5rem' }}>
-                            {products.map(pt => {
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 450px), 1fr))', gap: '1.5rem', marginBottom: '3.5rem' }}>
+                            {products.filter(pt => pt.name?.toLowerCase().includes(searchPT.toLowerCase())).map(pt => {
                                 const recipe = recipesMap[pt.id] || [];
                                 return (
-                                    <div key={pt.id} style={{ background: '#fff', borderRadius: '24px', border: '1px solid #f1f5f9', padding: '1.5rem', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+                                    <div key={pt.id} className="recipe-card" style={{ background: '#fff', padding: '1.5rem', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', transition: 'all 0.3s' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
                                             <div>
-                                                <h4 style={{ margin: 0, fontSize: '1.1rem', color: '#1e293b' }}>{pt.name}</h4>
-                                                <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>SKU: {pt.sku || pt.id.split('-')[0]}</div>
+                                                <h3 style={{ fontSize: '1.15rem', fontWeight: '800', color: '#1A3636' }}>{pt.name}</h3>
+                                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
+                                                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Batch Producción</div>
+                                                    <div style={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '4px',
+                                                        fontSize: '0.75rem',
+                                                        background: '#dcfce7',
+                                                        padding: '2px 8px',
+                                                        borderRadius: '6px',
+                                                        color: '#166534',
+                                                        fontWeight: '800'
+                                                    }}>
+                                                        🧴 {pt.batch_size || 1} frascos / lote
+                                                    </div>
+                                                </div>
                                             </div>
                                             <div style={{ textAlign: 'right' }}>
-                                                <div style={{ fontSize: '0.7rem', fontWeight: '900', color: '#64748b' }}>COSTO TOTAL</div>
-                                                <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#10b981' }}>
-                                                    ${(pt.cost || 0).toLocaleString()}
+                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.2rem' }}>
+                                                    <div style={{ fontSize: '0.7rem', fontWeight: '900', color: '#64748b', textTransform: 'uppercase' }}>COSTO BATCH LOTE</div>
+                                                    <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#10b981' }}>
+                                                        ${(pt.recipe_batch_cost || (pt.cost * (pt.batch_size || 1)) || 0).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                                    </div>
+                                                    <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#0ea5e9', background: '#e0f2fe', padding: '2px 8px', borderRadius: '6px', marginTop: '4px' }}>
+                                                        Valor Unitario: ${(pt.cost || 0).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '1rem' }}>
-                                            <div style={{ fontSize: '0.7rem', fontWeight: '800', color: '#94a3b8', marginBottom: '0.8rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.4rem' }}>
-                                                DESGLOSE DE COMPONENTES (BOM)
-                                            </div>
-                                            {recipe.map(comp => {
-                                                const costCalc = comp.cost * comp.qty;
-                                                return (
-                                                    <div key={comp.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
-                                                        <span style={{ color: '#475569' }}>
-                                                            {comp.name}
-                                                            <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginLeft: '4px' }}>
-                                                                ({comp.qty} {comp.unit})
-                                                            </span>
-                                                        </span>
-                                                        <span style={{ fontWeight: '600' }}>
-                                                            ${Math.round(costCalc).toLocaleString()}
-                                                        </span>
+                                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                                            {recipe.length > 0 ? (
+                                                <>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #f1f5f9', paddingBottom: '0.5rem', fontSize: '0.7rem', color: '#94a3b8', fontWeight: '800' }}>
+                                                        <div style={{ flex: 2 }}>MATERIAL / INSUMO</div>
+                                                        <div style={{ flex: 1, textAlign: 'right' }}>V. UNITARIO</div>
+                                                        <div style={{ flex: 1, textAlign: 'right' }}>V. TOTAL</div>
                                                     </div>
-                                                );
-                                            })}
+                                                    {recipe.map((comp, idx) => {
+                                                        const costCalc = comp.cost * comp.qty;
+                                                        const displayQty = comp.qty;
+                                                        const displayUnit = comp.unit;
+                                                        const VUnitario = comp.cost;
+
+                                                        return (
+                                                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '0.5rem', borderBottom: '1px solid #f1f5f9', fontSize: '0.85rem' }}>
+                                                                <div style={{ flex: 2 }}>
+                                                                    <div style={{ color: '#475569', fontWeight: '600' }}>{comp.name}</div>
+                                                                    <div style={{ fontSize: '0.75rem', fontWeight: '800', color: 'var(--color-primary)' }}>{displayQty.toLocaleString('es-CO', { maximumFractionDigits: 2 })} {displayUnit}</div>
+                                                                </div>
+                                                                <div style={{ flex: 1, textAlign: 'right', fontWeight: '600', color: '#64748b' }}>
+                                                                    ${VUnitario.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                                                    <div style={{ fontSize: '0.65rem', opacity: 0.6 }}>/ {displayUnit}</div>
+                                                                </div>
+                                                                <div style={{ flex: 1, textAlign: 'right', fontWeight: '800', color: 'var(--color-primary)' }}>
+                                                                    ${costCalc.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </>
+                                            ) : (
+                                                <div style={{ padding: '1.5rem', background: '#f8fafc', borderRadius: '12px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem', border: '1px dashed #cbd5e1' }}>
+                                                    Sin receta vinculada
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 );
@@ -226,6 +283,12 @@ const Costs = () => {
                     </section>
                 </>
             )}
+            <style>{`
+                .recipe-card:hover {
+                    transform: translateY(-5px);
+                    box-shadow: 0 12px 20px -5px rgba(0,0,0,0.1) !important;
+                }
+            `}</style>
         </div>
     );
 };

@@ -21,7 +21,7 @@ const Products = () => {
     const [previewUrl, setPreviewUrl] = useState('');
     const [previewUrl2, setPreviewUrl2] = useState('');
 
-    
+
     const toggleSelection = (product) => {
         if (selectedForPrint.find(p => p.id === product.id)) {
             setSelectedForPrint(selectedForPrint.filter(p => p.id !== product.id));
@@ -43,8 +43,9 @@ const Products = () => {
         price: '',
         cost: '',
         stock: '0',
-        unit_measure: 'unidad',
-        purchase_unit: '', // New field for Raw Materials
+        unit_measure: 'und',
+        purchase_unit: 'und',
+        conversion_factor: 1, // Nuevo campo para equivalencia
         type: 'PT',
         barcode_text: '',
         description: '',
@@ -60,10 +61,23 @@ const Products = () => {
     const [showUnitManager, setShowUnitManager] = useState(false);
     const [newUnitType, setNewUnitType] = useState('');
     const [unitOptions, setUnitOptions] = useState(() => {
-        const saved = localStorage.getItem('zeticas_units');
-        if (saved) return JSON.parse(saved);
-        return ['unidad', 'kg', 'gr', 'ml', 'lt', 'paquete', 'caja', 'und'];
+        return ['atd', 'cja', 'gr', 'kg', 'lb', 'lt', 'ml', 'paq', 'und'];
     });
+
+    const normalizeUnit = (u) => {
+        if (!u) return 'und';
+        const str = u.toLowerCase().trim();
+        if (['unidades', 'unidad', 'und', 'insumo'].includes(str)) return 'und';
+        if (['kilogramo', 'kilogramos', 'kg', 'kilos', 'kilo'].includes(str)) return 'kg';
+        if (['gramo', 'gramos', 'gr'].includes(str)) return 'gr';
+        if (['litro', 'litros', 'lt'].includes(str)) return 'lt';
+        if (['mililitro', 'mililitros', 'ml'].includes(str)) return 'ml';
+        if (['libra', 'libras', 'lb'].includes(str)) return 'lb';
+        if (['paquete', 'paquetes', 'paq'].includes(str)) return 'paq';
+        if (['caja', 'cajas', 'cja'].includes(str)) return 'cja';
+        if (['atado', 'atados', 'atd'].includes(str)) return 'atd';
+        return str;
+    };
 
     const handleAddUnit = () => {
         if (!newUnitType) return;
@@ -88,13 +102,10 @@ const Products = () => {
 
     const finalUnitOptions = useMemo(() => {
         const set = new Set(unitOptions);
-        // Incluir unidades guardadas en Firestore (colección 'units')
-        units.forEach(u => { if (u.name) set.add(u.name.toLowerCase().trim()); });
-        // Asegurar que el valor actual del form siempre esté disponible
         if (formData.unit_measure) set.add(formData.unit_measure);
         if (formData.purchase_unit) set.add(formData.purchase_unit);
         return Array.from(set).sort();
-    }, [unitOptions, units, formData.unit_measure, formData.purchase_unit]);
+    }, [unitOptions, formData.unit_measure, formData.purchase_unit]);
 
     const productsList = items.map(i => ({
         id: i.id,
@@ -107,6 +118,7 @@ const Products = () => {
         stock: i.initial || 0,
         unit_measure: i.unit_measure || i.unit || 'unidad',
         purchase_unit: i.purchase_unit || i.unit_measure || i.unit || 'unidad',
+        conversion_factor: i.conversion_factor || 1,
         type: i.type === 'product' ? 'PT' : 'MP',
         barcode_text: i.barcode_text || '',
         image_url: i.image_url || '',
@@ -126,10 +138,10 @@ const Products = () => {
             (p.sku?.toLowerCase().includes(srch)) ||
             (p.product_type?.toLowerCase().includes(srch)) ||
             (p.category?.toLowerCase().includes(srch));
-        
+
         const matchesCategory = selectedCategoryFilter === 'Todos' || p.category === selectedCategoryFilter;
         const matchesLine = selectedLineFilter === 'Todos' || p.product_type === selectedLineFilter;
-        
+
         return matchesSearch && matchesCategory && matchesLine;
     });
 
@@ -138,14 +150,17 @@ const Products = () => {
         setShowUnitManager(false);
         if (product) {
             setEditingProduct(product);
-            setFormData({ 
+            setFormData({
                 ...product,
-                barcode_text: product.barcode_text || '' 
+                unit_measure: normalizeUnit(product.unit_measure),
+                purchase_unit: normalizeUnit(product.purchase_unit),
+                barcode_text: product.barcode_text || '',
+                conversion_factor: product.conversion_factor || 1
             });
         } else {
             setEditingProduct(null);
-            setFormData({ 
-                sku: '', name: '', category: 'Producto Terminado', product_type: 'Sal', price: '', cost: '', stock: '0', min_stock_level: 0, unit_measure: 'unidad', purchase_unit: 'unidad', type: 'PT', barcode_text: '', batch_size: 1, published: true
+            setFormData({
+                sku: '', name: '', category: 'Producto Terminado', product_type: 'Sal', price: '', cost: '', stock: '0', min_stock_level: 0, unit_measure: 'und', purchase_unit: 'und', conversion_factor: 1, type: 'PT', barcode_text: '', batch_size: 1, published: true
             });
         }
         setSelectedFile(null);
@@ -175,12 +190,12 @@ const Products = () => {
                 imageUrl2 = await getDownloadURL(storageRef2);
             }
 
-            
+
             // Note: Currently only supporting one primary image upload in this UI, 
             // but we could add a second one later if needed. 
             // For now we persist imageUrl2 if it existed or was manually linked.
 
-            const productData = { 
+            const productData = {
                 sku: formData.sku,
                 name: formData.name,
                 category: formData.category,
@@ -189,8 +204,10 @@ const Products = () => {
                 cost: parseFloat(formData.cost) || 0,
                 stock: parseInt(formData.stock) || 0,
                 unit_measure: formData.unit_measure,
-                purchase_unit: formData.category === 'Materia Prima' ? (formData.purchase_unit || formData.unit_measure) : (formData.unit_measure),
-                type: formData.category === 'Materia Prima' ? 'MP' : 'PT',
+                purchase_unit: formData.category !== 'Producto Terminado' ? (formData.purchase_unit || formData.unit_measure) : (formData.unit_measure),
+                conversion_factor: formData.category !== 'Producto Terminado' ? (parseFloat(formData.conversion_factor) || 1) : 1,
+                purchase_cost: formData.category !== 'Producto Terminado' ? ((parseFloat(formData.cost) || 0) * (parseFloat(formData.conversion_factor) || 1)) : (parseFloat(formData.cost) || 0),
+                type: formData.category !== 'Producto Terminado' ? 'MP' : 'PT',
                 barcode_text: formData.barcode_text || '',
                 image_url: imageUrl,
                 image_url_2: imageUrl2,
@@ -268,8 +285,8 @@ const Products = () => {
                     <div key={p.id} className="print-label">
                         <div className="label-barcode">
                             <div style={{ width: '46mm', display: 'flex', justifyContent: 'center' }}>
-                                <Barcode 
-                                    value={p.barcode_text || p.sku || 'ERROR'} 
+                                <Barcode
+                                    value={p.barcode_text || p.sku || 'ERROR'}
                                     format="CODE128"
                                     width={1.4}
                                     height={40}
@@ -294,8 +311,8 @@ const Products = () => {
                     </div>
                     <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: window.innerWidth < 768 ? 'flex-start' : 'flex-end', width: window.innerWidth < 768 ? '100%' : 'auto' }}>
                         {selectedForPrint.length > 0 && (
-                            <button 
-                                onClick={handlePrintSelected} 
+                            <button
+                                onClick={handlePrintSelected}
                                 style={{ background: '#D4785A', color: '#fff', padding: '0.7rem 1.5rem', borderRadius: '12px', border: 'none', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 10px 20px rgba(212, 120, 90, 0.2)', fontSize: '0.8rem' }}
                             >
                                 <BarcodeIcon size={18} /> {window.innerWidth < 768 ? 'Imprimir' : `Imprimir ${selectedForPrint.length} Etiquetas`}
@@ -313,11 +330,11 @@ const Products = () => {
                 <div style={{ background: '#fff', padding: '1.2rem', borderRadius: '25px', marginBottom: '2.5rem', display: 'flex', gap: '1.5rem', alignItems: 'center', boxShadow: '0 15px 35px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
                     <div style={{ flex: 1, position: 'relative', minWidth: window.innerWidth < 768 ? '100%' : '300px' }}>
                         <Search size={22} style={{ position: 'absolute', left: '1.5rem', top: '50%', transform: 'translateY(-50%)', color: '#023636', opacity: 0.4 }} />
-                        <input 
-                            placeholder="Buscar SKU, Nombre..." 
-                            value={searchTerm} 
-                            onChange={(e) => setSearchTerm(e.target.value)} 
-                            style={{ width: '100%', padding: '1rem 3rem 1rem 4rem', borderRadius: '20px', border: '1px solid #f1f5f9', outline: 'none', fontSize: '1rem', fontWeight: '500', background: '#f8fafc', transition: 'all 0.3s', boxSizing: 'border-box' }} 
+                        <input
+                            placeholder="Buscar SKU, Nombre..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            style={{ width: '100%', padding: '1rem 3rem 1rem 4rem', borderRadius: '20px', border: '1px solid #f1f5f9', outline: 'none', fontSize: '1rem', fontWeight: '500', background: '#f8fafc', transition: 'all 0.3s', boxSizing: 'border-box' }}
                             onFocus={(e) => { e.target.style.borderColor = '#023636'; e.target.style.background = '#fff'; }}
                             onBlur={(e) => { e.target.style.borderColor = '#f1f5f9'; e.target.style.background = '#f8fafc'; }}
                         />
@@ -328,44 +345,44 @@ const Products = () => {
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
                         <span style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginRight: '4px' }}>Tipo:</span>
                         {['Todos', 'Materia Prima', 'Producto Terminado'].map(cat => (
-                            <button 
-                                key={cat} 
-                                onClick={() => setSelectedCategoryFilter(cat)} 
-                                style={{ 
-                                    padding: '0.6rem 1.2rem', 
-                                    borderRadius: '12px', 
-                                    border: '1px solid #e2e8f0', 
-                                    background: selectedCategoryFilter === cat ? '#023636' : '#fff', 
-                                    color: selectedCategoryFilter === cat ? '#fff' : '#64748b', 
-                                    fontSize: '0.75rem', 
-                                    fontWeight: '900', 
-                                    cursor: 'pointer', 
-                                    textTransform: 'uppercase', 
-                                    transition: 'all 0.3s' 
+                            <button
+                                key={cat}
+                                onClick={() => setSelectedCategoryFilter(cat)}
+                                style={{
+                                    padding: '0.6rem 1.2rem',
+                                    borderRadius: '12px',
+                                    border: '1px solid #e2e8f0',
+                                    background: selectedCategoryFilter === cat ? '#023636' : '#fff',
+                                    color: selectedCategoryFilter === cat ? '#fff' : '#64748b',
+                                    fontSize: '0.75rem',
+                                    fontWeight: '900',
+                                    cursor: 'pointer',
+                                    textTransform: 'uppercase',
+                                    transition: 'all 0.3s'
                                 }}
                             >
                                 {cat}
                             </button>
                         ))}
-                        
+
                         <div style={{ width: '1px', height: '24px', background: '#e2e8f0', margin: '0 12px' }} />
-                        
+
                         <span style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginRight: '4px' }}>Línea:</span>
                         {['Todos', 'Sal', 'Dulce'].map(line => (
-                            <button 
-                                key={line} 
-                                onClick={() => setSelectedLineFilter(line)} 
-                                style={{ 
-                                    padding: '0.6rem 1.2rem', 
-                                    borderRadius: '12px', 
-                                    border: '1px solid #e2e8f0', 
-                                    background: selectedLineFilter === line ? '#D4785A' : '#fff', 
-                                    color: selectedLineFilter === line ? '#fff' : '#64748b', 
-                                    fontSize: '0.75rem', 
-                                    fontWeight: '900', 
-                                    cursor: 'pointer', 
-                                    textTransform: 'uppercase', 
-                                    transition: 'all 0.3s' 
+                            <button
+                                key={line}
+                                onClick={() => setSelectedLineFilter(line)}
+                                style={{
+                                    padding: '0.6rem 1.2rem',
+                                    borderRadius: '12px',
+                                    border: '1px solid #e2e8f0',
+                                    background: selectedLineFilter === line ? '#D4785A' : '#fff',
+                                    color: selectedLineFilter === line ? '#fff' : '#64748b',
+                                    fontSize: '0.75rem',
+                                    fontWeight: '900',
+                                    cursor: 'pointer',
+                                    textTransform: 'uppercase',
+                                    transition: 'all 0.3s'
                                 }}
                             >
                                 {line}
@@ -381,9 +398,9 @@ const Products = () => {
                             <thead style={{ background: '#f8fafc' }}>
                                 <tr>
                                     <th style={{ padding: '1.2rem', textAlign: 'center', width: '50px' }}>
-                                        <input 
-                                            type="checkbox" 
-                                            checked={selectedForPrint.length === filteredProducts.length && filteredProducts.length > 0} 
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedForPrint.length === filteredProducts.length && filteredProducts.length > 0}
                                             onChange={(e) => {
                                                 if (e.target.checked) setSelectedForPrint(filteredProducts);
                                                 else setSelectedForPrint([]);
@@ -404,9 +421,9 @@ const Products = () => {
                                 {filteredProducts.map(p => (
                                     <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9', background: selectedForPrint.find(s => s.id === p.id) ? '#fff7ed' : 'transparent' }}>
                                         <td style={{ padding: '1rem', textAlign: 'center' }}>
-                                            <input 
-                                                type="checkbox" 
-                                                checked={!!selectedForPrint.find(s => s.id === p.id)} 
+                                            <input
+                                                type="checkbox"
+                                                checked={!!selectedForPrint.find(s => s.id === p.id)}
                                                 onChange={() => toggleSelection(p)}
                                                 style={{ cursor: 'pointer' }}
                                             />
@@ -429,13 +446,15 @@ const Products = () => {
                                                 </div>
                                             </div>
                                         </td>
-    
+
                                         <td style={{ padding: '1rem' }}>
                                             <span style={{ padding: '4px 10px', borderRadius: '8px', fontSize: '0.7rem', fontWeight: '900', background: p.product_type === 'Sal' ? '#f1f5f9' : p.product_type === 'Dulce' ? '#fff7ed' : '#f8fafc', color: p.product_type === 'Sal' ? '#475569' : p.product_type === 'Dulce' ? '#c2410c' : '#94a3b8', border: '1px solid currentColor', opacity: p.product_type === 'Insumo' ? 0.3 : 1 }}>{p.product_type}</span>
                                         </td>
                                         <td style={{ padding: '1rem', fontSize: '0.85rem' }}>{p.category}</td>
                                         <td style={{ padding: '1rem', color: '#666' }}>${p.cost?.toLocaleString()}</td>
-                                        <td style={{ padding: '1rem', fontWeight: 'bold', color: 'var(--color-primary)' }}>${p.price?.toLocaleString()}</td>
+                                        <td style={{ padding: '1rem', fontWeight: 'bold', color: 'var(--color-primary)' }}>
+                                            {p.category === 'Producto Terminado' ? `$${p.price?.toLocaleString()}` : <span style={{ color: '#cbd5e1', fontWeight: 'normal' }}>-</span>}
+                                        </td>
                                         <td style={{ padding: '1rem', textAlign: 'center' }}>
                                             <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
                                                 <button onClick={() => setBarcodeModal({ show: true, product: p })} style={{ padding: '0.4rem', border: '1px solid #eee', background: 'none', cursor: 'pointer' }}><BarcodeIcon size={14} /></button>
@@ -452,27 +471,27 @@ const Products = () => {
 
                 {isModalOpen && (
                     <div className="no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: window.innerWidth < 768 ? 'flex-start' : 'center', justifyContent: 'center', zIndex: 3000 }}>
-                        <div style={{ 
-                            background: '#fff', 
-                            padding: window.innerWidth < 768 ? '1.5rem' : '2rem', 
-                            borderRadius: window.innerWidth < 768 ? '0' : '24px', 
-                            width: '100%', 
-                            maxWidth: '500px', 
+                        <div style={{
+                            background: '#fff',
+                            padding: window.innerWidth < 768 ? '1.5rem' : '2rem',
+                            borderRadius: window.innerWidth < 768 ? '0' : '24px',
+                            width: '100%',
+                            maxWidth: '500px',
                             height: window.innerWidth < 768 ? '100%' : 'auto',
-                            maxHeight: window.innerWidth < 768 ? '100%' : '90vh', 
-                            overflowY: 'auto', 
-                            position: 'relative' 
+                            maxHeight: window.innerWidth < 768 ? '100%' : '90vh',
+                            overflowY: 'auto',
+                            position: 'relative'
                         }}>
                             <button onClick={() => setIsModalOpen(false)} style={{ position: 'absolute', right: '1.5rem', top: '1.5rem', border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={24} /></button>
                             <h3 style={{ marginBottom: '1.5rem', color: 'var(--color-primary)', fontWeight: '800' }}>{editingProduct ? 'Editar SKU' : 'Nuevo SKU'}</h3>
                             <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-                                
+
                                 {/* 1. CATEGORÍA - PRIMER CAMPO */}
                                 <div>
                                     <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>CATEGORÍA</label>
-                                    <select 
-                                        value={formData.category} 
-                                        onChange={(e) => setFormData({ ...formData, category: e.target.value, type: e.target.value === 'Materia Prima' ? 'MP' : 'PT' })} 
+                                    <select
+                                        value={formData.category}
+                                        onChange={(e) => setFormData({ ...formData, category: e.target.value, type: e.target.value === 'Materia Prima' ? 'MP' : 'PT' })}
                                         style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', background: '#f8fafc', fontWeight: '700', color: 'var(--color-primary)', outline: 'none' }}
                                     >
                                         <option value="Producto Terminado">Producto Terminado</option>
@@ -495,57 +514,94 @@ const Products = () => {
 
                                 {/* 3. Valores financieros */}
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                    <div>
-                                        <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>COSTO / COMPRA</label>
-                                        <input type="number" value={formData.cost} onChange={(e) => setFormData({ ...formData, cost: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', fontWeight: '700' }} />
+                                    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                                        <div style={{ flex: 1 }}>
+                                            <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.4rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                                {formData.category !== 'Producto Terminado' ? 'COSTO UNITARIO RECETA' : 'COSTO DE PRODUCCIÓN'}
+                                            </label>
+                                            <div style={{ fontSize: '0.65rem', color: '#64748b', marginBottom: '0.6rem', fontWeight: '600', minHeight: '1.5rem' }}>
+                                                {formData.category !== 'Producto Terminado' && `Valor por 1 ${formData.unit_measure || 'unidad de uso'}`}
+                                            </div>
+                                        </div>
+                                        <div style={{ position: 'relative', marginTop: 'auto' }}>
+                                            <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', fontWeight: '900', color: '#94a3b8' }}>$</span>
+                                            <input type="number" value={formData.cost} onChange={(e) => setFormData({ ...formData, cost: e.target.value })} style={{ width: '100%', padding: '1rem 1rem 1rem 2rem', borderRadius: '16px', border: '1px solid #e2e8f0', fontWeight: '700', boxSizing: 'border-box' }} />
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>PRECIO VENTA</label>
-                                        <input type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', fontWeight: '700' }} />
-                                    </div>
+
+                                    {formData.category === 'Producto Terminado' ? (
+                                        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                                            <div style={{ flex: 1 }}>
+                                                <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.4rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>PRECIO VENTA</label>
+                                                <div style={{ fontSize: '0.65rem', color: '#64748b', marginBottom: '0.6rem', fontWeight: '600', minHeight: '1.5rem' }}>
+                                                    Precio final al cliente
+                                                </div>
+                                            </div>
+                                            <div style={{ marginTop: 'auto' }}>
+                                                <input type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', fontWeight: '700', boxSizing: 'border-box' }} />
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                                            <div style={{ flex: 1 }}>
+                                                <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#10b981', marginBottom: '0.4rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>COSTO TOTAL COMPRA</label>
+                                                <div style={{ fontSize: '0.65rem', color: '#047857', marginBottom: '0.6rem', fontWeight: '600', minHeight: '1.5rem' }}>
+                                                    {`Valor por 1 ${formData.purchase_unit || 'unidad'}`}
+                                                </div>
+                                            </div>
+                                            <div style={{ marginTop: 'auto', padding: '0.9rem 1rem', background: '#ecfdf5', border: '2px solid rgba(16, 185, 129, 0.2)', borderRadius: '16px', color: '#047857', fontWeight: '900', display: 'flex', alignItems: 'center', boxSizing: 'border-box', height: '54px' }}>
+                                                ${((parseFloat(formData.cost) || 0) * (parseFloat(formData.conversion_factor) || 1)).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
-                                {/* Stock de Seguridad - Política Centralizada */}
-                                <div style={{ background: '#fef2f2', padding: '1.2rem', borderRadius: '16px', border: '1px solid #fee2e2' }}>
-                                    <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#dc2626', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                                        🚨 Política de Stock de Seguridad (Mínimo)
-                                    </label>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                        <input 
-                                            type="number" 
-                                            value={formData.min_stock_level} 
-                                            onChange={(e) => setFormData({ ...formData, min_stock_level: e.target.value })} 
-                                            style={{ width: '120px', padding: '0.8rem', borderRadius: '12px', border: '2px solid #ef4444', fontWeight: '900', fontSize: '1.1rem', textAlign: 'center', color: '#b91c1c' }} 
-                                        />
-                                        <div style={{ fontSize: '0.8rem', color: '#7f1d1d', fontWeight: '500', lineHeight: '1.3' }}>
-                                            Nivel crítico donde el sistema activará señales de reposición.
+                                {/* 4. UNIDADES DE MEDIDA - Lógica Dual para Materia Prima / Insumos */}
+                                {formData.category !== 'Producto Terminado' ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                            <div>
+                                                <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>UNIDAD DE COMPRA</label>
+                                                <select
+                                                    value={formData.purchase_unit || formData.unit_measure}
+                                                    onChange={(e) => setFormData({ ...formData, purchase_unit: e.target.value })}
+                                                    style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '2px solid #D4785A', background: '#fff', fontWeight: 'bold' }}
+                                                >
+                                                    {finalUnitOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>UNIDAD DE USO / RECETA</label>
+                                                <select
+                                                    value={formData.unit_measure}
+                                                    onChange={(e) => setFormData({ ...formData, unit_measure: e.target.value })}
+                                                    style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', background: '#f8fafc', fontWeight: 'bold' }}
+                                                >
+                                                    {finalUnitOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                                                </select>
+                                            </div>
                                         </div>
-                                    </div>
-                                </div>
 
-                                {/* 4. UNIDADES DE MEDIDA - Lógica Dual para Materia Prima */}
-                                {formData.category === 'Materia Prima' ? (
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                        <div>
-                                            <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>UNIDAD DE COMPRA</label>
-                                            <select 
-                                                value={formData.purchase_unit || formData.unit_measure} 
-                                                onChange={(e) => setFormData({ ...formData, purchase_unit: e.target.value })} 
-                                                style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '2px solid #D4785A', background: '#fff', fontWeight: 'bold' }}
-                                            >
-                                                {finalUnitOptions.map(u => <option key={u} value={u}>{u}</option>)}
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>UNIDAD DE USO / RECETA</label>
-                                            <select 
-                                                value={formData.unit_measure} 
-                                                onChange={(e) => setFormData({ ...formData, unit_measure: e.target.value })} 
-                                                style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', background: '#f8fafc', fontWeight: 'bold' }}
-                                            >
-                                                {finalUnitOptions.map(u => <option key={u} value={u}>{u}</option>)}
-                                            </select>
-                                        </div>
+                                        {formData.purchase_unit && formData.unit_measure && formData.purchase_unit !== formData.unit_measure && (
+                                            <div style={{ background: '#f8fafc', padding: '1.2rem', borderRadius: '16px', border: '1px dashed #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', animation: 'fadeIn 0.3s' }}>
+                                                <div style={{ fontSize: '0.75rem', color: '#64748b', lineHeight: '1.4' }}>
+                                                    <b style={{ color: '#023636', display: 'block', marginBottom: '2px' }}>EQUIVALENCIA:</b>
+                                                    ¿Cuántos <b>{formData.unit_measure}</b> rinde 1 <b>{formData.purchase_unit}</b>?
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#fff', padding: '0.5rem 1rem', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.02)', border: '1px solid #e2e8f0' }}>
+                                                    <span style={{ fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8' }}>1 {formData.purchase_unit} = </span>
+                                                    <input
+                                                        type="number"
+                                                        min="0.0001"
+                                                        step="any"
+                                                        value={formData.conversion_factor}
+                                                        onChange={(e) => setFormData({ ...formData, conversion_factor: e.target.value })}
+                                                        style={{ width: '80px', padding: '0.6rem', borderRadius: '8px', border: '2px solid #D4785A', fontWeight: '900', textAlign: 'center', color: '#023636', outline: 'none' }}
+                                                    />
+                                                    <span style={{ fontSize: '0.8rem', fontWeight: '900', color: '#023636' }}>{formData.unit_measure}</span>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 ) : (
                                     <div>
@@ -558,6 +614,25 @@ const Products = () => {
                                         </div>
                                     </div>
                                 )}
+
+                                {/* Stock de Seguridad - Política Centralizada */}
+                                <div style={{ background: '#fef2f2', padding: '1.2rem', borderRadius: '16px', border: '1px solid #fee2e2' }}>
+                                    <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#dc2626', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                        🚨 Política de Stock de Seguridad (Mínimo)
+                                    </label>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                        <input
+                                            type="number"
+                                            value={formData.min_stock_level}
+                                            onChange={(e) => setFormData({ ...formData, min_stock_level: e.target.value })}
+                                            style={{ width: '120px', padding: '0.8rem', borderRadius: '12px', border: '2px solid #ef4444', fontWeight: '900', fontSize: '1.1rem', textAlign: 'center', color: '#b91c1c' }}
+                                        />
+                                        <span style={{ fontSize: '1.1rem', fontWeight: '900', color: '#b91c1c' }}>{formData.unit_measure}</span>
+                                        <div style={{ fontSize: '0.8rem', color: '#7f1d1d', fontWeight: '500', lineHeight: '1.3', marginLeft: '0.5rem' }}>
+                                            Nivel crítico donde el sistema activará señales de reposición.
+                                        </div>
+                                    </div>
+                                </div>
 
                                 {showUnitManager && (
                                     <div style={{ padding: '1.2rem', background: '#f8fafc', borderRadius: '20px', border: '1px solid #e2e8f0', animation: 'fadeIn 0.3s' }}>
@@ -615,12 +690,12 @@ const Products = () => {
 
                                         <div>
                                             <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>DESCRIPCIÓN COMERCIAL (TIENDA)</label>
-                                            <textarea 
+                                            <textarea
                                                 rows="3"
-                                                placeholder="Ej: Mermelada gourmet endulzada con stevia..." 
-                                                value={formData.description} 
-                                                onChange={(e) => setFormData({ ...formData, description: e.target.value })} 
-                                                style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', outline: 'none', fontFamily: 'inherit' }} 
+                                                placeholder="Ej: Mermelada gourmet endulzada con stevia..."
+                                                value={formData.description}
+                                                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                                style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', outline: 'none', fontFamily: 'inherit' }}
                                             />
                                         </div>
 
@@ -629,25 +704,25 @@ const Products = () => {
                                                 <span style={{ fontSize: '0.8rem', fontWeight: '800', color: '#025357', display: 'block' }}>Publicar en Tienda</span>
                                                 <span style={{ fontSize: '0.65rem', color: '#64748b' }}>¿Mostrar este producto en el catálogo digital?</span>
                                             </div>
-                                            <div 
+                                            <div
                                                 onClick={() => setFormData({ ...formData, published: !formData.published })}
-                                                style={{ 
-                                                    width: '50px', 
-                                                    height: '26px', 
-                                                    borderRadius: '13px', 
-                                                    background: formData.published ? '#10b981' : '#cbd5e1', 
-                                                    position: 'relative', 
+                                                style={{
+                                                    width: '50px',
+                                                    height: '26px',
+                                                    borderRadius: '13px',
+                                                    background: formData.published ? '#10b981' : '#cbd5e1',
+                                                    position: 'relative',
                                                     cursor: 'pointer',
                                                     transition: 'all 0.3s ease'
                                                 }}
                                             >
-                                                <div style={{ 
-                                                    width: '20px', 
-                                                    height: '20px', 
-                                                    borderRadius: '50%', 
-                                                    background: '#fff', 
-                                                    position: 'absolute', 
-                                                    top: '3px', 
+                                                <div style={{
+                                                    width: '20px',
+                                                    height: '20px',
+                                                    borderRadius: '50%',
+                                                    background: '#fff',
+                                                    position: 'absolute',
+                                                    top: '3px',
                                                     left: formData.published ? '27px' : '3px',
                                                     transition: 'all 0.3s ease',
                                                     boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
@@ -697,8 +772,8 @@ const Products = () => {
                             <button onClick={() => setBarcodeModal({ show: false, product: null })} style={{ position: 'absolute', right: '1.5rem', top: '1.5rem', border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={24} /></button>
                             <h3 style={{ marginBottom: '1.5rem' }}>Generador de Etiqueta Individual</h3>
                             <div style={{ padding: '1rem', border: '2px dashed #e2e8f0', background: '#f8fafc', borderRadius: '16px', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                <Barcode 
-                                    value={barcodeModal.product?.barcode_text || barcodeModal.product?.sku || 'ERROR'} 
+                                <Barcode
+                                    value={barcodeModal.product?.barcode_text || barcodeModal.product?.sku || 'ERROR'}
                                     format="CODE128"
                                     width={1.5}
                                     height={60}
@@ -707,11 +782,11 @@ const Products = () => {
                                 />
                                 <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.5rem' }}>{barcodeModal.product?.name}</div>
                             </div>
-                            <button 
+                            <button
                                 onClick={() => {
                                     setSelectedForPrint([barcodeModal.product]);
                                     setTimeout(() => window.print(), 100);
-                                }} 
+                                }}
                                 style={{ width: '100%', padding: '1rem', borderRadius: '12px', background: 'var(--color-primary)', color: '#fff', border: 'none', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
                             >
                                 <BarcodeIcon size={18} /> Imprimir Etiqueta Sola

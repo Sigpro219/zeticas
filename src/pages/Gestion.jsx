@@ -301,8 +301,7 @@ const Gestion = () => {
                     {/* Primary Workflow Flows */}
                     {['orders', 'purchases', 'production', 'shipping'].map(tabId => {
                         const tab = [...valueStreamTabs, ...operationalHubTabs].find(t => t.id === tabId);
-                        const isOperational = operationalHubTabs.some(o => o.id === tabId);
-                        const themeColor = isOperational ? institutionOcre : deepTeal;
+                        const themeColor = deepTeal;
 
                         return (
                             <button
@@ -341,7 +340,7 @@ const Gestion = () => {
                                 gap: '0.8rem',
                                 padding: '0.7rem 1.25rem',
                                 border: 'none',
-                                background: activeTab === tab.id ? (operationalHubTabs.some(o => o.id === tab.id) ? institutionOcre : deepTeal) : 'transparent',
+                                background: activeTab === tab.id ? deepTeal : 'transparent',
                                 color: activeTab === tab.id ? '#fff' : '#64748b',
                                 borderRadius: '14px',
                                 cursor: 'pointer',
@@ -349,7 +348,7 @@ const Gestion = () => {
                                 fontWeight: '700',
                                 transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
                                 transform: activeTab === tab.id ? 'translateX(5px)' : 'none',
-                                boxShadow: activeTab === tab.id ? `0 8px 20px ${operationalHubTabs.some(o => o.id === tab.id) ? institutionOcre : deepTeal}25` : 'none'
+                                boxShadow: activeTab === tab.id ? `0 8px 20px ${deepTeal}25` : 'none'
                             }}
                         >
                             <span style={{ opacity: activeTab === tab.id ? 1 : 0.6 }}>{tab.icon}</span>

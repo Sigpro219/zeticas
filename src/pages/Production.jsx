@@ -38,8 +38,17 @@ const premiumSalmon = "#E29783";
 const glassWhite = "rgba(255, 255, 255, 0.85)";
 
 const Production = () => {
-    const { orders, items, recipes, productionOrders, saveOdp, consumeMaterials, loadFinishedGoods } = useBusiness();
-    
+    const {
+        orders,
+        items,
+        recipes,
+        productionOrders,
+        saveOdp,
+        consumeMaterials,
+        loadFinishedGoods,
+        ownCompany
+    } = useBusiness();
+
     const [odpSettings, setOdpSettings] = useState(() => {
         const saved = localStorage.getItem('zeticas_odp_settings');
         return saved ? JSON.parse(saved) : {};
@@ -47,7 +56,7 @@ const Production = () => {
 
     const [syncStatus, setSyncStatus] = useState('idle');
     const [pdfPreview, setPdfPreview] = useState({ show: false, url: '', fileName: '', odpData: null });
-    const [confModal, setConfModal] = useState({ show: false, odp: null });
+    const [confModal, setConfModal] = useState({ show: false, odp: null, endTime: null });
     const [mpConfModal, setMpConfModal] = useState({ show: false, odp: null, materials: [] });
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState(STATUS_ALL);
@@ -80,17 +89,17 @@ const Production = () => {
                     const s = settingsFromDB[sku];
                     const p = prev[sku];
                     if (!p) return true;
-                    return s.customQty !== p.customQty || 
-                           s.wasteQty !== p.wasteQty || 
-                           s.start !== p.start || 
-                           s.end !== p.end || 
-                           s.mpSynced !== p.mpSynced || 
-                           s.inventorySynced !== p.inventorySynced ||
-                           s.odpId !== p.odpId;
+                    return s.customQty !== p.customQty ||
+                        s.wasteQty !== p.wasteQty ||
+                        s.start !== p.start ||
+                        s.end !== p.end ||
+                        s.mpSynced !== p.mpSynced ||
+                        s.inventorySynced !== p.inventorySynced ||
+                        s.odpId !== p.odpId;
                 });
 
                 if (!needsUpdate) return prev;
-                
+
                 const merged = { ...prev, ...settingsFromDB };
                 // Timeout to move storage update out of render cycle
                 setTimeout(() => localStorage.setItem('zeticas_odp_settings', JSON.stringify(merged)), 0);
@@ -112,7 +121,8 @@ const Production = () => {
                 completed_at: settings.end || null,
                 mp_synced: settings.mpSynced || false,
                 inventory_synced: settings.inventorySynced || false,
-                status: settings.end ? 'DONE' : (settings.start ? 'IN_PROGRESS' : 'TO_DO'),
+                materials_consumed: settings.materials_consumed || null,
+                status: (settings.end && settings.inventorySynced) ? 'DONE' : (settings.start ? 'IN_PROGRESS' : 'TO_DO'),
             };
 
             await saveOdp(sku, payload);
@@ -147,7 +157,8 @@ const Production = () => {
             const safetyStock = product?.safety || 0;
 
             // ── MRP por lotes mínimos ────────────────────────────────
-            const batchSize = product?.batch_size || 1;
+            const recipeList = recipes[group.sku] || [];
+            const batchSize = product?.batch_size || recipeList[0]?.yield_quantity || 1;
             const netDemand = Math.max(0, group.totalRequested - inventoryPT + safetyStock);
             const batchesNeeded = netDemand > 0 ? Math.ceil(netDemand / batchSize) : 0;
             const calculatedQty = batchesNeeded * batchSize;  // siempre múltiplo del lote
@@ -160,7 +171,7 @@ const Production = () => {
 
             let status = { text: STATUS_PROGRAMADA, color: 'rgba(239, 68, 68, 0.1)', textColor: '#ef4444' };
             if (settings.start) status = { text: STATUS_EN_PRODUCCION, color: 'rgba(212, 120, 90, 0.1)', textColor: '#D4785A' };
-            if (settings.end) status = { text: STATUS_FINALIZADA, color: 'rgba(16, 185, 129, 0.1)', textColor: '#10b981' };
+            if (settings.end && settings.inventorySynced) status = { text: STATUS_FINALIZADA, color: 'rgba(16, 185, 129, 0.1)', textColor: '#10b981' };
 
             // Efficiency and waste calculations
             let efficiency = null;
@@ -171,7 +182,7 @@ const Production = () => {
                 const end = new Date(settings.end);
                 const diffHr = (end - start) / (1000 * 60 * 60);
                 if (diffHr > 0) efficiency = Math.round(Number(finalQty) / diffHr);
-                
+
                 if (settings.wasteQty !== undefined) {
                     waste = Number(settings.wasteQty);
                     waste_percent = ((waste / Number(finalQty)) * 100).toFixed(1);
@@ -212,7 +223,7 @@ const Production = () => {
         const finished = odpQueue.filter(o => o.efficiency !== null);
         if (finished.length === 0) return { avg: null, rows: [] };
         const avg = finished.reduce((acc, o) => acc + o.efficiency, 0) / finished.length;
-        
+
         const perSku = {};
         finished.forEach(o => {
             if (!perSku[o.sku]) perSku[o.sku] = { sku: o.sku, count: 0, total: 0 };
@@ -280,52 +291,85 @@ const Production = () => {
         });
     }, [odpQueue, searchQuery, statusFilter, dateFilter, customRange]);
 
+    const resetOdp = async (sku) => {
+        if (!window.confirm("¿Deseas resetear esta ODP? Se borrarán los tiempos y estados de sincronización.")) return;
+        const newSettings = { ...odpSettings };
+        delete newSettings[sku];
+        setOdpSettings(newSettings);
+        localStorage.setItem('zeticas_odp_settings', JSON.stringify(newSettings));
+        await saveOdp(sku, {
+            started_at: null,
+            completed_at: null,
+            mp_synced: false,
+            inventory_synced: false,
+            waste_qty: 0,
+            custom_qty: null,
+            status: 'TO_DO'
+        });
+        alert("Estado de ODP limpiado.");
+    };
+
     // ── Actualizar ODP ────────────────────────────────────────────────────────
     const updateOdp = (sku, field, value) => {
-        const newSettings = {
-            ...odpSettings,
-            [sku]: { ...(odpSettings[sku] || {}), [field]: value }
-        };
-        
         // Logic for start: show MP confirmation first
         if (field === 'start' && value && !odpSettings[sku]?.mpSynced) {
             const recipeList = recipes[sku] || [];
             const odp = odpQueue.find(o => o.sku === sku);
             if (recipeList.length > 0 && odp) {
-                // ── Cálculo MRP por lotes mínimos ──────────────────
-                const product = items.find(i => i.name === sku);
-                const batchSize = product?.batch_size || recipeList[0]?.yield_quantity || 1;
-                const batchesNeeded = batchSize > 0 ? Math.ceil(Number(odp.finalQty) / batchSize) : Number(odp.finalQty);
-                // ────────────────────────────────────────────────────
+                const yieldQty = Number(recipeList[0]?.yield_quantity) || 1;
+                const finalToProd = Number(odp.finalQty) || 0;
+
                 const materialsWithQty = recipeList.map(r => ({
                     ...r,
-                    qtyToConsume: Number(r.qty) * batchesNeeded  // qty por lote × número de lotes
+                    id: r.rm_id, // ensure ID is used for consumeMaterials
+                    qtyToConsume: (Number(r.qty) / yieldQty) * finalToProd
                 }));
                 setMpConfModal({ show: true, odp, materials: materialsWithQty });
-                return; // Stop here until confirmed
+                return;
             }
         }
+
+        // Logic for end: show PT confirmation
+        if (field === 'end' && value && !odpSettings[sku]?.inventorySynced) {
+            const odp = odpQueue.find(o => o.sku === sku);
+            if (odp) {
+                setConfModal({ show: true, odp, endTime: value });
+                // We don't save 'end' yet, we wait for authorization to stop timer AND charge PT
+                return;
+            }
+        }
+
+        const newSettings = {
+            ...odpSettings,
+            [sku]: { ...(odpSettings[sku] || {}), [field]: value }
+        };
 
         setOdpSettings(newSettings);
         localStorage.setItem('zeticas_odp_settings', JSON.stringify(newSettings));
         const odpEntry = odpQueue.find(o => o.sku === sku);
         saveToFirestore(sku, newSettings[sku], odpEntry?.odpId);
-        
-        if (field === 'end' && value && !newSettings[sku]?.inventorySynced) {
-            const odp = odpQueue.find(o => o.sku === sku);
-            if (odp) setConfModal({ show: true, odp });
-        }
     };
 
     const handleConfirmMp = async () => {
         const { odp, materials } = mpConfModal;
         try {
-            // Discount from inventory
+            // 1. Discount from inventory
             const result = await consumeMaterials(materials.map(m => ({ id: m.id, qtyToConsume: m.qtyToConsume })));
             if (result.success) {
+                // 2. Update state with start time, sync flag, and the list of materials associated
                 const newSettings = {
                     ...odpSettings,
-                    [odp.sku]: { ...(odpSettings[odp.sku] || {}), start: new Date().toISOString(), mpSynced: true }
+                    [odp.sku]: {
+                        ...(odpSettings[odp.sku] || {}),
+                        start: new Date().toISOString(),
+                        mpSynced: true,
+                        materials_consumed: materials.map(m => ({
+                            id: m.id,
+                            name: m.name,
+                            qty: Number(m.qtyToConsume.toFixed(2)),
+                            unit: m.unit
+                        }))
+                    }
                 };
                 setOdpSettings(newSettings);
                 localStorage.setItem('zeticas_odp_settings', JSON.stringify(newSettings));
@@ -339,23 +383,62 @@ const Production = () => {
 
     const generateOdpPdfFull = (odp, isDownload = false) => {
         const doc = new jsPDF();
+        const comp = ownCompany || {};
+
+        // Header with Company Data
         doc.setFontSize(22);
         doc.setTextColor(2, 54, 54);
-        doc.text('ORDEN DE PRODUCCIÓN', 14, 25);
+        doc.text(comp.name || 'Zeticas SAS BIC', 14, 25);
+
         doc.setFontSize(10);
-        doc.text(`NO. ODP: ${odp.odpId}`, 14, 35);
-        doc.text(`FECHA: ${new Date().toLocaleDateString()}`, 14, 40);
-        
+        doc.setTextColor(100, 100, 100);
+        doc.text(`NIT: ${comp.nit || '901.XXX.XXX-X'}`, 14, 32);
+        doc.text(`DIRECCIÓN: ${comp.address || 'Guasca, Cundinamarca'}`, 14, 37);
+        doc.text(`TELÉFONO: ${comp.phone || '314 433 6525'}`, 14, 42);
+
+        doc.setFontSize(16);
+        doc.setTextColor(2, 54, 54);
+        doc.text('ORDEN DE PRODUCCIÓN', 14, 55);
+
+        doc.setFontSize(11);
+        doc.setTextColor(33, 33, 33);
+        doc.text(`REFERENCIA: ${odp.odpId}`, 14, 65);
+        doc.text(`FECHA EMISIÓN: ${new Date().toLocaleDateString()}`, 14, 70);
+        doc.text(`ESTADO ACTUAL: ${odp.status.text.toUpperCase()}`, 14, 75);
+
+        // Main Info Table
         autoTable(doc, {
-            startY: 50,
-            head: [['SKU', 'CANTIDAD', 'INICIO', 'FIN']],
-            body: [[odp.sku, odp.finalQty, odp.settings.start || 'N/A', odp.settings.end || 'N/A']],
+            startY: 85,
+            head: [['PRODUCTO / SKU', 'CANTIDAD PROGRAMADA', 'LOTE MÍN.']],
+            body: [[odp.sku, `${odp.finalQty} un.`, `${odp.batchSize} un.`]],
             theme: 'grid',
-            headStyles: { fillColor: [2, 54, 54] }
+            headStyles: { fillColor: [2, 54, 54], textColor: [255, 255, 255], fontStyle: 'bold' },
+            styles: { fontSize: 10, cellPadding: 5 }
         });
 
+        // Cronometry Table
+        autoTable(doc, {
+            startY: doc.lastAutoTable.finalY + 15,
+            head: [['INICIO PRODUCCIÓN', 'FIN PRODUCCIÓN', 'TIEMPO ESTIMADO']],
+            body: [[
+                odp.settings.start ? new Date(odp.settings.start).toLocaleString() : 'PENDIENTE',
+                odp.settings.end ? new Date(odp.settings.end).toLocaleString() : 'PENDIENTE',
+                odp.efficiency ? `${odp.efficiency} und/hr (Real)` : 'N/A'
+            ]],
+            theme: 'striped',
+            headStyles: { fillColor: [212, 120, 90] }
+        });
+
+        // Signatures
+        const finalY = doc.lastAutoTable.finalY + 40;
+        doc.line(14, finalY, 80, finalY);
+        doc.text('RESPONSABLE PRODUCCIÓN', 14, finalY + 5);
+
+        doc.line(120, finalY, 186, finalY);
+        doc.text('CONTROL CALIDAD', 120, finalY + 5);
+
         if (isDownload) {
-            doc.save(`${odp.odpId}.pdf`);
+            doc.save(`${odp.odpId}_${odp.sku.replace(/\s+/g, '_')}.pdf`);
         } else {
             const pdfBlob = doc.output('bloburl');
             setPdfPreview({ show: true, url: pdfBlob, fileName: `${odp.odpId}.pdf`, odpData: odp });
@@ -364,18 +447,24 @@ const Production = () => {
 
     const handleInventorySync = async (odp) => {
         try {
+            // 1. Charge Finished Goods to inventory
             const result = await loadFinishedGoods(odp.sku, Number(odp.finalQty));
             if (result.success) {
-                const newSettings = { 
-                    ...odpSettings, 
-                    [odp.sku]: { ...odpSettings[odp.sku], inventorySynced: true } 
+                // 2. Stop timer at the EXACT moment 'Finalizar' was clicked and finalize ODP
+                const newSettings = {
+                    ...odpSettings,
+                    [odp.sku]: {
+                        ...odpSettings[odp.sku],
+                        end: confModal.endTime || new Date().toISOString(),
+                        inventorySynced: true
+                    }
                 };
                 setOdpSettings(newSettings);
                 localStorage.setItem('zeticas_odp_settings', JSON.stringify(newSettings));
                 await saveToFirestore(odp.sku, newSettings[odp.sku], odp.odpId);
                 alert(`Ingresado a Inventario de producto terminado: ${odp.finalQty} unidades de ${odp.sku}`);
             }
-            setConfModal({ show: false, odp: null });
+            setConfModal({ show: false, odp: null, endTime: null });
         } catch (err) { alert(err.message); }
     };
 
@@ -385,10 +474,10 @@ const Production = () => {
             {/* HEADER removed as it's redundant with the main layout */}
 
             {/* Filter Bar */}
-            <div style={{ 
-                display: 'flex', 
-                gap: '1.5rem', 
-                marginBottom: '1.5rem', 
+            <div style={{
+                display: 'flex',
+                gap: '1.5rem',
+                marginBottom: '1.5rem',
                 alignItems: 'center',
                 background: glassWhite,
                 backdropFilter: 'blur(10px)',
@@ -403,15 +492,15 @@ const Production = () => {
                         <button
                             key={key}
                             onClick={() => setDateFilter(key)}
-                            style={{ 
-                                padding: '0.7rem 1.5rem', 
-                                border: 'none', 
-                                borderRadius: '12px', 
-                                fontSize: '0.75rem', 
-                                fontWeight: '900', 
-                                cursor: 'pointer', 
-                                background: dateFilter === key ? deepTeal : 'transparent', 
-                                color: dateFilter === key ? '#fff' : '#64748b', 
+                            style={{
+                                padding: '0.7rem 1.5rem',
+                                border: 'none',
+                                borderRadius: '12px',
+                                fontSize: '0.75rem',
+                                fontWeight: '900',
+                                cursor: 'pointer',
+                                background: dateFilter === key ? deepTeal : 'transparent',
+                                color: dateFilter === key ? '#fff' : '#64748b',
                                 transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
                                 textTransform: 'uppercase',
                                 letterSpacing: '0.5px'
@@ -463,7 +552,7 @@ const Production = () => {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <span style={{ fontSize: '0.75rem', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px', opacity: 0.7 }}>Eficiencia (UND/HORA)</span>
                         <button onClick={() => setShowEficList(!showEficList)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', padding: '4px', borderRadius: '8px', color: '#fff', cursor: 'pointer' }}>
-                            {showEficList ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
+                            {showEficList ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                         </button>
                     </div>
                     <div style={{ marginTop: '1.5rem', fontSize: '2.5rem', fontWeight: '900', letterSpacing: '-1px', lineHeight: 1 }}>
@@ -487,13 +576,13 @@ const Production = () => {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <span style={{ fontSize: '0.75rem', fontWeight: '900', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px' }}>% Desperdicio</span>
                         <button onClick={() => setShowWasteList(!showWasteList)} style={{ background: 'rgba(2, 54, 54, 0.05)', border: 'none', padding: '4px', borderRadius: '8px', color: deepTeal, cursor: 'pointer' }}>
-                            {showWasteList ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
+                            {showWasteList ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                         </button>
                     </div>
                     <div style={{ marginTop: '1.5rem', fontSize: '2.5rem', fontWeight: '900', color: premiumSalmon, letterSpacing: '-1px', lineHeight: 1 }}>
                         {desperdicioStats.avg !== null ? desperdicioStats.avg.toFixed(1) : '0.0'}%
                     </div>
-                    
+
                     {showWasteList && (
                         <div style={{ marginTop: '1.5rem', maxHeight: '150px', overflowY: 'auto', background: 'rgba(2, 54, 54, 0.02)', borderRadius: '12px', padding: '1rem' }}>
                             {desperdicioStats.rows.map(r => (
@@ -527,50 +616,129 @@ const Production = () => {
                         <tbody>
                             {filteredOdpQueue.map((odp) => (
                                 <tr key={odp.odpId} style={{ borderBottom: '1px solid #f8fafc', transition: 'all 0.3s' }} onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(2, 83, 87, 0.02)'; }} onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
-                                    <td style={{ padding: '2rem' }}><div style={{ fontWeight: '900', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.8rem' }}><FileText size={18} color={deepTeal}/> {odp.odpId}</div></td>
-                                    <td style={{ padding: '2rem 1rem' }}><div style={{ fontWeight: '900' }}>{odp.sku}</div></td>
-                                    <td style={{ padding: '2rem 1rem', textAlign: 'center' }}><div style={{ background: '#f1f5f9', padding: '0.6rem 1rem', borderRadius: '15px', fontWeight: '900', display: 'inline-block' }}>{odp.finalQty}</div></td>
+                                    <td style={{ padding: '2rem' }}>
+                                        <button
+                                            onClick={() => generateOdpPdfFull(odp)}
+                                            style={{
+                                                background: 'none',
+                                                border: 'none',
+                                                fontWeight: '900',
+                                                fontSize: '1rem',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '0.8rem',
+                                                cursor: 'pointer',
+                                                color: deepTeal,
+                                                padding: 0
+                                            }}
+                                        >
+                                            <FileText size={18} /> {odp.odpId}
+                                        </button>
+                                    </td>
+                                    <td style={{ padding: '2rem 1rem' }}><div style={{ fontWeight: '900', color: '#1e293b' }}>{odp.sku}</div></td>
                                     <td style={{ padding: '2rem 1rem', textAlign: 'center' }}>
-                                        <div style={{ fontSize: '0.75rem', fontWeight: '900', color: '#94a3b8' }}>{odp.settings.start ? new Date(odp.settings.start).toLocaleTimeString() : '--'} - {odp.settings.end ? new Date(odp.settings.end).toLocaleTimeString() : '--'}</div>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
+                                            <input
+                                                type="number"
+                                                value={odp.finalQty}
+                                                onChange={(e) => updateOdp(odp.sku, 'customQty', Number(e.target.value))}
+                                                style={{
+                                                    width: '80px',
+                                                    background: '#fff',
+                                                    border: '2px solid #e2e8f0',
+                                                    padding: '0.6rem',
+                                                    borderRadius: '14px',
+                                                    fontWeight: '900',
+                                                    textAlign: 'center',
+                                                    color: deepTeal,
+                                                    outline: 'none',
+                                                    transition: 'border 0.3s'
+                                                }}
+                                                onFocus={(e) => e.target.style.borderColor = institutionOcre}
+                                                onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
+                                            />
+                                            {odp.finalQty % odp.batchSize !== 0 && (
+                                                <div title={`No es múltiplo exacto del lote (${odp.batchSize})`} style={{ width: '10px', height: '10px', background: institutionOcre, borderRadius: '50%' }} />
+                                            )}
+                                        </div>
                                     </td>
                                     <td style={{ padding: '2rem 1rem', textAlign: 'center' }}>
-                                        <input 
-                                            type="number" 
-                                            placeholder="0"
-                                            value={odp.settings.wasteQty || ''}
-                                            onChange={(e) => updateOdp(odp.sku, 'wasteQty', e.target.value)}
-                                            style={{ width: '80px', padding: '0.6rem', borderRadius: '12px', border: '1px solid #e2e8f0', textAlign: 'center', fontSize: '0.85rem', fontWeight: '800' }}
-                                        />
+                                        <div style={{ fontSize: '0.6rem', fontWeight: '900', color: '#64748b', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                            <span style={{ color: odp.settings.start ? deepTeal : '#94a3b8' }}>
+                                                {odp.settings.start ? `${new Date(odp.settings.start).toLocaleDateString('es-CO')} ${new Date(odp.settings.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'DATE/TIME START'}
+                                            </span>
+                                            <div style={{ width: '1px', height: '8px', background: '#e2e8f0', margin: '0 auto' }} />
+                                            <span style={{ color: odp.settings.end ? '#10b981' : '#94a3b8' }}>
+                                                {odp.settings.end ? `${new Date(odp.settings.end).toLocaleDateString('es-CO')} ${new Date(odp.settings.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'DATE/TIME END'}
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td style={{ padding: '2rem 1rem', textAlign: 'center' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                                            <input
+                                                type="number"
+                                                placeholder="0"
+                                                value={odp.settings.wasteQty || ''}
+                                                onChange={(e) => updateOdp(odp.sku, 'wasteQty', e.target.value)}
+                                                style={{ width: '60px', padding: '0.5rem', borderRadius: '10px', border: '1px solid #e2e8f0', textAlign: 'center', fontSize: '0.8rem', fontWeight: '800' }}
+                                            />
+                                            <span style={{ fontSize: '0.6rem', fontWeight: '900', color: '#94a3b8' }}>UDS</span>
+                                        </div>
                                     </td>
                                     <td style={{ padding: '2rem 1rem', textAlign: 'center' }}>
                                         <div style={{ fontSize: '1rem', fontWeight: '900', color: deepTeal }}>{odp.efficiency || '0.0'}</div>
-                                        <div style={{ fontSize: '0.6rem', color: '#94a3b8', fontWeight: '800', textTransform: 'uppercase' }}>und/hr</div>
+                                        <div style={{ fontSize: '0.55rem', color: '#94a3b8', fontWeight: '900', textTransform: 'uppercase' }}>und/hr</div>
                                     </td>
                                     <td style={{ padding: '2rem 1rem', textAlign: 'center' }}>
-                                        <div style={{ fontSize: '1rem', fontWeight: '900', color: premiumSalmon }}>{odp.waste_percent}%</div>
+                                        <div style={{ fontSize: '1rem', fontWeight: '900', color: Number(odp.waste_percent) > 5 ? '#ef4444' : premiumSalmon }}>{odp.waste_percent}%</div>
                                     </td>
                                     <td style={{ padding: '2rem 1rem', textAlign: 'center' }}>
-                                        <span style={{ padding: '6px 12px', borderRadius: '10px', fontSize: '0.7rem', fontWeight: '900', background: odp.status.color, color: odp.status.textColor }}>{odp.status.text}</span>
+                                        <span style={{ padding: '6px 12px', borderRadius: '10px', fontSize: '0.65rem', fontWeight: '900', background: odp.status.color, color: odp.status.textColor, whiteSpace: 'nowrap' }}>{odp.status.text.toUpperCase()}</span>
                                     </td>
                                     <td style={{ padding: '2rem', textAlign: 'center' }}>
                                         <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem' }}>
-                                            {!odp.settings.start && (
-                                                <button 
-                                                    onClick={() => updateOdp(odp.sku, 'start', new Date().toISOString())} 
-                                                    style={{ padding: '0.8rem 1.5rem', borderRadius: '15px', border: 'none', background: deepTeal, color: '#fff', fontWeight: '900', cursor: 'pointer', boxShadow: '0 4px 12px rgba(2, 54, 54, 0.2)' }}
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                                <button
+                                                    onClick={() => updateOdp(odp.sku, 'start', new Date().toISOString())}
+                                                    disabled={!!odp.settings.start}
+                                                    style={{
+                                                        padding: '0.8rem 1.2rem',
+                                                        borderRadius: '15px',
+                                                        border: 'none',
+                                                        background: !!odp.settings.start ? '#e2e8f0' : deepTeal,
+                                                        color: '#fff',
+                                                        fontWeight: '900',
+                                                        cursor: !!odp.settings.start ? 'not-allowed' : 'pointer',
+                                                        fontSize: '0.75rem',
+                                                        boxShadow: !odp.settings.start ? '0 4px 12px rgba(2, 54, 54, 0.2)' : 'none',
+                                                        transition: 'all 0.2s',
+                                                        minWidth: '100px'
+                                                    }}
                                                 >
-                                                    INICIAR
+                                                    INICIO
                                                 </button>
-                                            )}
-                                            {odp.settings.start && !odp.settings.end && (
-                                                <button 
-                                                    onClick={() => updateOdp(odp.sku, 'end', new Date().toISOString())} 
-                                                    style={{ padding: '0.8rem 1.5rem', borderRadius: '15px', border: 'none', background: '#10b981', color: '#fff', fontWeight: '900', cursor: 'pointer', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.2)' }}
+                                                <button
+                                                    onClick={() => updateOdp(odp.sku, 'end', new Date().toISOString())}
+                                                    disabled={!odp.settings.start || !!odp.settings.end}
+                                                    style={{
+                                                        padding: '0.8rem 1.2rem',
+                                                        borderRadius: '15px',
+                                                        border: 'none',
+                                                        background: (!odp.settings.start || !!odp.settings.end) ? '#e2e8f0' : institutionOcre,
+                                                        color: '#fff',
+                                                        fontWeight: '900',
+                                                        cursor: (!odp.settings.start || !!odp.settings.end) ? 'not-allowed' : 'pointer',
+                                                        fontSize: '0.75rem',
+                                                        boxShadow: (odp.settings.start && !odp.settings.end) ? `0 4px 12px ${institutionOcre}30` : 'none',
+                                                        transition: 'all 0.2s',
+                                                        minWidth: '100px'
+                                                    }}
                                                 >
-                                                    TERMINAR
+                                                    FINALIZAR
                                                 </button>
-                                            )}
-                                            <button onClick={() => generateOdpPdfFull(odp)} style={{ width: '45px', height: '45px', borderRadius: '50%', border: '1px solid #f1f5f9', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Descargar ODP"><FileText size={18} /></button>
+                                            </div>
+                                            <button onClick={() => resetOdp(odp.sku)} style={{ width: '40px', height: '40px', borderRadius: '12px', border: '1px solid #f1f5f9', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444' }} title="Resetear ODP"><Trash2 size={16} /></button>
+                                            <button onClick={() => generateOdpPdfFull(odp, true)} style={{ width: '40px', height: '40px', borderRadius: '12px', border: '1px solid #f1f5f9', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: deepTeal }} title="Descargar PDF"><Zap size={16} /></button>
                                         </div>
                                     </td>
                                 </tr>
@@ -598,11 +766,15 @@ const Production = () => {
                         </div>
                         <h3 style={{ fontWeight: '900', color: deepTeal, marginBottom: '1.5rem', fontSize: '1.5rem' }}>Finalizar Producción</h3>
                         <p style={{ fontWeight: '700', color: '#64748b', marginBottom: '2.5rem', lineHeight: '1.6' }}>
-                            ¿Autorizas el cargue o ingreso al inventario de PT de <span style={{ color: deepTeal }}>{confModal.odp.finalQty} unidades</span> de {confModal.odp.sku}?
+                            ¿Autorizas el cargue de <span style={{ color: deepTeal }}>{confModal.odp.finalQty} unidades</span> de {confModal.odp.sku}?
+                            <br />
+                            <span style={{ fontSize: '0.9rem', color: institutionOcre }}>
+                                Se sumarán a las {confModal.odp.inventoryPT} unidades del inventario inicial para un total de <b>{Number(confModal.odp.finalQty) + Number(confModal.odp.inventoryPT)} unidades</b>.
+                            </span>
                         </p>
                         <div style={{ display: 'flex', gap: '1.5rem' }}>
-                            <button onClick={() => setConfModal({ show: false, odp: null })} style={{ flex: 1, padding: '1.2rem', borderRadius: '20px', border: '2px solid #f1f5f9', background: '#fff', fontWeight: '900', cursor: 'pointer' }}>CANCELAR</button>
-                            <button onClick={() => handleInventorySync(confModal.odp)} style={{ flex: 2, padding: '1.2rem', borderRadius: '20px', border: 'none', background: '#10b981', color: '#fff', fontWeight: '900', cursor: 'pointer', boxShadow: '0 10px 20px rgba(16, 185, 129, 0.2)' }}>SÍ, AUTORIZAR INGRESO</button>
+                            <button onClick={() => setConfModal({ show: false, odp: null, endTime: null })} style={{ flex: 1, padding: '1.2rem', borderRadius: '20px', border: '2px solid #f1f5f9', background: '#fff', fontWeight: '900', cursor: 'pointer' }}>CANCELAR</button>
+                            <button onClick={() => handleInventorySync(confModal.odp)} style={{ flex: 2, padding: '1.2rem', borderRadius: '20px', border: 'none', background: '#10b981', color: '#fff', fontWeight: '900', cursor: 'pointer', boxShadow: '0 10px 20px rgba(16, 185, 129, 0.2)' }}>SÍ, AUTORIZAR CARGUE PT</button>
                         </div>
                     </div>
                 </div>
@@ -613,10 +785,10 @@ const Production = () => {
                     <div style={{ background: '#fff', padding: '3rem', borderRadius: '40px', maxWidth: '600px', width: '100%', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
                             <h3 style={{ fontWeight: '900', color: deepTeal, margin: 0 }}>Consumo de Materias Primas</h3>
-                            <button onClick={() => setMpConfModal({ show: false, odp: null, materials: [] })} style={{ background: '#f1f5f9', border: 'none', padding: '8px', borderRadius: '50%', cursor: 'pointer' }}><X size={20}/></button>
+                            <button onClick={() => setMpConfModal({ show: false, odp: null, materials: [] })} style={{ background: '#f1f5f9', border: 'none', padding: '8px', borderRadius: '50%', cursor: 'pointer' }}><X size={20} /></button>
                         </div>
                         <p style={{ fontWeight: '700', color: '#64748b', marginBottom: '1.5rem' }}>Lista de materias primas e insumos a consumir para fabricar <span style={{ color: deepTeal }}>{mpConfModal.odp.finalQty} un.</span>:</p>
-                        
+
                         <div style={{ maxHeight: '300px', overflowY: 'auto', marginBottom: '2rem', padding: '1.5rem', background: 'rgba(2, 54, 54, 0.02)', borderRadius: '20px' }}>
                             {mpConfModal.materials.map(m => (
                                 <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>

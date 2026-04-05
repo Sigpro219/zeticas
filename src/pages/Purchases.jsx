@@ -23,16 +23,20 @@ import {
     Search,
     FileText,
     CheckCircle2,
-    X
+    X,
+    ChefHat,
+    Trash2,
+    AlertTriangle
 } from 'lucide-react';
 
 const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, providers }) => {
-    const { setOrders, banks, updateBankBalance, recalculatePTCosts, receivePurchase, payPurchase, ownCompany, addPurchase, refreshData } = useBusiness();
+    const { orders, setOrders, banks, updateBankBalance, recalculatePTCosts, receivePurchase, payPurchase, ownCompany, addPurchase, refreshData, clients, updateOrder } = useBusiness();
     // Local State for BOM Explosion & OC Generation
     const [viewingOC, setViewingOC] = useState(null); // Modal state for OC
     const [invEntryOC, setInvEntryOC] = useState(null);
     const [paymentModalOC, setPaymentModalOC] = useState(null);
     const [paymentBankId, setPaymentBankId] = useState('');
+    const [viewingRelatedOrder, setViewingRelatedOrder] = useState(null);
 
     // Filters and UI State
     const [filterType, setFilterType] = useState('month');
@@ -69,6 +73,26 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
             });
         }
         setNewItem({ id: '', quantity: 1, unitCost: 0 });
+    };
+
+    const handleUpdateRelatedOrder = async () => {
+        if (!viewingRelatedOrder) return;
+        const total = viewingRelatedOrder.items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+        const updated = { ...viewingRelatedOrder, amount: total };
+
+        try {
+            const res = await updateOrder(updated.dbId || updated.id, {
+                amount: updated.amount,
+                status: updated.status,
+                items: updated.items
+            });
+            if (!res.success) throw new Error(res.error);
+            refreshData();
+        } catch (e) {
+            console.error("Error updating related order from Purchases:", e);
+        }
+
+        setViewingRelatedOrder(null);
     };
 
     const handleSaveManualOC = async () => {
@@ -201,11 +225,11 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
         doc.setFontSize(18);
         doc.setTextColor(15, 23, 42); // #0f172a
         doc.text('ORDEN DE COMPRA', 196, 25, { align: 'right' });
-        
+
         doc.setFontSize(14);
         doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
         doc.text(oc.id, 196, 33, { align: 'right' });
-        
+
         doc.setFontSize(9);
         doc.setTextColor(100, 116, 139);
         doc.text(`Fecha: ${oc.date}`, 196, 39, { align: 'right' });
@@ -230,7 +254,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
         doc.setFontSize(10);
         doc.setTextColor(30, 41, 59);
         doc.text(oc.providerName || 'Proveedor', 18, 66);
-        
+
         const supInfo = providers.find(p => p.id === oc.providerId || p.name === oc.providerName);
         doc.setFontSize(8);
         doc.setFont('helvetica', 'normal');
@@ -266,9 +290,9 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
             const total = item.total_cost || (qty * unit);
             return [
                 item.name || 'Material',
-                qty.toLocaleString('es-CO'),
-                `$${Math.round(unit).toLocaleString('es-CO')}`,
-                `$${Math.round(total).toLocaleString('es-CO')}`
+                qty.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 }),
+                `$${(Number(unit)).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`,
+                `$${(Number(total)).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
             ];
         });
 
@@ -295,7 +319,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
         const tax = subtotal * 0.19;
         const total = subtotal + tax;
 
-        const numFormat = (num) => `$${Math.round(num).toLocaleString('es-CO')}`;
+        const numFormat = (num) => `$${(Number(num)).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 
         doc.setFontSize(9);
         doc.setTextColor(100, 116, 139);
@@ -314,7 +338,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
         // Total badge in PDF
         doc.setFillColor(240, 253, 244); // #f0fdf4 (Light green)
         doc.roundedRect(125, finalY + 24, 71, 10, 2, 2, 'F');
-        
+
         doc.setFontSize(11);
         doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
         doc.text('TOTAL:', 145, finalY + 30, { align: 'right' });
@@ -324,68 +348,74 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
         doc.save(`${oc.id}.pdf`);
     };
 
-    const handleReceiveOC = (ocId) => {
-        if (!window.confirm("¿Estás seguro que quieres realizar esta acción? El inventario y los costos promedio se actualizarán automáticamente.")) {
-            return;
-        }
-        const oc = purchaseOrders.find(o => o.id === ocId);
+    const handleReceiveOC = async (ocId) => {
+        try {
+            const oc = purchaseOrders.find(o => o.id === ocId);
+            if (!oc) return;
 
-        // 1. Update Inventory MP (purchases column) AND Cost (Weighted Average)
-        const updatedInventory = [...items];
-        oc.items.forEach(ocItem => {
-            const invItemIndex = updatedInventory.findIndex(i => i.id === ocItem.id || i.name === ocItem.name);
-            if (invItemIndex !== -1) {
-                const item = updatedInventory[invItemIndex];
-                const currentStock = (item.initial || 0) + (item.purchases || 0) - (item.sales || 0);
-                const currentTotalValue = currentStock * (item.avgCost || 0);
-                const purchaseValue = ocItem.toBuy * ocItem.purchasePrice;
-
-                const newTotalQty = currentStock + ocItem.toBuy;
-                const newAvgCost = newTotalQty > 0 ? (currentTotalValue + purchaseValue) / newTotalQty : item.avgCost;
-
-                updatedInventory[invItemIndex] = {
-                    ...item,
-                    purchases: (item.purchases || 0) + ocItem.toBuy,
-                    avgCost: Math.round(newAvgCost)
-                };
+            const confirmMessage = `¿Registrar ingreso de las materias primas de la orden ${oc.id}?\n\nAl confirmar, el inventario de compras y sus saldos se actualizarán automáticamente.`;
+            if (!window.confirm(confirmMessage)) {
+                return; // They clicked 'Cancelar'
             }
-        });
-        // 2. Update OC status local
-        const updatedOCs = purchaseOrders.map(o => {
-            if (o.id === ocId) return { ...o, status: 'Recibida' };
-            return o;
-        });
 
-        // Persist Inventory & OC changes to Supabase
-        const persistReceipt = async () => {
-            const res = await receivePurchase(ocId, oc.items, refs);
+            // 1. Update Inventory MP (purchases column) AND Cost (Weighted Average)
+            const updatedInventory = [...items];
+            oc.items.forEach(ocItem => {
+                const invItemIndex = updatedInventory.findIndex(i => i.id === ocItem.id || i.name === ocItem.name);
+                if (invItemIndex !== -1) {
+                    const item = updatedInventory[invItemIndex];
+                    const currentStock = (item.initial || 0) + (item.purchases || 0) - (item.sales || 0);
+                    const currentTotalValue = currentStock * (item.avgCost || 0);
+                    const purchaseValue = (ocItem.toBuy || ocItem.quantity || 0) * (ocItem.purchasePrice || ocItem.unit_cost || 0);
+
+                    const newTotalQty = currentStock + (ocItem.toBuy || ocItem.quantity || 0);
+                    const newAvgCost = newTotalQty > 0 ? (currentTotalValue + purchaseValue) / newTotalQty : item.avgCost;
+
+                    updatedInventory[invItemIndex] = {
+                        ...item,
+                        purchases: (item.purchases || 0) + (ocItem.toBuy || ocItem.quantity || 0),
+                        avgCost: Math.round(newAvgCost)
+                    };
+                }
+            });
+
+            // 2. Update OC status local
+            const updatedOCs = purchaseOrders.map(o => {
+                if (o.id === oc.id) return { ...o, status: 'Recibida' };
+                return o;
+            });
+
+            // 3. Flow Check: If all OCs for a reference are received, move to production local
+            const refs = Array.isArray(oc.relatedOrders) ? oc.relatedOrders : (oc.orderRef ? [oc.orderRef] : []);
+
+            refs.forEach(refId => {
+                if (!refId) return;
+                const allForRef = updatedOCs.filter(o => (o.relatedOrders && o.relatedOrders.includes(refId)) || o.orderRef === refId);
+                const allReceived = allForRef.every(o => o.status === 'Recibida');
+
+                if (allReceived) {
+                    setOrders(prevOrders => prevOrders.map(o => o.id === refId ? { ...o, status: 'En Producción' } : o));
+                }
+            });
+
+            // 4. Persist Inventory & OC changes to Context DB Map
+            // Use dbId (Firestore UUID) as primary, fallback to alphanumeric id
+            const res = await receivePurchase(oc.dbId || oc.id, oc.items, refs);
             if (!res.success) {
                 console.error("Error persisting receipt:", res.error);
-                alert("Error al guardar en la base de datos.");
+                alert(`Error técnico: ${res.error}`);
             } else {
+                setItems(updatedInventory);
+                setPurchaseOrders(updatedOCs);
+                setInvEntryOC(null); // Close modal ONLY on success
                 await recalculatePTCosts();
-                alert(`Ingreso registrado y base de datos actualizada.`);
+                alert(`✅ ¡Ingreso exitoso! Las materias primas de la OC ${oc.id} han sumado a la columna 'Compras' actualizando tu saldo final.`);
             }
-        };
-        persistReceipt();
 
-        setItems(updatedInventory);
-        setPurchaseOrders(updatedOCs);
-
-        // 3. Flow Check: If all OCs for a reference are received, move to production local
-        const refs = Array.isArray(oc.relatedOrders) ? oc.relatedOrders : [oc.orderRef];
-
-        refs.forEach(refId => {
-            if (!refId) return;
-            const allForRef = updatedOCs.filter(o => (o.relatedOrders && o.relatedOrders.includes(refId)) || o.orderRef === refId);
-            const allReceived = allForRef.every(o => o.status === 'Recibida');
-
-            if (allReceived) {
-                setOrders(prevOrders => prevOrders.map(o => o.id === refId ? { ...o, status: 'En Producción' } : o));
-            }
-        });
-
-        alert(`Ingreso registrado y base de datos actualizada.`);
+        } catch (err) {
+            console.error("Error handling OC receipt:", err);
+            alert(`Ocurrió un error inesperado: ${err.message}`);
+        }
     };
 
     const handlePaymentOC = async () => {
@@ -398,17 +428,14 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
         const amount = oc.total || 0;
 
         try {
-            // 1. Update OC Payment Status in Firestore
-            const res = await payPurchase(oc.id, paymentBankId);
+            // 1. Update OC Payment Status, Bank Balance and Create Expense record centrally
+            const res = await payPurchase(oc.id, paymentBankId, amount, oc.providerName);
             if (!res.success) throw new Error(res.error);
-
-            // 2. Update Bank Balance (Expense) using centralized function
-            await updateBankBalance(paymentBankId, amount, 'expense', `Pago OC ${oc.id} a ${oc.providerName}`, oc.id);
 
             // 3. Update Local State (only purchase orders, bank state is updated by updateBankBalance)
             setPurchaseOrders(prev => prev.map(o => o.id === oc.id ? { ...o, paymentStatus: 'Pagado', bankId: paymentBankId } : o));
 
-            alert(`Pago registrado exitosamente. Se descontaron $${amount.toLocaleString()} del banco seleccionado.`);
+            alert(`Pago registrado exitosamente. Se descontaron $${amount.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} del banco seleccionado.`);
             setPaymentModalOC(null);
             setPaymentBankId('');
         } catch (err) {
@@ -423,7 +450,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
     const glassWhite = "rgba(255, 255, 255, 0.85)";
 
     return (
-        <div className="purchases-module" style={{ 
+        <div className="purchases-module" style={{
             padding: '0 0.5rem',
             animation: 'fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1)'
         }}>
@@ -433,10 +460,10 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
             {/* Premium Supply Chain KPIs */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
                 {/* Procurement Volume - Main Card */}
-                <div style={{ 
-                    background: `linear-gradient(135deg, ${deepTeal} 0%, #037075 100%)`, 
-                    padding: '1.5rem 2rem', 
-                    borderRadius: '24px', 
+                <div style={{
+                    background: `linear-gradient(135deg, ${deepTeal} 0%, #037075 100%)`,
+                    padding: '1.5rem 2rem',
+                    borderRadius: '24px',
                     color: '#fff',
                     boxShadow: `0 15px 35px ${deepTeal}20`,
                     position: 'relative',
@@ -455,7 +482,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                     </div>
                     <div style={{ fontSize: '2.2rem', fontWeight: '900', letterSpacing: '-1.5px', lineHeight: 1 }}>
                         <span style={{ fontSize: '1.4rem', opacity: 0.6, marginRight: '4px', verticalAlign: 'middle' }}>$</span>
-                        {purchaseStats.total.toLocaleString()}
+                        {purchaseStats.total.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '1.2rem' }}>
                         <div style={{ background: 'rgba(255,255,255,0.1)', padding: '0.6rem 1.2rem', borderRadius: '14px', fontSize: '0.85rem', fontWeight: '900', border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -465,11 +492,11 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                 </div>
 
                 {/* Treasury Status - Glass Effect */}
-                <div style={{ 
+                <div style={{
                     background: glassWhite,
                     backdropFilter: 'blur(10px)',
-                    padding: '1.5rem 2rem', 
-                    borderRadius: '24px', 
+                    padding: '1.5rem 2rem',
+                    borderRadius: '24px',
                     border: '1px solid rgba(2, 54, 54, 0.05)',
                     boxShadow: '0 10px 25px rgba(0,0,0,0.02)',
                     display: 'flex',
@@ -493,18 +520,18 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                     <span style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase' }}>{item.label}</span>
                                     <span style={{ fontSize: '0.6rem', fontWeight: '800', color: '#cbd5e1' }}>{item.count} DOCS</span>
                                 </div>
-                                <span style={{ fontSize: '1.2rem', fontWeight: '900', color: item.color }}>${item.val.toLocaleString()}</span>
+                                <span style={{ fontSize: '1.2rem', fontWeight: '900', color: item.color }}>${item.val.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
                             </div>
                         ))}
                     </div>
                 </div>
 
                 {/* Logistics Health - High Performance */}
-                <div style={{ 
+                <div style={{
                     background: glassWhite,
                     backdropFilter: 'blur(10px)',
-                    padding: '1.5rem 2rem', 
-                    borderRadius: '24px', 
+                    padding: '1.5rem 2rem',
+                    borderRadius: '24px',
                     border: '1px solid rgba(2, 54, 54, 0.05)',
                     boxShadow: '0 10px 25px rgba(0,0,0,0.02)',
                     display: 'flex',
@@ -513,13 +540,13 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                     animation: 'fadeUp 0.8s ease-out'
                 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', marginBottom: '1rem' }}>
-                         <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'rgba(2, 54, 54, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: deepTeal }}>
+                        <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'rgba(2, 54, 54, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: deepTeal }}>
                             <Truck size={20} />
                         </div>
                         <span style={{ fontSize: '0.75rem', fontWeight: '900', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px' }}>Ingreso Lead-Time</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
-                        <div style={{ fontSize: '2.5rem', fontWeight: '900', color: deepTeal, lineHeight: 1 }}>92<span style={{fontSize: '1.2rem', opacity: 0.5}}>%</span></div>
+                        <div style={{ fontSize: '2.5rem', fontWeight: '900', color: deepTeal, lineHeight: 1 }}>92<span style={{ fontSize: '1.2rem', opacity: 0.5 }}>%</span></div>
                     </div>
                     <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem', background: '#fcfcfc', padding: '0.8rem 1.2rem', borderRadius: '14px', width: 'fit-content', border: '1px solid #f1f5f9' }}>
                         <div style={{ fontSize: '0.7rem', fontWeight: '900', color: '#64748b' }}>RECIBIDO: <span style={{ color: '#10b981' }}>{inventoryKPIs.receivedCount}</span></div>
@@ -530,10 +557,10 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
             </div>
 
             {/* Action Bar & Filter Section - Premium Glass Design */}
-            <div style={{ 
-                display: 'flex', 
-                flexDirection: 'column', 
-                gap: '1.5rem', 
+            <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '1.5rem',
                 marginBottom: '2rem',
                 background: glassWhite,
                 backdropFilter: 'blur(10px)',
@@ -551,10 +578,10 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                     key={type}
                                     onClick={() => setFilterType(type)}
                                     style={{
-                                        padding: '0.7rem 1.5rem', 
-                                        borderRadius: '12px', 
+                                        padding: '0.7rem 1.5rem',
+                                        borderRadius: '12px',
                                         border: 'none',
-                                        fontSize: '0.75rem', 
+                                        fontSize: '0.75rem',
                                         fontWeight: '900',
                                         cursor: 'pointer',
                                         background: filterType === type ? deepTeal : 'transparent',
@@ -566,16 +593,16 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                 >{type === 'week' ? 'Semana' : type === 'month' ? 'Mes' : 'Personalizado'}</button>
                             ))}
                         </div>
-        
+
                         {filterType === 'custom' && (
-                            <div style={{ 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                gap: '1rem', 
-                                background: '#fcfcfc', 
-                                padding: '0 1.2rem', 
+                            <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '1rem',
+                                background: '#fcfcfc',
+                                padding: '0 1.2rem',
                                 height: '52px',
-                                borderRadius: '14px', 
+                                borderRadius: '14px',
                                 border: '1px solid #f1f5f9',
                                 animation: 'slideInRight 0.4s ease-out'
                             }}>
@@ -620,7 +647,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                 onBlur={(e) => { e.target.style.borderColor = '#f1f5f9'; e.target.style.boxShadow = 'none'; }}
                             />
                             {searchTerm && (
-                                <button 
+                                <button
                                     onClick={() => setSearchTerm('')}
                                     style={{ position: 'absolute', right: '1.2rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center' }}
                                 >
@@ -658,26 +685,27 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
             {/* List of Generated Purchase Orders (OC) - Premium Table */}
             <section style={{ marginBottom: '5rem' }}>
                 <div style={{ marginBottom: '2rem' }} />
- 
-                <div style={{ 
+
+                <div style={{
                     background: glassWhite,
                     backdropFilter: 'blur(10px)',
-                    borderRadius: '45px', 
-                    border: '1px solid rgba(255, 255, 255, 0.5)', 
-                    overflow: 'hidden', 
-                    boxShadow: '0 20px 50px rgba(0,0,0,0.03)' 
+                    borderRadius: '45px',
+                    border: '1px solid rgba(255, 255, 255, 0.5)',
+                    overflowX: 'auto',
+                    overflowY: 'hidden',
+                    boxShadow: '0 20px 50px rgba(0,0,0,0.03)'
                 }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse' }}>
                         <thead>
                             <tr style={{ background: 'rgba(2, 83, 87, 0.03)', borderBottom: '1px solid #f1f5f9' }}>
-                                <th style={{ padding: '2rem 1.5rem', textAlign: 'left', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Referencia OC</th>
-                                <th style={{ padding: '2rem 1.5rem', textAlign: 'left', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Proveedor</th>
-                                <th style={{ padding: '2rem 1.5rem', textAlign: 'left', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Pedidos Relacionados</th>
-                                <th style={{ padding: '2rem 1.5rem', textAlign: 'left', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Fecha</th>
-                                <th style={{ padding: '2rem 1.5rem', textAlign: 'right', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Valor Total</th>
-                                <th style={{ padding: '2rem 1.5rem', textAlign: 'center', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Ingreso Inv.</th>
-                                <th style={{ padding: '2rem 1.5rem', textAlign: 'center', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Acciones</th>
-                                <th style={{ padding: '2rem 1.5rem', textAlign: 'center', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Status</th>
+                                <th style={{ padding: '1.2rem 1rem', textAlign: 'left', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Referencia OC</th>
+                                <th style={{ padding: '1.2rem 1rem', textAlign: 'left', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Proveedor</th>
+                                <th style={{ padding: '1.2rem 1rem', textAlign: 'left', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Pedidos Relacionados</th>
+                                <th style={{ padding: '1.2rem 1rem', textAlign: 'left', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Fecha</th>
+                                <th style={{ padding: '1.2rem 1rem', textAlign: 'right', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Valor Total</th>
+                                <th style={{ padding: '1.2rem 1rem', textAlign: 'center', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Ingreso Inv.</th>
+                                <th style={{ padding: '1.2rem 1rem', textAlign: 'center', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Acciones</th>
+                                <th style={{ padding: '1.2rem 1rem', textAlign: 'center', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Status</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -688,37 +716,65 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                     onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(2, 83, 87, 0.02)'; e.currentTarget.style.transform = 'scale(0.998)'; }}
                                     onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.transform = 'scale(1)'; }}
                                 >
-                                    <td style={{ padding: '2rem 1.5rem' }}>
-                                        <div 
+                                    <td style={{ padding: '1.2rem 1rem' }}>
+                                        <div
                                             onClick={(e) => { e.stopPropagation(); setViewingOC(oc); }}
                                             style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', cursor: 'pointer' }}
                                         >
                                             <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: oc.status === 'Recibida' ? '#10b981' : institutionOcre }} />
                                             <span style={{ fontWeight: '900', color: deepTeal, fontSize: '1rem', letterSpacing: '-0.2px', textDecoration: 'underline' }}>{oc.id}</span>
                                         </div>
+                                        <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '6px', fontWeight: '800', textTransform: 'uppercase', opacity: 0.8, maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {oc.items?.map(i => i.name).join(', ')}
+                                        </div>
                                     </td>
-                                    <td style={{ padding: '2rem 1.5rem', fontWeight: '800', color: '#1e293b', fontSize: '0.95rem' }}>{oc.providerName || oc.supplier}</td>
-                                    <td style={{ padding: '2rem 1.5rem' }}>
+                                    <td style={{ padding: '1.2rem 1rem', fontWeight: '800', color: '#1e293b', fontSize: '0.95rem' }}>{oc.providerName || oc.supplier}</td>
+                                    <td style={{ padding: '1.2rem 1rem' }}>
                                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                            {(Array.isArray(oc.relatedOrders) ? oc.relatedOrders : [oc.orderRef || 'N/A']).map(ref => (
-                                                <div key={ref} style={{ fontSize: '0.7rem', background: '#f1f5f9', color: '#64748b', padding: '4px 10px', borderRadius: '8px', fontWeight: '900', border: '1px solid #e2e8f0' }}>{ref}</div>
+                                            {(Array.isArray(oc.related_orders || oc.relatedOrders) ? (oc.related_orders || oc.relatedOrders) : [oc.orderRef || 'N/A']).map(ref => (
+                                                <div
+                                                    key={ref}
+                                                    onClick={() => {
+                                                        const ord = orders.find(o => o.order_number === ref || o.id === ref);
+                                                        if (ord) {
+                                                            setViewingRelatedOrder(JSON.parse(JSON.stringify(ord)));
+                                                        } else {
+                                                            alert("No se encontró información de este pedido.");
+                                                        }
+                                                    }}
+                                                    style={{
+                                                        fontSize: '0.7rem',
+                                                        background: '#fff',
+                                                        color: deepTeal,
+                                                        padding: '4px 10px',
+                                                        borderRadius: '8px',
+                                                        fontWeight: '900',
+                                                        border: `1px solid ${deepTeal}30`,
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                    onMouseEnter={(e) => { e.target.style.background = deepTeal; e.target.style.color = '#fff'; }}
+                                                    onMouseLeave={(e) => { e.target.style.background = '#fff'; e.target.style.color = deepTeal; }}
+                                                >
+                                                    {ref}
+                                                </div>
                                             ))}
                                         </div>
                                     </td>
-                                    <td style={{ padding: '2rem 1.5rem', fontSize: '0.9rem', color: '#64748b', fontWeight: '700' }}>{oc.date}</td>
-                                    <td style={{ padding: '2rem 1.5rem', textAlign: 'right' }}>
+                                    <td style={{ padding: '1.2rem 1rem', fontSize: '0.9rem', color: '#64748b', fontWeight: '700' }}>{oc.date}</td>
+                                    <td style={{ padding: '1.2rem 1rem', textAlign: 'right' }}>
                                         <div style={{ fontWeight: '900', color: '#1e293b', fontSize: '1.2rem', letterSpacing: '-0.5px' }}>
                                             <span style={{ fontSize: '0.8rem', opacity: 0.4, marginRight: '4px' }}>$</span>
-                                            {(oc.total || 0).toLocaleString('es-CO')}
+                                            {(oc.total || 0).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                                         </div>
                                     </td>
-                                    <td style={{ padding: '2rem 1.5rem', textAlign: 'center' }}>
+                                    <td style={{ padding: '1.2rem 1rem', textAlign: 'center' }}>
                                         {oc.status === 'Recibida' ? (
                                             <div style={{ color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontWeight: 'bold', fontSize: '0.8rem' }}>
                                                 <CheckCircle2 size={24} /> INGRESADO
                                             </div>
                                         ) : (
-                                            <button 
+                                            <button
                                                 onClick={(e) => { e.stopPropagation(); setInvEntryOC(oc); }}
                                                 style={{
                                                     background: '#fff', border: '1px solid #e2e8f0', padding: '0.6rem 1rem', borderRadius: '10px',
@@ -731,21 +787,21 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                             </button>
                                         )}
                                     </td>
-                                    <td style={{ padding: '2rem 1.5rem', textAlign: 'center' }}>
+                                    <td style={{ padding: '1.2rem 1rem', textAlign: 'center' }}>
                                         {oc.paymentStatus !== 'Pagado' ? (
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); setPaymentModalOC(oc); }}
-                                                style={{ 
-                                                    background: `${premiumSalmon}15`, 
-                                                    color: premiumSalmon, 
-                                                    border: `1px solid ${premiumSalmon}30`, 
-                                                    borderRadius: '12px', 
-                                                    padding: '0.8rem 1.5rem', 
-                                                    fontSize: '0.75rem', 
-                                                    fontWeight: '900', 
-                                                    cursor: 'pointer', 
-                                                    display: 'flex', 
-                                                    alignItems: 'center', 
+                                                style={{
+                                                    background: `${premiumSalmon}15`,
+                                                    color: premiumSalmon,
+                                                    border: `1px solid ${premiumSalmon}30`,
+                                                    borderRadius: '12px',
+                                                    padding: '0.8rem 1.5rem',
+                                                    fontSize: '0.75rem',
+                                                    fontWeight: '900',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
                                                     gap: '0.6rem',
                                                     textTransform: 'uppercase',
                                                     letterSpacing: '1px',
@@ -758,8 +814,8 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                             <span style={{ fontSize: '0.75rem', fontWeight: '900', color: '#10b981' }}>LIQUIDADO</span>
                                         )}
                                     </td>
-                                    <td style={{ padding: '2rem 1.5rem', textAlign: 'center' }}>
-                                        <span style={{ 
+                                    <td style={{ padding: '1.2rem 1rem', textAlign: 'center' }}>
+                                        <span style={{
                                             padding: '6px 12px', borderRadius: '8px', fontSize: '0.7rem', fontWeight: '900',
                                             background: oc.status === 'Recibida' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(214, 189, 152, 0.2)',
                                             color: oc.status === 'Recibida' ? '#10b981' : '#B8A07E',
@@ -783,7 +839,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
 
             {/* OC Detail Modal - Premium Style */}
             {viewingOC && (
-                <div 
+                <div
                     onClick={() => setViewingOC(null)}
                     style={{
                         position: 'fixed',
@@ -798,7 +854,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                         animation: 'fadeIn 0.3s'
                     }}
                 >
-                    <div 
+                    <div
                         onClick={(e) => e.stopPropagation()}
                         style={{
                             background: '#fff',
@@ -844,9 +900,9 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                 </button>
                                 <button
                                     onClick={() => setViewingOC(null)}
-                                    style={{ 
+                                    style={{
                                         width: '40px', height: '40px', borderRadius: '50%',
-                                        background: '#fee2e2', border: 'none', cursor: 'pointer', 
+                                        background: '#fee2e2', border: 'none', cursor: 'pointer',
                                         color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center',
                                         transition: 'all 0.2s'
                                     }}
@@ -902,12 +958,12 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                                     <div style={{ fontWeight: '900', color: '#1e293b' }}>{item.name}</div>
                                                 </td>
                                                 <td style={{ padding: '1.2rem 1rem', textAlign: 'center', fontWeight: '900', color: '#1e293b' }}>
-                                                    {qtyValue.toLocaleString('es-CO')} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{item.unit || ''}</span>
+                                                    {qtyValue.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{item.unit || ''}</span>
                                                 </td>
-                                                <td style={{ padding: '1.2rem 1rem', textAlign: 'right', color: '#64748b', fontWeight: '700' }}>${Math.round(unitValue).toLocaleString('es-CO')}</td>
+                                                <td style={{ padding: '1.2rem 1rem', textAlign: 'right', color: '#64748b', fontWeight: '700' }}>${(Number(unitValue)).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
                                                 <td style={{ padding: '1.2rem 1rem', textAlign: 'right', color: '#94a3b8', fontWeight: '700' }}>19%</td>
                                                 <td style={{ padding: '1.2rem 1rem', textAlign: 'right', fontWeight: '900', color: '#1e293b', borderRadius: '0 12px 12px 0' }}>
-                                                    ${Math.round(total).toLocaleString('es-CO')}
+                                                    ${(Number(total)).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                                                 </td>
                                             </tr>
                                         );
@@ -931,17 +987,17 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                             <>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.8rem' }}>
                                                     <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#64748b' }}>SUBTOTAL NETO</span>
-                                                    <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#1e293b' }}>${Math.round(sub).toLocaleString('es-CO')}</span>
+                                                    <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#1e293b' }}>${(Number(sub)).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
                                                 </div>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.2rem' }}>
                                                     <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#64748b' }}>IVA (19%)</span>
-                                                    <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#1e293b' }}>${Math.round(iva).toLocaleString('es-CO')}</span>
+                                                    <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#1e293b' }}>${(Number(iva)).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
                                                 </div>
                                                 <div style={{ height: '1px', background: '#e2e8f0', margin: '1rem 0' }} />
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                     <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#025357' }}>TOTAL ORDEN</span>
                                                     <span style={{ fontSize: '1.5rem', fontWeight: '900', color: '#025357', letterSpacing: '-0.5px' }}>
-                                                        ${Math.round(sub + iva).toLocaleString('es-CO')}
+                                                        ${(Number(sub + iva)).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                                                     </span>
                                                 </div>
                                             </>
@@ -985,11 +1041,11 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                     display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3000,
                     padding: '1.5rem', animation: 'fadeIn 0.3s'
                 }}>
-                    <div style={{ 
-                        background: '#fff', 
-                        padding: '2.5rem', 
-                        borderRadius: '32px', 
-                        width: '450px', 
+                    <div style={{
+                        background: '#fff',
+                        padding: '2.5rem',
+                        borderRadius: '32px',
+                        width: '450px',
                         boxShadow: '0 30px 60px rgba(0,0,0,0.2)',
                         position: 'relative',
                         border: '1px solid rgba(255,255,255,0.2)'
@@ -1011,7 +1067,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <span style={{ fontSize: '0.9rem', fontWeight: '700', color: '#c2410c' }}>VALOR A LIQUIDAR</span>
                                 <span style={{ fontSize: '1.6rem', fontWeight: '900', color: '#c2410c', letterSpacing: '-0.5px' }}>
-                                    ${(paymentModalOC.total || 0).toLocaleString()}
+                                    ${(paymentModalOC.total || 0).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                                 </span>
                             </div>
                         </div>
@@ -1023,11 +1079,11 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                             <select
                                 value={paymentBankId}
                                 onChange={(e) => setPaymentBankId(e.target.value)}
-                                style={{ 
-                                    width: '100%', 
-                                    padding: '1rem', 
-                                    borderRadius: '16px', 
-                                    border: '1px solid #f1f5f9', 
+                                style={{
+                                    width: '100%',
+                                    padding: '1rem',
+                                    borderRadius: '16px',
+                                    border: '1px solid #f1f5f9',
                                     background: '#f8fafc',
                                     fontSize: '0.9rem',
                                     fontWeight: '700',
@@ -1041,7 +1097,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                             >
                                 <option value="">Seleccione una cuenta...</option>
                                 {banks.map(bank => (
-                                    <option key={bank.id} value={bank.id}>{bank.name} (${(bank.balance || 0).toLocaleString()})</option>
+                                    <option key={bank.id} value={bank.id}>{bank.name} (${(bank.balance || 0).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })})</option>
                                 ))}
                             </select>
                         </div>
@@ -1049,14 +1105,14 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                         <div style={{ display: 'flex', gap: '1rem' }}>
                             <button
                                 onClick={() => setPaymentModalOC(null)}
-                                style={{ 
-                                    flex: 1, 
-                                    padding: '1rem', 
-                                    borderRadius: '16px', 
-                                    border: '1px solid #f1f5f9', 
-                                    background: '#fff', 
+                                style={{
+                                    flex: 1,
+                                    padding: '1rem',
+                                    borderRadius: '16px',
+                                    border: '1px solid #f1f5f9',
+                                    background: '#fff',
                                     color: '#64748b',
-                                    fontWeight: '900', 
+                                    fontWeight: '900',
                                     cursor: 'pointer',
                                     fontSize: '0.85rem',
                                     transition: 'all 0.2s'
@@ -1067,14 +1123,14 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                             </button>
                             <button
                                 onClick={handlePaymentOC}
-                                style={{ 
-                                    flex: 1, 
-                                    padding: '1rem', 
-                                    borderRadius: '16px', 
-                                    border: 'none', 
-                                    background: '#025357', 
-                                    color: '#fff', 
-                                    fontWeight: '900', 
+                                style={{
+                                    flex: 1,
+                                    padding: '1rem',
+                                    borderRadius: '16px',
+                                    border: 'none',
+                                    background: '#025357',
+                                    color: '#fff',
+                                    fontWeight: '900',
                                     cursor: 'pointer',
                                     fontSize: '0.85rem',
                                     boxShadow: '0 10px 20px rgba(2, 83, 87, 0.2)',
@@ -1097,9 +1153,9 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                     display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4000,
                     padding: '2rem'
                 }}>
-                    <div style={{ 
-                        background: '#f8fafc', width: '100%', maxWidth: '1000px', maxHeight: '90vh', 
-                        borderRadius: '32px', boxShadow: '0 50px 100px -20px rgba(0,0,0,0.5)', 
+                    <div style={{
+                        background: '#f8fafc', width: '100%', maxWidth: '1000px', maxHeight: '90vh',
+                        borderRadius: '32px', boxShadow: '0 50px 100px -20px rgba(0,0,0,0.5)',
                         display: 'flex', flexDirection: 'column', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)'
                     }}>
                         {/* Header */}
@@ -1116,7 +1172,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(350px, 1fr) 1.2fr', flex: 1, overflow: 'hidden' }}>
                             {/* Left Panel: Selection & Inputs */}
                             <div style={{ padding: '2rem', borderRight: '1px solid #e2e8f0', overflowY: 'auto', background: '#fff' }}>
-                                
+
                                 <div style={{ marginBottom: '1.5rem' }}>
                                     <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.6rem', letterSpacing: '1px' }}>1. Seleccionar Proveedor</label>
                                     <select
@@ -1149,8 +1205,8 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                             <div style={{ display: 'flex', gap: '1rem' }}>
                                                 <div style={{ flex: 1 }}>
                                                     <span style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: '800' }}>CANTIDAD</span>
-                                                    <input 
-                                                        type="number" 
+                                                    <input
+                                                        type="number"
                                                         value={newItem.quantity}
                                                         onChange={(e) => setNewItem({ ...newItem, quantity: parseFloat(e.target.value) || 0 })}
                                                         style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '1rem', fontWeight: '800', textAlign: 'center' }}
@@ -1158,8 +1214,8 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                                 </div>
                                                 <div style={{ flex: 1 }}>
                                                     <span style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: '800' }}>COSTO UNIT ($)</span>
-                                                    <input 
-                                                        type="number" 
+                                                    <input
+                                                        type="number"
                                                         value={newItem.unitCost}
                                                         onChange={(e) => setNewItem({ ...newItem, unitCost: parseFloat(e.target.value) || 0 })}
                                                         style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '1rem', fontWeight: '800', textAlign: 'right' }}
@@ -1169,14 +1225,14 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                             <button
                                                 onClick={handleAddManualItem}
                                                 disabled={!newItem.id || newItem.quantity <= 0}
-                                                style={{ 
-                                                    width: '100%', 
-                                                    padding: '1rem', 
-                                                    background: newItem.id ? deepTeal : '#f1f5f9', 
-                                                    color: newItem.id ? '#fff' : '#cbd5e1', 
-                                                    border: 'none', 
-                                                    borderRadius: '16px', 
-                                                    fontWeight: '900', 
+                                                style={{
+                                                    width: '100%',
+                                                    padding: '1rem',
+                                                    background: newItem.id ? deepTeal : '#f1f5f9',
+                                                    color: newItem.id ? '#fff' : '#cbd5e1',
+                                                    border: 'none',
+                                                    borderRadius: '16px',
+                                                    fontWeight: '900',
                                                     cursor: newItem.id ? 'pointer' : 'not-allowed',
                                                     display: 'flex',
                                                     alignItems: 'center',
@@ -1194,20 +1250,20 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                 {/* Items List for Deletion */}
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
                                     {manualOCData.items.map((item, idx) => (
-                                        <div key={idx} style={{ 
-                                            display: 'flex', 
-                                            justifyContent: 'space-between', 
-                                            alignItems: 'center', 
-                                            background: '#f8fafc', 
-                                            padding: '1rem 1.5rem', 
+                                        <div key={idx} style={{
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            background: '#f8fafc',
+                                            padding: '1rem 1.5rem',
                                             borderRadius: '16px',
                                             border: '1px solid #f1f5f9'
                                         }}>
                                             <div>
                                                 <div style={{ fontWeight: '800', color: deepTeal, fontSize: '0.9rem' }}>{item.name}</div>
-                                                <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '600' }}>{item.quantity} {item.unit} x ${item.unitCost.toLocaleString()}</div>
+                                                <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '600' }}>{item.quantity} {item.unit} x ${item.unitCost.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</div>
                                             </div>
-                                            <button 
+                                            <button
                                                 onClick={() => setManualOCData({ ...manualOCData, items: manualOCData.items.filter((_, i) => i !== idx) })}
                                                 style={{ padding: '0.5rem', background: '#fef2f2', border: 'none', borderRadius: '8px', color: '#ef4444', cursor: 'pointer' }}
                                             >
@@ -1221,27 +1277,27 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                             {/* Right Panel: Live Preview */}
                             <div style={{ padding: '2rem', background: '#f1f5f9', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                                 <div style={{ transform: 'scale(0.95)', transformOrigin: 'top center' }}>
-                                    <DocumentBuilder 
+                                    <DocumentBuilder
                                         type="ORDEN DE COMPRA MANUAL"
                                         docId="BORRADOR-AUTO"
                                         date={manualOCData.date}
                                         client={{
-                                             name: ownCompany.name,
-                                             detail1: ownCompany.name,
-                                             detail2: `NIT: ${ownCompany.nit}`,
-                                             address: ownCompany.address,
-                                             phone: ownCompany.phone
+                                            name: ownCompany.name,
+                                            detail1: ownCompany.name,
+                                            detail2: `NIT: ${ownCompany.nit}`,
+                                            address: ownCompany.address,
+                                            phone: ownCompany.phone
                                         }}
                                         shippingInfo={{
-                                             title: 'Lugar de Entrega',
-                                             location: ownCompany.name,
-                                             address: ownCompany.delivery_address || ownCompany.address
+                                            title: 'Lugar de Entrega',
+                                            location: ownCompany.name,
+                                            address: ownCompany.delivery_address || ownCompany.address
                                         }}
                                         provider={{
-                                             name: providers.find(p => p.id === manualOCData.providerId)?.name || 'Selecciona un proveedor',
-                                             nit: providers.find(p => p.id === manualOCData.providerId)?.nit || '',
-                                             phone: providers.find(p => p.id === manualOCData.providerId)?.phone || '',
-                                             email: providers.find(p => p.id === manualOCData.providerId)?.email || ''
+                                            name: providers.find(p => p.id === manualOCData.providerId)?.name || 'Selecciona un proveedor',
+                                            nit: providers.find(p => p.id === manualOCData.providerId)?.nit || '',
+                                            phone: providers.find(p => p.id === manualOCData.providerId)?.phone || '',
+                                            email: providers.find(p => p.id === manualOCData.providerId)?.email || ''
                                         }}
                                         items={manualOCData.items.map(i => ({
                                             name: i.name,
@@ -1272,14 +1328,14 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                             <button
                                 onClick={handleSaveManualOC}
                                 disabled={manualOCData.items.length === 0 || !manualOCData.providerId}
-                                style={{ 
-                                    padding: '1rem 3rem', 
-                                    background: (manualOCData.items.length > 0 && manualOCData.providerId) ? '#16a34a' : '#f1f5f9', 
-                                    color: (manualOCData.items.length > 0 && manualOCData.providerId) ? '#fff' : '#cbd5e1', 
-                                    border: 'none', 
-                                    borderRadius: '16px', 
-                                    fontWeight: '900', 
-                                    fontSize: '0.9rem', 
+                                style={{
+                                    padding: '1rem 3rem',
+                                    background: (manualOCData.items.length > 0 && manualOCData.providerId) ? '#16a34a' : '#f1f5f9',
+                                    color: (manualOCData.items.length > 0 && manualOCData.providerId) ? '#fff' : '#cbd5e1',
+                                    border: 'none',
+                                    borderRadius: '16px',
+                                    fontWeight: '900',
+                                    fontSize: '0.9rem',
                                     cursor: (manualOCData.items.length > 0 && manualOCData.providerId) ? 'pointer' : 'not-allowed',
                                     display: 'flex',
                                     alignItems: 'center',
@@ -1301,8 +1357,8 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                     display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3100,
                     padding: '2rem', animation: 'fadeIn 0.3s'
                 }}>
-                    <div style={{ 
-                        background: '#fff', padding: '2.5rem', borderRadius: '32px', width: '550px', 
+                    <div style={{
+                        background: '#fff', padding: '2.5rem', borderRadius: '32px', width: '550px',
                         boxShadow: '0 30px 60px rgba(0,0,0,0.2)', position: 'relative'
                     }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
@@ -1312,7 +1368,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                             </div>
                             <button onClick={() => setInvEntryOC(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={24} /></button>
                         </div>
-                        
+
                         <p style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
                             Confirma la recepción física de los siguientes insumos de la <strong>OC {invEntryOC.id}</strong> para que ingresen al inventario:
                         </p>
@@ -1327,7 +1383,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                         </div>
 
                         <button
-                            onClick={() => { handleReceiveOC(invEntryOC.id); setInvEntryOC(null); }}
+                            onClick={() => handleReceiveOC(invEntryOC.id)}
                             style={{
                                 width: '100%', padding: '1.2rem', background: '#16a34a', color: '#fff', border: 'none', borderRadius: '16px',
                                 fontWeight: '900', fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.8rem'
@@ -1335,6 +1391,153 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                         >
                             <Save size={20} /> INGRESO MP A INV.
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Related Order Detail Modal — SAME DESIGN AS SALES MODULE */}
+            {viewingRelatedOrder && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '2rem' }}>
+                    <div style={{ background: '#fff', width: '100%', maxWidth: '800px', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+                        <div style={{ padding: '1.5rem 2rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                <FileText size={24} color="var(--color-primary)" />
+                                <div>
+                                    <h3 style={{ margin: 0, color: '#0f172a', fontSize: '1.25rem' }}>NOTA DE PEDIDO: {viewingRelatedOrder.id}</h3>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.3rem', flexWrap: 'wrap' }}>
+                                        <span style={{ color: '#64748b', fontSize: '0.85rem' }}>Fecha: {viewingRelatedOrder.date} &nbsp;|&nbsp; Origen: {viewingRelatedOrder.source}</span>
+                                        <select
+                                            value={viewingRelatedOrder.status || 'Pendiente'}
+                                            onChange={(e) => setViewingRelatedOrder({ ...viewingRelatedOrder, status: e.target.value })}
+                                            style={{
+                                                padding: '3px 10px',
+                                                borderRadius: '20px',
+                                                border: '1.5px solid',
+                                                fontSize: '0.75rem',
+                                                fontWeight: '800',
+                                                cursor: 'pointer',
+                                                outline: 'none',
+                                                appearance: 'none',
+                                                paddingRight: '24px',
+                                                backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%2364748b\' stroke-width=\'2\'%3E%3Cpath d=\'M6 9l6 6 6-6\'/%3E%3C/svg%3E")',
+                                                backgroundRepeat: 'no-repeat',
+                                                backgroundPosition: 'right 6px center',
+                                                ...(
+                                                    viewingRelatedOrder.status === 'Pagado' || viewingRelatedOrder.status === 'Entregado'
+                                                        ? { background: 'rgba(22,163,74,0.08)', color: '#16a34a', borderColor: '#16a34a' }
+                                                        : viewingRelatedOrder.status === 'Pendiente' || viewingRelatedOrder.status === 'PENDIENTE'
+                                                            ? { background: 'rgba(214,189,152,0.15)', color: '#B8A07E', borderColor: '#B8A07E' }
+                                                            : viewingRelatedOrder.status === 'En Producción'
+                                                                ? { background: 'rgba(234,88,12,0.08)', color: '#ea580c', borderColor: '#ea580c' }
+                                                                : viewingRelatedOrder.status === 'En Compras'
+                                                                    ? { background: 'rgba(37,99,235,0.08)', color: '#2563eb', borderColor: '#2563eb' }
+                                                                    : { background: 'rgba(2,83,87,0.05)', color: '#023636', borderColor: '#023636' }
+                                                )
+                                            }}
+                                        >
+                                            {['Pendiente', 'En Compras', 'En Producción', 'Listo para Despacho', 'Despachado', 'Pagado', 'Entregado', 'Cancelado'].map(s => (
+                                                <option key={s} value={s}>{s}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                <button onClick={() => setViewingRelatedOrder(null)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', padding: '0.6rem', cursor: 'pointer', color: '#64748b', display: 'flex' }}><X size={20} /></button>
+                            </div>
+                        </div>
+
+                        <div style={{ padding: '2rem', overflowY: 'auto', flex: 1 }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem', paddingBottom: '2rem', borderBottom: '2px dashed #e2e8f0' }}>
+                                <div>
+                                    <h4 style={{ margin: '0 0 1rem 0', color: '#334155', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Datos Vendedor</h4>
+                                    <div style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '0.2rem' }}>{ownCompany.name}</div>
+                                    <div style={{ color: '#64748b', fontSize: '0.9rem' }}>NIT: {ownCompany.nit}</div>
+                                    <div style={{ color: '#64748b', fontSize: '0.9rem' }}>{ownCompany.city || 'Bogotá'}, Colombia</div>
+                                </div>
+                                <div>
+                                    <h4 style={{ margin: '0 0 1rem 0', color: '#334155', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Datos Cliente</h4>
+                                    <div style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '0.4rem' }}>
+                                        {viewingRelatedOrder.client || 'Consumidor Final'}
+                                    </div>
+                                    {(() => {
+                                        const clientRecord = (clients || []).find(c => c.id === viewingRelatedOrder.clientId || c.name === viewingRelatedOrder.client);
+                                        const nit = clientRecord?.nit;
+                                        const isRealNit = nit && !/^\d{10}$/.test(nit.replace(/\D/g, ''));
+                                        if (isRealNit) return <div style={{ color: '#64748b', fontSize: '0.9rem' }}>{nit}</div>;
+                                        if (viewingRelatedOrder.customer_id) return <div style={{ color: '#64748b', fontSize: '0.9rem' }}>ID: {viewingRelatedOrder.customer_id}</div>;
+                                        return <div style={{ color: '#94a3b8', fontSize: '0.85rem', fontStyle: 'italic' }}>Identificación no registrada</div>;
+                                    })()}
+                                    {(viewingRelatedOrder.shipping_address || (clients || []).find(c => c.id === viewingRelatedOrder.clientId || c.name === viewingRelatedOrder.client)?.address) && (
+                                        <div style={{ color: '#64748b', fontSize: '0.9rem', marginTop: '0.2rem' }}>
+                                            {viewingRelatedOrder.shipping_address || (clients || []).find(c => c.id === viewingRelatedOrder.clientId || c.name === viewingRelatedOrder.client)?.address}
+                                        </div>
+                                    )}
+                                    {(viewingRelatedOrder.shipping_city || (clients || []).find(c => c.id === viewingRelatedOrder.clientId || c.name === viewingRelatedOrder.client)?.city) && (
+                                        <div style={{ color: '#64748b', fontSize: '0.9rem' }}>
+                                            {viewingRelatedOrder.shipping_city || (clients || []).find(c => c.id === viewingRelatedOrder.clientId || c.name === viewingRelatedOrder.client)?.city}
+                                        </div>
+                                    )}
+                                    {(() => {
+                                        const phone = viewingRelatedOrder.shipping_phone
+                                            || (clients || []).find(c => c.id === viewingRelatedOrder.clientId || c.name === viewingRelatedOrder.client)?.phone;
+                                        return phone ? <div style={{ color: '#64748b', fontSize: '0.9rem', marginTop: '0.2rem' }}>Tel: {phone}</div> : null;
+                                    })()}
+                                </div>
+                            </div>
+
+                            <h4 style={{ margin: '0 0 1rem 0', color: '#334155', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Detalle de Productos</h4>
+                            <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                    <thead style={{ background: '#f8fafc' }}>
+                                        <tr>
+                                            <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid #e2e8f0', color: '#64748b', fontSize: '0.85rem' }}>Producto</th>
+                                            <th style={{ padding: '1rem', textAlign: 'center', borderBottom: '1px solid #e2e8f0', color: '#64748b', fontSize: '0.85rem' }}>Cant.</th>
+                                            <th style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid #e2e8f0', color: '#64748b', fontSize: '0.85rem' }}>Unitario</th>
+                                            <th style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid #e2e8f0', color: '#64748b', fontSize: '0.85rem' }}>Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {viewingRelatedOrder.items.map((item, index) => (
+                                            <tr key={index}>
+                                                <td style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9', fontWeight: '600', color: '#0f172a' }}>{item.name}</td>
+                                                <td style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9', textAlign: 'center' }}>
+                                                    <input
+                                                        type="number"
+                                                        value={item.quantity}
+                                                        onChange={(e) => {
+                                                            const newQ = parseInt(e.target.value) || 1;
+                                                            const newItems = [...viewingRelatedOrder.items];
+                                                            newItems[index].quantity = newQ < 1 ? 1 : newQ;
+                                                            setViewingRelatedOrder({ ...viewingRelatedOrder, items: newItems });
+                                                        }}
+                                                        style={{ width: '60px', padding: '0.4rem', textAlign: 'center', border: '1px solid #cbd5e1', borderRadius: '6px' }}
+                                                        min="1"
+                                                    />
+                                                </td>
+                                                <td style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9', textAlign: 'right', color: '#64748b' }}>${(item.price || 0).toLocaleString()}</td>
+                                                <td style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9', textAlign: 'right', fontWeight: 'bold' }}>${((item.price * item.quantity) || 0).toLocaleString()}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div style={{ padding: '1.5rem 2rem', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                            <button
+                                onClick={() => setViewingRelatedOrder(null)}
+                                style={{ padding: '0.8rem 2rem', borderRadius: '10px', border: '1px solid #cbd5e1', background: '#fff', color: '#64748b', fontWeight: 'bold', cursor: 'pointer' }}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleUpdateRelatedOrder}
+                                style={{ padding: '0.8rem 2.5rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 12px rgba(26,54,54,0.3)' }}
+                            >
+                                <Save size={18} /> Guardar Cambios
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

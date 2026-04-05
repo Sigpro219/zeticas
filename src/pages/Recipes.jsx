@@ -6,9 +6,9 @@ import { useBusiness } from '../context/BusinessContext';
 const WEIGHT_UNITS = ['kg', 'gr', 'g', 'lb'];
 const VOLUME_UNITS = ['lt', 'ml', 'l'];
 
-// Factores a la unidad mínima: peso → gr, volumen → ml
-const TO_BASE = { kg: 1000, gr: 1, g: 1, lb: 453.592, lt: 1000, l: 1000, ml: 1 };
-const FROM_BASE = { kg: 1/1000, gr: 1, g: 1, lb: 1/453.592, lt: 1/1000, l: 1/1000, ml: 1 };
+// Factores a la unidad mínima: peso → gr, volumen → ml (1 lb = 500g Colombia std)
+const TO_BASE = { kg: 1000, gr: 1, g: 1, lb: 500, lt: 1000, l: 1000, ml: 1 };
+const FROM_BASE = { kg: 1 / 1000, gr: 1, g: 1, lb: 1 / 500, lt: 1 / 1000, l: 1 / 1000, ml: 1 };
 
 /**
  * Convierte `qty` desde `inputUnit` a `targetUnit`.
@@ -35,20 +35,48 @@ const convertQty = (qty, inputUnit, targetUnit) => {
 
 const Recipes = () => {
     const { items, recipes, recalculatePTCosts, addRecipe, deleteRecipeByProduct, units } = useBusiness();
-    
+
     // Split items into PTs and Materials
     const pts = useMemo(() => items.filter(i => i.category === 'Producto Terminado'), [items]);
     // Ingredients can be anything EXCEPT Finished Goods (to avoid circular references)
     const materials = useMemo(() => items.filter(i => i.category !== 'Producto Terminado'), [items]);
 
     const recipesList = useMemo(() => {
-        return pts.map(pt => ({
-            id: pt.id,
-            name: pt.name,
-            batch_size: pt.batch_size || 1,  // tamaño del lote desde el SKU
-            yield: 'Batch Producción',
-            ingredients: recipes[pt.id] || []
-        }));
+        return pts.map(pt => {
+            const rawIngredients = recipes[pt.id] || [];
+
+            const mappedIngredients = rawIngredients.map(ing => {
+                let q = parseFloat(ing.qty) || 0;
+                let u = (ing.unit || '').toLowerCase().trim();
+
+                if (u === 'lb' || u === 'lbs' || u === 'libras') {
+                    q = q * 500;
+                    u = 'gr';
+                } else if (u === 'kg' || u === 'kilo' || u === 'kilos') {
+                    q = q * 1000;
+                    u = 'gr';
+                } else if (u === 'g') {
+                    u = 'gr';
+                } else if (u === 'lt' || u === 'l' || u === 'litros') {
+                    q = q * 1000;
+                    u = 'ml';
+                }
+
+                return {
+                    ...ing,
+                    qty: Math.round(q * 100) / 100, // max 2 decimals
+                    unit: u
+                };
+            });
+
+            return {
+                id: pt.id,
+                name: pt.name,
+                batch_size: pt.batch_size || 1,  // tamaño del lote desde el SKU
+                yield: 'Batch Producción',
+                ingredients: mappedIngredients
+            };
+        });
     }, [pts, recipes]);
 
     const [isSaving, setIsSaving] = useState(false);
@@ -196,10 +224,10 @@ const Recipes = () => {
                         raw_material_id: i.rm_id,
                         raw_material_name: i.name,
                         raw_material_sku: i.sku || i.name,
-                        quantity_required: normalizedQty,      // en purchase_unit
-                        unit: purchaseUnit,                    // unidad de compra del insumo
-                        input_qty: parseFloat(i.qty),          // valor original del usuario
-                        input_unit: i.unit,                    // unidad original del usuario
+                        quantity_required: parseFloat(i.qty),
+                        unit: i.unit,
+                        input_qty: parseFloat(i.qty),
+                        input_unit: i.unit,
                         yield_quantity: Number(formData.yield_qty) || 1
                     });
                 }
@@ -244,9 +272,9 @@ const Recipes = () => {
                             }}
                         />
                         {searchTerm && (
-                            <X 
-                                size={14} 
-                                style={{ position: 'absolute', right: '0.8rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', cursor: 'pointer' }} 
+                            <X
+                                size={14}
+                                style={{ position: 'absolute', right: '0.8rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', cursor: 'pointer' }}
                                 onClick={() => setSearchTerm('')}
                             />
                         )}
@@ -537,8 +565,8 @@ const Recipes = () => {
                             <p style={{ fontSize: '0.95rem', color: '#64748b', lineHeight: '1.6', marginBottom: '1.5rem' }}>{confirmModal.message}</p>
 
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', padding: '1rem', background: '#fff1f2', borderRadius: '12px', marginBottom: '1.5rem', border: '1px solid #ffe4e6' }}>
-                                <input 
-                                    type="checkbox" 
+                                <input
+                                    type="checkbox"
                                     id="double-confirm-check"
                                     checked={doubleConfirm}
                                     onChange={(e) => setDoubleConfirm(e.target.checked)}
@@ -560,20 +588,20 @@ const Recipes = () => {
                                 <button
                                     onClick={executeDeletion}
                                     disabled={isDeleting || !doubleConfirm}
-                                    style={{ 
-                                        flex: 1, 
-                                        padding: '0.6rem', 
-                                        borderRadius: '10px', 
-                                        border: 'none', 
-                                        background: doubleConfirm ? '#ef4444' : '#fca5a5', 
-                                        color: '#fff', 
-                                        fontWeight: '700', 
-                                        cursor: doubleConfirm ? 'pointer' : 'not-allowed', 
-                                        display: 'flex', 
-                                        alignItems: 'center', 
-                                        justifyContent: 'center', 
-                                        gap: '0.5rem', 
-                                        boxShadow: doubleConfirm ? '0 4px 12px rgba(239, 68, 68, 0.2)' : 'none', 
+                                    style={{
+                                        flex: 1,
+                                        padding: '0.6rem',
+                                        borderRadius: '10px',
+                                        border: 'none',
+                                        background: doubleConfirm ? '#ef4444' : '#fca5a5',
+                                        color: '#fff',
+                                        fontWeight: '700',
+                                        cursor: doubleConfirm ? 'pointer' : 'not-allowed',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '0.5rem',
+                                        boxShadow: doubleConfirm ? '0 4px 12px rgba(239, 68, 68, 0.2)' : 'none',
                                         fontSize: '0.85rem',
                                         transition: 'all 0.2s'
                                     }}
