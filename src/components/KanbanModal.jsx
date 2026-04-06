@@ -6,15 +6,21 @@ import {
 import { useBusiness } from '../context/BusinessContext';
 
 const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
-    const { purchaseOrders, updateOrder, refreshData } = useBusiness();
+    const { recipes, items: contextItems, updateOrder, refreshData, clients, leads } = useBusiness();
     const [selectedOrder, setSelectedOrder] = useState(null);
+    const [hoveredOrder, setHoveredOrder] = useState(null);
+    const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
 
     if (!isOpen) return null;
 
+    // Use items from context if not provided via props
+    const currentItems = items.length > 0 ? items : contextItems;
+
+    // Combinar bases de datos para búsqueda
+    const allContacts = [...(clients || []), ...(leads || [])];
+
     // Premium Branding Colors
     const deepTeal = "#025357";
-    const institutionOcre = "#D6BD98";
-    const premiumSalmon = "#D4785A";
 
     const columns = [
         {
@@ -135,37 +141,102 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
             {/* Cuerpos de Columnas */}
             <div style={{
                 flex: 1, display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)',
-                gap: '1rem', padding: '1.5rem', overflowX: 'auto', background: '#f1f5f9'
+                gap: '1rem', padding: '1.5rem', background: '#f1f5f9',
+                overflow: 'hidden' // Removiendo el "slider" o scroll lateral
             }}>
                 {columns.map(col => {
                     const stats = getColumnStats(col);
                     return (
-                        <div key={col.id} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, col)} style={{ background: 'rgba(255,255,255,0.8)', borderRadius: '16px', display: 'flex', flexDirection: 'column', minWidth: '250px', border: '1px solid rgba(0,0,0,0.05)', height: '100%' }}>
+                                <div key={col.id} style={{ background: 'rgba(255,255,255,0.8)', borderRadius: '16px', display: 'flex', flexDirection: 'column', minWidth: '250px', border: '1px solid rgba(0,0,0,0.05)', height: '100%', overflow: 'hidden' }}>
                             <div style={{ padding: '1rem', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: deepTeal, marginBottom: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: deepTeal }}>
                                     {col.icon}
-                                    <span style={{ fontWeight: '900', fontSize: '0.85rem', textTransform: 'uppercase' }}>{col.label}</span>
-                                </div>
-                                <div style={{ display: 'flex', gap: '4px' }}>
-                                    <div style={{ flex: 1, background: '#fee2e2', color: '#ef4444', fontSize: '0.6rem', fontWeight: '900', padding: '2px 6px', borderRadius: '4px', textAlign: 'center' }}>
-                                        IP: {stats.inProcess}
-                                    </div>
-                                    <div style={{ flex: 1, background: '#dcfce7', color: '#16a34a', fontSize: '0.6rem', fontWeight: '900', padding: '2px 6px', borderRadius: '4px', textAlign: 'center' }}>
-                                        FIN: {stats.finished}
+                                    <span style={{ fontWeight: '950', fontSize: '1rem', textTransform: 'uppercase', letterSpacing: '1px' }}>{col.label}</span>
+                                    <div style={{ marginLeft: 'auto', background: `${deepTeal}15`, color: deepTeal, padding: '2px 8px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: '900' }}>
+                                        {stats.inProcess}
                                     </div>
                                 </div>
                             </div>
                             <div style={{ flex: 1, padding: '0.8rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                {orders.filter(o => col.inProcessStatuses.includes(o.status)).map(order => (
-                                    <div
-                                        key={order.id} draggable onDragStart={e => handleDragStart(e, order.dbId)}
-                                        onClick={() => setSelectedOrder({ ...order, stageName: col.label })}
-                                        style={{ background: '#fff', padding: '0.8rem', borderRadius: '10px', borderLeft: `3px solid ${deepTeal}`, cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
-                                    >
-                                        <div style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8' }}>#{order.id}</div>
-                                        <div style={{ fontSize: '0.8rem', fontWeight: '700', color: '#1e293b', margin: '4px 0' }}>{order.client}</div>
-                                    </div>
-                                ))}
+                                {orders.filter(o => col.inProcessStatuses.includes(o.status)).map(order => {
+                                    // 1. Lógica de Alerta Operativa (Stock y Entrada)
+                                    const isNew = order.status === 'Pendiente';
+                                    const needsMP = order.status === 'En Compras' || order.status === 'En Producción';
+                                    let hasMissingMaterials = isNew; // Rojo por defecto si es nuevo (requiere acción)
+                                    
+                                    if (needsMP && recipes && currentItems) {
+                                        order.items?.forEach(item => {
+                                            const recipe = recipes[item.name] || [];
+                                            recipe.forEach(ing => {
+                                                const mat = currentItems.find(i => i.id === ing.rm_id || i.name === ing.name);
+                                                const stock = (mat?.initial || 0) + (mat?.purchases || 0) - (mat?.sales || 0);
+                                                const multiplier = (Number(item.quantity) || 0) / (mat?.batch_size || 1);
+                                                if (stock < (Number(ing.qty) * multiplier)) hasMissingMaterials = true;
+                                            });
+                                        });
+                                    }
+
+                                    // 2. Lógica del "Cronómetro" de Gestión (Lead Time)
+                                    const getTimeInStage = (lastAt) => {
+                                        if (!lastAt) return 'Nuevo';
+                                        const diffMs = new Date() - new Date(lastAt);
+                                        const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
+                                        const diffMin = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                                        if (diffHrs > 0) return `Hace ${diffHrs}h ${diffMin}m`;
+                                        return `Hace ${diffMin}m`;
+                                    };
+
+                                    const isAutoMoved = order.auto_moved_at && (new Date() - new Date(order.auto_moved_at) < 86400000);
+                                    const isStuck = order.last_status_at && (new Date() - new Date(order.last_status_at) > 86400000);
+
+                                    return (
+                                        <div
+                                            key={order.dbId || order.id} 
+                                            onClick={() => setSelectedOrder({ ...order, stageName: col.label })}
+                                            className="kanban-card"
+                                            style={{ 
+                                                background: '#fff', padding: '0.6rem 0.8rem', borderRadius: '12px', 
+                                                border: `2px solid ${hasMissingMaterials ? '#ef4444' : 'rgba(0,0,0,0.05)'}`,
+                                                borderLeft: `6px solid ${hasMissingMaterials ? '#ef4444' : deepTeal}`, 
+                                                cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.03)',
+                                                position: 'relative', transition: 'all 0.2s',
+                                                minHeight: '65px'
+                                            }}
+                                            onMouseEnter={e => {
+                                                const rect = e.currentTarget.getBoundingClientRect();
+                                                const tooltipWidth = 270;
+                                                const windowWidth = window.innerWidth;
+                                                
+                                                let xPos = rect.right + 10;
+                                                if (xPos + tooltipWidth > windowWidth) {
+                                                    xPos = rect.left - tooltipWidth - 10;
+                                                }
+
+                                                setHoveredOrder(order);
+                                                setHoverPos({ x: xPos, y: rect.top });
+                                            }}
+                                            onMouseLeave={() => setHoveredOrder(null)}
+                                        >
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                                <div style={{ fontSize: '0.6rem', fontWeight: '950', color: '#94a3b8' }}>#{order.id}</div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                    <div style={{ fontSize: '0.6rem', fontWeight: '900', color: isStuck ? '#ea580c' : '#bdc3c7' }}>
+                                                        {getTimeInStage(order.last_status_at)}
+                                                    </div>
+                                                    <div style={{
+                                                        width: '8px', height: '8px', borderRadius: '50%',
+                                                        background: hasMissingMaterials ? '#ef4444' : '#10b981',
+                                                        boxShadow: hasMissingMaterials ? '0 0 5px #ef4444' : 'none',
+                                                        animation: (hasMissingMaterials && col.id === 'produccion') || isAutoMoved ? 'blink 1s infinite' : 'none'
+                                                    }} />
+                                                </div>
+                                            </div>
+                                            <div style={{ fontSize: '0.82rem', fontWeight: '850', color: '#1e293b', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                {order.client}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
                     );
@@ -179,18 +250,130 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
                         <button onClick={() => setSelectedOrder(null)} style={{ position: 'absolute', top: '1.5rem', right: '1.5rem', border: 'none', background: '#f1f5f9', padding: '0.5rem', borderRadius: '50%', cursor: 'pointer' }}>
                             <X size={20} />
                         </button>
-                        <h3 style={{ margin: 0, fontSize: '1.5rem', color: deepTeal, fontWeight: '900' }}>#{selectedOrder.id} - {selectedOrder.client}</h3>
-                        <p style={{ fontSize: '0.9rem', color: '#64748b', marginTop: '0.5rem' }}>Etapa actual: <strong>{selectedOrder.stageName}</strong></p>
-                        <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#f8fafc', borderRadius: '12px' }}>
-                            <h4 style={{ fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', margin: '0 0 10px' }}>Productos</h4>
-                            {selectedOrder.items?.map(i => <div key={i.id} style={{ fontSize: '0.9rem', fontWeight: '600' }}>{i.name} x{i.quantity}</div>)}
+                        
+                        <div style={{ borderLeft: `8px solid ${deepTeal}`, paddingLeft: '1.2rem' }}>
+                            <h3 style={{ margin: 0, fontSize: '1.5rem', color: deepTeal, fontWeight: '950' }}>#{selectedOrder.id} - {selectedOrder.client}</h3>
+                            <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '4px 0', textTransform: 'uppercase', fontWeight: '700' }}>{selectedOrder.stageName}</p>
+                                {(() => {
+                                    const o = selectedOrder;
+                                    
+                                    // Función para normalizar texto (quitar tildes y espacios)
+                                    const normalize = (str) => 
+                                        str?.toLowerCase()
+                                           .normalize("NFD")
+                                           .replace(/[\u0300-\u036f]/g, "")
+                                           .trim() || "";
+
+                                    const targetName = normalize(o.client);
+                                    
+                                    // Búsqueda inteligente (Fuzzy Match): German Higuera -> German Higuera Duran
+                                    const clientInfo = allContacts?.find(c => {
+                                        const cName = normalize(c.name);
+                                        return cName === targetName || 
+                                               cName.includes(targetName) || 
+                                               targetName.includes(cName) ||
+                                               c.id === (o.clientId || o.client_id);
+                                    });
+                                    
+                                    // Lógica de Prioridad: 1. CRM Maestro, 2. Datos de OC, 3. "No registrado"
+                                    const finalCity = clientInfo?.city || o.shipping_city || o.city || 'Ciudad no registrada';
+                                    const finalAddress = clientInfo?.address || o.shipping_address || o.address || 'Sin dirección registrada';
+                                    const finalPhone = clientInfo?.phone || o.shipping_phone || o.phone || 'Sin teléfono registrado';
+                                    const finalEmail = clientInfo?.email || o.customer_email || o.email || 'No registrado';
+
+                                    return (
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.5rem', marginTop: '2rem' }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                <label style={{ fontSize: '0.65rem', fontWeight: '950', color: '#94a3b8', textTransform: 'uppercase' }}>Información del Cliente</label>
+                                                <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#1e293b' }}>
+                                                    {finalCity}
+                                                </div>
+                                                <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                                                    {finalAddress}
+                                                </div>
+                                                <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                                                    {finalPhone}
+                                                </div>
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                <label style={{ fontSize: '0.65rem', fontWeight: '950', color: '#94a3b8', textTransform: 'uppercase' }}>Trazabilidad Operativa</label>
+                                                <div style={{ fontSize: '0.85rem', color: '#1e293b', fontWeight: '600' }}>
+                                                    Creado: {o.realDate || o.date || 'N/A'}
+                                                </div>
+                                                <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                                                    Email: {finalEmail}
+                                                </div>
+                                                <div style={{ fontSize: '0.6rem', color: '#cbd5e1', fontStyle: 'italic', marginTop: '5px' }}>
+                                                    Sistema: Link {clientInfo ? 'Exitoso ✅' : 'No encontrado ❌'}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
                         </div>
+
+                        <div style={{ marginTop: '2rem', padding: '1.5rem', background: '#f8fafc', borderRadius: '16px', border: '1px solid #f1f5f9' }}>
+                            <h4 style={{ fontSize: '0.8rem', fontWeight: '950', color: '#94a3b8', textTransform: 'uppercase', margin: '0 0 15px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <Package size={16} /> Detalle de Productos
+                            </h4>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                {selectedOrder.items?.map(i => (
+                                    <div key={i.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1rem', fontWeight: '800', color: '#1e293b', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>
+                                        <span>{i.name}</span>
+                                        <span style={{ color: deepTeal }}>x{i.quantity}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Tooltip Maestro - Prioridad Z Máxima */}
+            {hoveredOrder && (
+                <div style={{
+                    position: 'fixed',
+                    top: hoverPos.y,
+                    left: hoverPos.x,
+                    width: '260px',
+                    background: '#0f172a',
+                    color: '#fff',
+                    padding: '16px',
+                    borderRadius: '16px',
+                    boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+                    zIndex: 999999, // Jerarquía Suprema
+                    pointerEvents: 'none',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    animation: 'fadeIn 0.2s ease-out'
+                }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: '950', borderBottom: '1px solid rgba(255,255,255,0.2)', paddingBottom: '6px', marginBottom: '10px', color: '#10b981', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        DETALLE DEL PEDIDO
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
+                        {hoveredOrder.items?.map((item, idx) => (
+                            <div key={idx} style={{ fontSize: '0.75rem', display: 'flex', justifyContent: 'space-between', gap: '15px' }}>
+                                <span style={{ opacity: 0.9, fontWeight: '600' }}>{item.name.toUpperCase()}</span>
+                                <span style={{ fontWeight: '950', color: '#10b981' }}>x{item.quantity}</span>
+                            </div>
+                        ))}
+                    </div>
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '8px', fontSize: '0.65rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Calendar size={10} /> 
+                        MOVIDO: {hoveredOrder.last_status_at ? new Date(hoveredOrder.last_status_at).toLocaleString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Reciente'}
                     </div>
                 </div>
             )}
 
             <style>{`
                 @keyframes fadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+                @keyframes blink { 
+                    0% { opacity: 1; transform: scale(1); box-shadow: 0 0 15px rgba(239, 68, 68, 0.8); } 
+                    50% { opacity: 0.4; transform: scale(0.85); box-shadow: 0 0 5px rgba(239, 68, 68, 0.2); } 
+                    100% { opacity: 1; transform: scale(1); box-shadow: 0 0 15px rgba(239, 68, 68, 0.8); } 
+                }
+
+                .kanban-card { position: relative; }
+                .kanban-card:hover { transform: translateY(-2px); }
             `}</style>
         </div>
     );

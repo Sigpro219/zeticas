@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import {
     UserPlus, Calendar, BarChart3, MessageSquare, Clock, Edit2, X, CheckSquare,
     ChevronDown, Check, Trash2, Download, TrendingUp, CheckCircle2, Phone,
-    Mail, FileText, ShoppingCart, Search, RefreshCw, Zap, MapPin, Plus, CheckCircle, Save, Truck
+    Mail, FileText, ShoppingCart, Search, RefreshCw, Zap, MapPin, Plus, CheckCircle, Save, Truck, History, Archive, Eye, EyeOff
 } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
 import { useMediaQuery } from '../hooks/useMediaQuery';
@@ -11,12 +11,14 @@ import autoTable from 'jspdf-autotable';
 import { colombia_cities } from '../data/colombia_cities';
 
 const CRM = () => {
-    const { addClient, leads, updateLead, deleteLead, addLead, addQuotation, quotations, items: masterProducts, siteContent, ownCompany } = useBusiness();
+    const { addClient, leads, updateLead, deleteLead, addLead, addQuotation, deleteQuotation, quotations, items: masterProducts, siteContent, ownCompany } = useBusiness();
     const isMobile = useMediaQuery('(max-width: 1024px)');
 
     // Premium Branding Colors
-    const deepTeal = "#023636";
-    const institutionOcre = "#D4785A";
+    const deepTeal = '#023636';
+    const institutionOcre = '#D4785A';
+    const premiumSalmon = '#FF8A65';
+    const softOcre = '#FDF8F6';
 
     const [editingLead, setEditingLead] = useState(null);
     const [isFollowUpModalOpen, setIsFollowUpModalOpen] = useState(false);
@@ -43,6 +45,7 @@ const CRM = () => {
     // Quotation State
     const [quoteItems, setQuoteItems] = useState([]);
     const [quoteDiscount, setQuoteDiscount] = useState(0);
+    const [showArchived, setShowArchived] = useState(false);
 
     // Shipping Settings from siteContent
     const shipSettings = useMemo(() => {
@@ -152,207 +155,166 @@ const CRM = () => {
         }
     };
 
-    const generatePDF = async (lead, items, discountPercent, isDownload = false) => {
-        const doc = new jsPDF();
-        const primaryColor = [2, 54, 54]; // #023636
-        
-        const subtotal = items.reduce((s, i) => s + (i.price * i.qty), 0);
-        const discountAmount = Math.round((subtotal * discountPercent / 100) / 100) * 100;
-        const shipping = getShippingCost(lead.city, subtotal);
-        const rawTotal = subtotal + shipping - discountAmount;
-        const total = Math.round(rawTotal / 100) * 100;
-        const date = new Date().toLocaleDateString();
-        const validityDate = new Date();
-        validityDate.setDate(validityDate.getDate() + Number(quoteValidity));
-        const validityStr = validityDate.toLocaleDateString();
+    const handleArchive = async (id, currentStatus) => {
+        const newStatus = currentStatus === 'Archived' ? 'Active' : 'Archived';
+        await updateLead(id, { status: newStatus });
+    };
 
-        setCurrentQuoteLead(lead);
+    const generatePDF = (lead, items, discountPercent, isDownload = false) => {
+        try {
+            if (!lead || !items) throw new Error("Datos de cliente o productos incompletos");
+            
+            const doc = new jsPDF();
+            const primaryColor = [2, 54, 54]; // #023636
+            
+            const subtotal = items.reduce((s, i) => s + (Number(i.price || 0) * Number(i.qty || 0)), 0);
+            const discountAmount = Math.round((subtotal * (Number(discountPercent) || 0) / 100) / 100) * 100;
+            const shipping = getShippingCost(lead.city, subtotal);
+            const total = Math.round((subtotal + shipping - discountAmount) / 100) * 100;
+            const date = new Date().toLocaleDateString();
+            
+            const vDays = Number(quoteValidity) || 15;
+            const validityDate = new Date();
+            validityDate.setDate(validityDate.getDate() + vDays);
+            const validityStr = validityDate.toLocaleDateString();
 
-        // 1. Logo "zeticas" in serif
-        doc.setFont('times', 'bold');
-        doc.setFontSize(30);
-        doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-        doc.text('zeticas', 20, 30);
+            setCurrentQuoteLead(lead);
 
-        // Company Details (Ocre)
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(10);
-        doc.setTextColor(212, 120, 90); 
-        doc.text(ownCompany.name || 'Zeticas SAS BIC', 20, 40);
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9);
-        doc.setTextColor(100, 116, 139);
-        doc.text(`NIT: ${ownCompany.nit || '901.531.875-4'}`, 20, 45);
-        doc.text(`${ownCompany.city || 'Guasca'}, ${ownCompany.department || 'Cundinamarca'}`, 20, 50);
+            // Header: Logo "zeticas"
+            doc.setFont('times', 'bold');
+            doc.setFontSize(30);
+            doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+            doc.text('zeticas', 20, 30);
 
-        // Quote Title & ID
-        const ref = `QT-${Math.floor(1000 + Math.random() * 9000)}`;
-        doc.setFontSize(22);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-        doc.text('COTIZACIÓN COMERCIAL', 196, 30, { align: 'right' });
-        doc.setFontSize(14);
-        doc.text(ref, 196, 40, { align: 'right' });
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`Fecha: ${date}`, 196, 48, { align: 'right' });
-        doc.setTextColor(212, 120, 90);
-        doc.setFont('helvetica', 'bold');
-        doc.text(`Validez: ${validityStr} (${quoteValidity} días)`, 196, 54, { align: 'right' });
-
-        // Horizontal Rule
-        doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-        doc.setLineWidth(0.8);
-        doc.line(14, 60, 196, 60);
-
-        // 4. Info Cards
-        // Client Info
-        doc.setFillColor(248, 250, 252);
-        doc.roundedRect(14, 65, 88, 30, 2, 2, 'F');
-        doc.setDrawColor(241, 245, 249);
-        doc.roundedRect(14, 65, 88, 30, 2, 2, 'S');
-
-        doc.setFontSize(7);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(148, 163, 184);
-        doc.text('CLIENTE', 18, 70);
-
-        doc.setFontSize(10);
-        doc.setTextColor(30, 41, 59);
-        doc.text(lead.name || 'N/A', 18, 76);
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(100, 116, 139);
-        doc.text(`Tel: ${lead.phone || 'N/A'}`, 18, 81);
-        doc.text(`Email: ${lead.email || 'N/A'}`, 18, 86);
-
-        // Shipping Info
-        doc.setFillColor(248, 250, 252);
-        doc.roundedRect(108, 65, 88, 30, 2, 2, 'F');
-        doc.setDrawColor(241, 245, 249);
-        doc.roundedRect(108, 65, 88, 30, 2, 2, 'S');
-
-        doc.setFontSize(7);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(148, 163, 184);
-        doc.text('DIRECCIÓN DE ENTREGA', 112, 70);
-
-        doc.setFontSize(10);
-        doc.setTextColor(30, 41, 59);
-        doc.text(lead.address || 'N/A', 112, 76);
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(100, 116, 139);
-        doc.text(`${lead.city || 'N/A'}, Colombia`, 112, 81);
-
-        // 5. Items Table
-        autoTable(doc, {
-            startY: 105,
-            head: [['DESCRIPCIÓN', 'CANTIDAD', 'V. UNITARIO', 'V. TOTAL']],
-            body: [
-                ...items.map(i => [
-                    i.name,
-                    i.qty,
-                    `$${(i.price || 0).toLocaleString()}`,
-                    `$${(i.price * i.qty).toLocaleString()}`
-                ])
-            ],
-            theme: 'grid',
-            styles: { fontSize: 8.5, cellPadding: 4, textColor: [30, 41, 59] },
-            headStyles: { fillColor: primaryColor, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
-            columnStyles: {
-                0: { cellWidth: 'auto' },
-                1: { halign: 'center', cellWidth: 30 },
-                2: { halign: 'right', cellWidth: 35 },
-                3: { halign: 'right', cellWidth: 35 }
-            },
-            alternateRowStyles: { fillColor: [248, 250, 252] },
-            margin: { left: 14, right: 14 }
-        });
-
-        // 6. Totals
-        const pageHeight = doc.internal.pageSize.height;
-        let finalY = doc.lastAutoTable.finalY + 10;
-        const numFormat = (num) => `$${Math.round(num).toLocaleString()}`;
-
-        if (finalY + 60 > pageHeight) {
-            doc.addPage();
-            finalY = 20;
-        }
-
-        doc.setFontSize(10);
-        doc.setTextColor(100, 116, 139);
-        doc.text('SUBTOTAL:', 145, finalY + 6, { align: 'right' });
-        doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-        doc.setFont('helvetica', 'bold');
-        doc.text(numFormat(subtotal), 196, finalY + 6, { align: 'right' });
-
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9);
-        doc.setTextColor(100, 116, 139);
-        doc.text(`FLETE A ${lead.city.toUpperCase()}:`, 145, finalY + 12, { align: 'right' });
-        doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-        doc.text(numFormat(shipping), 196, finalY + 12, { align: 'right' });
-
-        if (discountPercent > 0) {
+            // Company Info
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(10);
+            doc.setTextColor(212, 120, 90); 
+            doc.text(ownCompany.name || 'Zeticas SAS BIC', 20, 40);
+            doc.setFont('helvetica', 'normal');
             doc.setFontSize(9);
-            doc.setTextColor(239, 68, 68);
-            doc.text(`DESCUENTO (${discountPercent}%):`, 145, finalY + 18, { align: 'right' });
-            doc.text(`-${numFormat(discountAmount)}`, 196, finalY + 18, { align: 'right' });
+            doc.setTextColor(100, 116, 139);
+            doc.text(`NIT: ${ownCompany.nit || '901.531.875-4'}`, 20, 45);
+            doc.text(`Origen: ${ownCompany.city || 'Guasca'}, Cundinamarca`, 20, 50);
+
+            // Quote Metadata (Compact Sequence: QT-001 format)
+            const quoteCount = quotations.length + 1;
+            const ref = `QT-${String(quoteCount).padStart(3, '0')}`;
+            
+            doc.setFontSize(22);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+            doc.text('COTIZACIÓN COMERCIAL', 192, 30, { align: 'right' });
+            doc.setFontSize(14);
+            doc.text(ref, 192, 40, { align: 'right' });
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Fecha: ${date}`, 192, 48, { align: 'right' });
+            doc.setTextColor(212, 120, 90);
+            doc.text(`Válida hasta: ${validityStr}`, 192, 54, { align: 'right' });
+
+            doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+            doc.setLineWidth(0.5);
+            doc.line(14, 60, 196, 60);
+
+            // Client & Shipping Cards
+            doc.setFillColor(248, 250, 252);
+            doc.roundedRect(14, 65, 88, 30, 2, 2, 'F');
+            doc.setFontSize(7); doc.setFont('helvetica', 'bold'); doc.setTextColor(148, 163, 184);
+            doc.text('CLIENTE', 18, 71);
+            doc.setFontSize(10); doc.setTextColor(30, 41, 59);
+            doc.text(lead.name || 'N/A', 18, 77);
+            doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(100, 116, 139);
+            doc.text(`NIT/CC: ${lead.nit || 'N/A'}`, 18, 82);
+            doc.text(`Tel: ${lead.phone || 'N/A'}`, 18, 87);
+
+            doc.setFillColor(248, 250, 252);
+            doc.roundedRect(108, 65, 88, 30, 2, 2, 'F');
+            doc.setFontSize(7); doc.setFont('helvetica', 'bold'); doc.setTextColor(148, 163, 184);
+            doc.text('DESTINO Y ENTREGA', 112, 71);
+            doc.setFontSize(10); doc.setTextColor(30, 41, 59);
+            doc.text(lead.city || 'N/A', 112, 77);
+            doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(100, 116, 139);
+            doc.text(lead.address || 'Hacer llegar a sucursal', 112, 82);
+
+            // Table of items
+            autoTable(doc, {
+                startY: 105,
+                head: [['PRODUCTO', 'CANT', 'PRECIO UNIT.', 'TOTAL']],
+                body: items.map(i => [
+                    i.name || 'Producto',
+                    Number(i.qty || 0),
+                    `$${Number(i.price || 0).toLocaleString()}`,
+                    `$${(Number(i.price || 0) * Number(i.qty || 0)).toLocaleString()}`
+                ]),
+                theme: 'striped',
+                headStyles: { fillColor: primaryColor, fontSize: 9, fontStyle: 'bold', halign: 'center' },
+                bodyStyles: { fontSize: 8.5, valign: 'middle' },
+                columnStyles: {
+                    1: { halign: 'center' },
+                    2: { halign: 'right', cellPadding: { right: 8 } },
+                    3: { halign: 'right', cellPadding: { right: 8 } }
+                }
+            });
+
+            // Totals section
+            const pageHeight = doc.internal.pageSize.height;
+            let finalY = doc.lastAutoTable.finalY + 10;
+            const numF = (n) => `$${Math.round(n || 0).toLocaleString()}`;
+
+            if (finalY + 60 > pageHeight) { doc.addPage(); finalY = 20; }
+
+            doc.setFontSize(10); doc.setTextColor(100, 116, 139);
+            doc.text('SUBTOTAL:', 145, finalY + 6, { align: 'right' });
+            doc.setTextColor(30, 41, 59);
+            doc.text(numF(subtotal), 192, finalY + 6, { align: 'right' });
+
+            doc.text('FLETE / ENVÍO:', 145, finalY + 12, { align: 'right' });
+            doc.text(numF(shipping), 192, finalY + 12, { align: 'right' });
+
+            if (discountPercent > 0) {
+                doc.setTextColor(239, 68, 68);
+                doc.text(`DESCUENTO (${discountPercent}%):`, 145, finalY + 18, { align: 'right' });
+                doc.text(`-${numF(discountAmount)}`, 192, finalY + 18, { align: 'right' });
+            }
+
+            const totalBoxY = discountPercent > 0 ? finalY + 24 : finalY + 18;
+            doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+            doc.roundedRect(120, totalBoxY, 76, 12, 1, 1, 'F');
+            doc.setFontSize(12); doc.setTextColor(255); doc.setFont('helvetica', 'bold');
+            doc.text('TOTAL A PAGAR:', 170, totalBoxY + 8, { align: 'right' });
+            doc.text(numF(total), 192, totalBoxY + 8, { align: 'right' });
+
+            // Persistence Mapping (REMOVED: Now happens only on send)
+            const quoteData = {
+                ref,
+                leadId: lead.id,
+                leadName: lead.name,
+                items: items.map(i => ({ name: i.name, qty: i.qty, price: i.price })),
+                subtotal,
+                discountPercent: Number(discountPercent) || 0,
+                discountAmount,
+                shipping,
+                total,
+                date,
+                validity_days: vDays,
+                validityDate: validityStr,
+                createdAt: new Date().toISOString(),
+                status: 'Sent'
+            };
+
+            if (isDownload) {
+                return { doc, quoteData };
+            } else {
+                const pdfBlob = doc.output('blob');
+                const blobUrl = URL.createObjectURL(pdfBlob);
+                setPdfPreviewUrl(blobUrl);
+                setIsPdfModalOpen(true);
+            }
+        } catch (error) {
+            console.error("PDF GENERATION FATAL:", error);
+            alert("Error al generar la cotización. Revisa la consola o los datos del cliente.");
         }
-
-        const badgeY = discountPercent > 0 ? finalY + 26 : finalY + 20;
-        doc.setFillColor(240, 253, 244); 
-        doc.roundedRect(110, badgeY, 90, 12, 2, 2, 'F');
-
-        doc.setFontSize(11);
-        doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-        doc.text('TOTAL NETO:', 145, badgeY + 8, { align: 'right' });
-        doc.setFontSize(14);
-        doc.text(numFormat(total), 196, badgeY + 8, { align: 'right' });
-
-        const footerY = badgeY + 25;
-        if (footerY + 30 < pageHeight) {
-            doc.setFontSize(9);
-            doc.setTextColor(148, 163, 184);
-            doc.setFont('helvetica', 'italic');
-            doc.text('Este documento es una cotización comercial y no constituye una factura de venta.', 105, footerY, { align: 'center' });
-            doc.text(`Zeticas - Generado el ${date} - ${ownCompany.website || 'zeticas.com'}`, 105, footerY + 5, { align: 'center' });
-        }
-
-        // Lead update and Persistence
-        const quoteData = {
-            ref,
-            leadId: lead.id,
-            leadName: lead.name,
-            items: items.map(i => ({ name: i.name, qty: i.qty, price: i.price })),
-            subtotal,
-            discountPercent,
-            discountAmount,
-            shipping,
-            total,
-            date,
-            validityDate: validityStr,
-            createdAt: new Date().toISOString()
-        };
-
-        await addQuotation(quoteData);
-
-        // Update lead metrics
-        updateLead(lead.id, {
-            stage: 'Cotización Enviada',
-            total_quoted: (lead.total_quoted || 0) + total,
-            last_quote_date: date
-        });
-
-        if (isDownload) {
-            doc.save(`Cotizacion_${lead.name}_${ref}.pdf`);
-            return;
-        }
-        
-        const pdfDataUri = doc.output('datauristring');
-        setPdfPreviewUrl(pdfDataUri);
-        setIsPdfModalOpen(true);
     };
 
     const getColumnColor = (stage) => {
@@ -373,8 +335,8 @@ const CRM = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3rem', gap: '2rem' }}>
                 <div style={{ display: 'flex', gap: '2rem', flex: 1 }}>
                     {[
-                        { label: 'Ingresar Nuevo Lead', val: leads.filter(l => l.stage !== 'Clientes Ingresados').length, color: '#3b82f6', icon: <UserPlus />, action: () => setIsAddModalOpen(true) },
-                        { label: 'Conversiones', val: leads.filter(l => l.stage === 'Clientes Ingresados').length, color: '#10b981', icon: <CheckCircle2 /> }
+                        { label: 'Ingresar Nuevo Lead', val: leads.filter(l => l.stage !== 'Clientes Ingresados' && l.status !== 'Archived').length, color: '#3b82f6', icon: <UserPlus />, action: () => setIsAddModalOpen(true) },
+                        { label: 'Conversiones', val: leads.filter(l => l.stage === 'Clientes Ingresados' && l.status !== 'Archived').length, color: '#10b981', icon: <CheckCircle2 /> }
                     ].map((stat, idx) => (
                         <div 
                             key={idx} 
@@ -434,7 +396,7 @@ const CRM = () => {
                                 </div>
                             </div>
                             <div style={{ maxHeight: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                                {leads.filter(l => l.follow_up_date && !l.task_completed && (!taskFilterDate || l.follow_up_date === taskFilterDate)).map(task => (
+                                {leads.filter(l => l.follow_up_date && !l.task_completed && l.status !== 'Archived' && (!taskFilterDate || l.follow_up_date === taskFilterDate)).map(task => (
                                     <div key={task.id} style={{ padding: '1rem', background: '#f8fafc', borderRadius: '12px', fontSize: '0.85rem' }}>
                                         <div style={{ fontWeight: '800' }}>{task.name} - {task.follow_up_date}</div>
                                         <div style={{ color: '#64748b', margin: '4px 0' }}>{task.follow_up_note || 'Sin nota'}</div>
@@ -444,19 +406,33 @@ const CRM = () => {
                                         >Marcar como cumplido</button>
                                     </div>
                                 ))}
-                                {leads.filter(l => l.follow_up_date && !l.task_completed && (!taskFilterDate || l.follow_up_date === taskFilterDate)).length === 0 && (
+                                {leads.filter(l => l.follow_up_date && !l.task_completed && l.status !== 'Archived' && (!taskFilterDate || l.follow_up_date === taskFilterDate)).length === 0 && (
                                     <div style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem' }}>{taskFilterDate ? 'No hay tareas para esta fecha' : 'No hay tareas pendientes'}</div>
                                 )}
                             </div>
                         </div>
                     )}
                 </div>
+
+                <button
+                    onClick={() => setShowArchived(!showArchived)}
+                    style={{
+                        background: showArchived ? institutionOcre : '#fff',
+                        color: showArchived ? '#fff' : deepTeal,
+                        padding: '1rem 1.5rem', borderRadius: '20px', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', gap: '0.8rem', border: '1px solid #f1f5f9',
+                        boxShadow: '0 8px 15px rgba(0,0,0,0.03)', fontWeight: '900', fontSize: '0.8rem', transition: 'all 0.3s'
+                    }}
+                >
+                    {showArchived ? <Eye size={18} /> : <EyeOff size={18} />}
+                    {showArchived ? 'OCULTAR ARCHIVADOS' : 'MOSTRAR ARCHIVADOS'}
+                </button>
             </div>
 
             {/* Kanban Board - Responsive Grid */}
             <div className="crm-kanban-board">
                 {stages.map(stage => {
-                    const columnLeads = leads.filter(l => l.stage === stage);
+                    const columnLeads = leads.filter(l => l.stage === stage && (showArchived || l.status !== 'Archived'));
                     const color = getColumnColor(stage);
                     return (
                         <div key={stage} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, stage)} style={{ background: 'rgba(241, 245, 249, 0.5)', borderRadius: '25px', border: '1px solid rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', height: '100%', minHeight: '400px', overflow: 'hidden' }}>
@@ -477,6 +453,7 @@ const CRM = () => {
                                             <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: '900', color: '#1e293b' }}>{lead.name}</h4>
                                             <div style={{ display: 'flex', gap: '0.5rem' }}>
                                                 <button onClick={(e) => { e.stopPropagation(); setEditingLead(lead); }} style={{ background: 'transparent', border: 'none', color: deepTeal, cursor: 'pointer', opacity: 0.5 }}><Edit2 size={16} /></button>
+                                                <button onClick={(e) => { e.stopPropagation(); handleArchive(lead.id, lead.status); }} style={{ background: 'transparent', border: 'none', color: lead.status === 'Archived' ? institutionOcre : '#64748b', cursor: 'pointer', opacity: 0.5 }} title={lead.status === 'Archived' ? 'Desarchivar' : 'Archivar'}><Archive size={16} /></button>
                                                 <button onClick={(e) => { e.stopPropagation(); handleDelete(lead.id); }} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', opacity: 0.3 }}><Trash2 size={16} /></button>
                                             </div>
                                         </div>
@@ -732,45 +709,47 @@ const CRM = () => {
                                         </div>
                                         <span>${getShippingCost(isQuotationModalOpen.city, quoteItems.reduce((s, i) => s + (i.price * i.qty), 0)).toLocaleString()}</span>
                                     </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '0.8rem' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                            <span>VALIDEZ:</span>
-                                            <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>(Días)</span>
+                                    <div style={{ display: 'flex', gap: '15px', marginBottom: '12px' }}>
+                                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                <span style={{ fontSize: '0.7rem', fontWeight: '800', color: '#64748b' }}>VALIDEZ:</span>
+                                            </div>
+                                            <select 
+                                                value={quoteValidity}
+                                                onChange={(e) => setQuoteValidity(e.target.value)}
+                                                style={{ width: '100%', border: '1px solid #e2e8f0', padding: '6px 10px', borderRadius: '10px', fontWeight: '800', fontSize: '0.8rem', background: '#fff', outline: 'none' }}
+                                            >
+                                                <option value={7}>7 días</option>
+                                                <option value={15}>15 días</option>
+                                                <option value={30}>30 días</option>
+                                            </select>
                                         </div>
-                                        <select 
-                                            value={quoteValidity}
-                                            onChange={(e) => setQuoteValidity(e.target.value)}
-                                            style={{ border: '1px solid #ddd', padding: '2px 6px', borderRadius: '6px', fontWeight: '800', fontSize: '0.8rem', background: '#fff' }}
-                                        >
-                                            <option value={7}>7 días</option>
-                                            <option value={15}>15 días</option>
-                                            <option value={30}>30 días</option>
-                                        </select>
+                                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                <span style={{ fontSize: '0.7rem', fontWeight: '800', color: '#64748b' }}>DESCUENTO (%):</span>
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                                                <input 
+                                                    type="number" 
+                                                    step="1"
+                                                    min="0"
+                                                    max="100"
+                                                    placeholder="0"
+                                                    value={quoteDiscount} 
+                                                    onChange={(e) => setQuoteDiscount(parseFloat(e.target.value) || 0)} 
+                                                    style={{ width: '100%', border: '1px solid #e2e8f0', padding: '6px 12px', borderRadius: '10px', fontWeight: '800', fontSize: '0.8rem', outline: 'none' }} 
+                                                />
+                                                <span style={{ position: 'absolute', right: '12px', fontWeight: '800', color: '#94a3b8', fontSize: '0.8rem' }}>%</span>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '0.8rem' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                            <span>DESCUENTO:</span>
-                                            <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>(%)</span>
-                                        </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <input 
-                                                type="number" 
-                                                step="0.01"
-                                                min="0"
-                                                max="100"
-                                                placeholder="0.00"
-                                                value={quoteDiscount} 
-                                                onChange={(e) => setQuoteDiscount(parseFloat(e.target.value) || 0)} 
-                                                style={{ width: '50px', textAlign: 'right', border: '1px solid #ddd', padding: '2px 6px', borderRadius: '6px', fontWeight: '800', fontSize: '0.8rem' }} 
-                                            />
-                                            <span style={{ fontWeight: '800', color: '#64748b' }}>%</span>
-                                        </div>
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#ef4444', marginBottom: '10px', fontSize: '0.75rem', fontWeight: '700' }}>
-                                        <span>AHORRO:</span>
+
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#ef4444', marginBottom: '10px', fontSize: '0.75rem', fontWeight: '800' }}>
+                                        <span>AHORRO ESTIMADO:</span>
                                         <span>-${(Math.round(((quoteItems.reduce((s, i) => s + (i.price * i.qty), 0) * quoteDiscount) / 100) / 100) * 100).toLocaleString()}</span>
                                     </div>
-                                    <div style={{ borderTop: '2px solid #e2e8f0', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', marginBottom: '15px', fontSize: '1.1rem', fontWeight: '900', color: deepTeal }}>
+                                    
+                                    <div style={{ borderTop: '2px solid #e2e8f0', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', marginBottom: '15px', fontSize: '1.2rem', fontWeight: '900', color: deepTeal }}>
                                         <span>TOTAL:</span>
                                         <span>
                                             ${(Math.round((
@@ -782,7 +761,7 @@ const CRM = () => {
                                     </div>
                                     <button
                                         disabled={quoteItems.length === 0}
-                                        onClick={() => {
+                                        onClick={(e) => {
                                             if (!isQuotationModalOpen.city || !isQuotationModalOpen.address) {
                                                 alert("Faltan datos de CIUDAD y DIRECCIÓN en el cliente. Por favor completa los Datos Maestros primero.");
                                                 return;
@@ -790,7 +769,7 @@ const CRM = () => {
                                             generatePDF(isQuotationModalOpen, quoteItems, quoteDiscount);
                                             setIsQuotationModalOpen(false);
                                         }}
-                                        style={{ width: '100%', background: institutionOcre, color: '#fff', border: 'none', borderRadius: '12px', padding: '0.8rem', fontWeight: '900', cursor: quoteItems.length === 0 ? 'not-allowed' : 'pointer', opacity: quoteItems.length === 0 ? 0.5 : 1, fontSize: '0.85rem' }}
+                                        style={{ width: '100%', background: institutionOcre, color: '#fff', border: 'none', borderRadius: '12px', padding: '0.8rem', fontWeight: '900', fontSize: '0.85rem', cursor: quoteItems.length === 0 ? 'not-allowed' : 'pointer' }}
                                     >
                                         GENERAR COTIZACIÓN
                                     </button>
@@ -939,18 +918,84 @@ const CRM = () => {
             {isPdfModalOpen && (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(15px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001, padding: '1rem' }}>
                     <div style={{ background: '#fff', width: '95%', maxWidth: '1000px', height: '95vh', borderRadius: '40px', overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative', boxShadow: '0 40px 100px rgba(0,0,0,0.5)' }}>
-                        <iframe 
-                            src={`${pdfPreviewUrl}#toolbar=0`} 
-                            style={{ flex: 1, border: 'none', background: '#f1f5f9' }} 
-                            title="PDF Preview"
-                        />
+                        <div style={{ padding: '0.8rem 3rem', background: `linear-gradient(90deg, ${deepTeal}, #037075)`, display: 'flex', alignItems: 'center', gap: '15px' }}>
+                            <div style={{ background: 'rgba(255,255,255,0.1)', padding: '8px', borderRadius: '10px' }}><Zap size={20} color={premiumSalmon} /></div>
+                            <div style={{ color: '#fff' }}>
+                                <div style={{ fontSize: '0.85rem', fontWeight: '900' }}>CONSOLA DE DESPACHO COMERCIAL</div>
+                                <div style={{ fontSize: '0.7rem', opacity: 0.8, fontWeight: '600' }}>PASO 1: Descarga el PDF • PASO 2: Envía por WhatsApp o Email y adjunta el archivo.</div>
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+                            <iframe 
+                                src={`${pdfPreviewUrl}#toolbar=0`} 
+                                style={{ flex: 1, border: 'none', background: '#f1f5f9' }} 
+                                title="PDF Preview"
+                            />
+                            
+                            {/* Quote History Sidebar (Visual Confirmation) */}
+                            <div style={{ width: '280px', background: '#fff', borderLeft: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' }}>
+                                <div style={{ padding: '1.5rem', borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
+                                    <h4 style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Historial en BD</h4>
+                                    <p style={{ margin: '4px 0 0', fontSize: '0.7rem', color: '#94a3b8' }}>Confirmación en tiempo real</p>
+                                </div>
+                                <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
+                                    {quotations.filter(q => q.leadId === (currentQuoteLead?.id)).length === 0 ? (
+                                        <div style={{ textAlign: 'center', padding: '2rem 1rem', color: '#94a3b8', fontSize: '0.8rem' }}>
+                                            <History size={24} style={{ opacity: 0.3, marginBottom: '8px' }} />
+                                            <p>No hay cotizaciones previas en la base de datos.</p>
+                                        </div>
+                                    ) : (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                            {quotations
+                                                .filter(q => q.leadId === (currentQuoteLead?.id))
+                                                .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+                                                .map((q, idx) => (
+                                                    <div key={q.id || idx} style={{ padding: '0.8rem', borderRadius: '12px', background: '#f8fafc', border: '1px solid #f1f5f9' }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: institutionOcre }}>{q.ref || 'S/N'}</span>
+                                                                <button 
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        if (window.confirm(`¿Estás seguro de ELIMINAR permanentemente la cotización ${q.ref}?`)) {
+                                                                            deleteQuotation(q.id);
+                                                                        }
+                                                                    }}
+                                                                    style={{ padding: '4px', border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', opacity: 0.6 }}
+                                                                    title="Eliminar de BD"
+                                                                >
+                                                                    <Trash2 size={12} />
+                                                                </button>
+                                                            </div>
+                                                            <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>{new Date(q.createdAt).toLocaleDateString()}</span>
+                                                        </div>
+                                                        <div style={{ fontSize: '0.85rem', fontWeight: '900', color: '#1e293b' }}>
+                                                            ${Math.round(q.total || 0).toLocaleString()}
+                                                        </div>
+                                                        {q.validity_days && (
+                                                            <div style={{ fontSize: '0.65rem', color: '#2dd4bf', marginTop: '4px' }}>
+                                                                Vigente ({q.validity_days} días)
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ))
+                                            }
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
                         <div style={{ padding: '1.5rem 2.5rem', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div style={{ display: 'flex', gap: '15px' }}>
                                 <button 
                                     onClick={() => {
                                         if (!currentQuoteLead) return;
-                                        const doc = generatePDF(currentQuoteLead, quoteItems, quoteDiscount, true);
-                                        doc.save(`Cotizacion_Zeticas_${currentQuoteLead.name.replace(/\s+/g, '_')}_${new Date().getTime()}.pdf`);
+                                        const quoteCount = quotations.length + 1;
+                                        const ref = `Q-${String(quoteCount).padStart(3, '0')}`;
+                                        const result = generatePDF(currentQuoteLead, quoteItems, quoteDiscount, true);
+                                        if (result && result.doc) {
+                                            result.doc.save(`Zeticas_${ref}_${currentQuoteLead.name.replace(/\s+/g, '_')}.pdf`);
+                                        }
                                     }} 
                                     style={{ padding: '1.1rem 2rem', borderRadius: '16px', border: 'none', background: institutionOcre, color: '#fff', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: `0 10px 20px ${institutionOcre}30` }}
                                 >
@@ -959,11 +1004,24 @@ const CRM = () => {
                                 <button 
                                     onClick={() => {
                                         if (!currentQuoteLead) return;
-                                        const quoteTotal = Math.round((quoteItems.reduce((s, i) => s + (i.price * i.qty), 0) + getShippingCost(currentQuoteLead.city, quoteItems.reduce((s, i) => s + (i.price * i.qty), 0)) - (quoteItems.reduce((s, i) => s + (i.price * i.qty), 0) * quoteDiscount / 100)) / 100) * 100;
-                                        const cleanPhone = (currentQuoteLead.phone || '').replace(/\D/g, '');
-                                        const messageText = `Hola ${currentQuoteLead.name}, te saludo de Zeticas 🌿. Te adjunto la cotización formal por un total de $${quoteTotal.toLocaleString()} (incluye envío a ${currentQuoteLead.city}). Quedamos atentos a tu confirmación.`;
-                                        const waLink = `https://wa.me/${cleanPhone.startsWith('57') ? cleanPhone : '57' + cleanPhone}?text=${encodeURIComponent(messageText)}`;
-                                        window.open(waLink, '_blank');
+                                        const quoteCount = quotations.length + 1;
+                                        const ref = `QT-${String(quoteCount).padStart(3, '0')}`;
+                                        const result = generatePDF(currentQuoteLead, quoteItems, quoteDiscount, true);
+                                        
+                                        if (result && result.quoteData) {
+                                            // "Nace" la cotización oficialmente en BD
+                                            addQuotation({ ...result.quoteData, ref }).catch(e => {});
+                                            updateLead(currentQuoteLead.id, { 
+                                                stage: 'Cotización Enviada', 
+                                                total_quoted: (currentQuoteLead.total_quoted || 0) + result.quoteData.total, 
+                                                last_quote_date: new Date().toLocaleDateString() 
+                                            }).catch(e => {});
+
+                                            const cleanPhone = (currentQuoteLead.phone || '').replace(/\D/g, '');
+                                            const messageText = `Hola ${currentQuoteLead.name}, te saludo de Zeticas. Te adjunto la cotización formal ${ref} por un total de $${result.quoteData.total.toLocaleString()} (incluye envío a ${currentQuoteLead.city}). Quedamos atentos a tu confirmación.`;
+                                            const waLink = `https://wa.me/${cleanPhone.startsWith('57') ? cleanPhone : '57' + cleanPhone}?text=${encodeURIComponent(messageText)}`;
+                                            window.open(waLink, '_blank');
+                                        }
                                     }} 
                                     style={{ padding: '1.1rem 2rem', borderRadius: '16px', border: 'none', background: '#25D366', color: '#fff', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 10px 20px rgba(37, 211, 102, 0.2)' }}
                                 >
@@ -972,11 +1030,24 @@ const CRM = () => {
                                 <button 
                                     onClick={() => {
                                         if (!currentQuoteLead) return;
-                                        const quoteTotal = Math.round((quoteItems.reduce((s, i) => s + (i.price * i.qty), 0) + getShippingCost(currentQuoteLead.city, quoteItems.reduce((s, i) => s + (i.price * i.qty), 0)) - (quoteItems.reduce((s, i) => s + (i.price * i.qty), 0) * quoteDiscount / 100)) / 100) * 100;
-                                        const subject = `Cotización Comercial - Zeticas - ${currentQuoteLead.name}`;
-                                        const body = `Hola ${currentQuoteLead.name},\n\nEs un gusto saludarte de Zeticas 🌿.\n\nAdjuntamos la cotización de los productos solicitados por un total de $${quoteTotal.toLocaleString()} (incluye flete a ${currentQuoteLead.city}).\n\nQuedamos atentos a tus comentarios para proceder con el despacho.\n\nAtentamente,\nEquipo Zeticas`;
-                                        const mailLink = `mailto:${currentQuoteLead.email || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-                                        window.location.href = mailLink;
+                                        const quoteCount = quotations.length + 1;
+                                        const ref = `QT-${String(quoteCount).padStart(3, '0')}`;
+                                        const result = generatePDF(currentQuoteLead, quoteItems, quoteDiscount, true);
+
+                                        if (result && result.quoteData) {
+                                            // "Nace" la cotización oficialmente en BD
+                                            addQuotation({ ...result.quoteData, ref }).catch(e => {});
+                                            updateLead(currentQuoteLead.id, { 
+                                                stage: 'Cotización Enviada', 
+                                                total_quoted: (currentQuoteLead.total_quoted || 0) + result.quoteData.total, 
+                                                last_quote_date: new Date().toLocaleDateString() 
+                                            }).catch(e => {});
+
+                                            const subject = `Cotización Comercial - Zeticas - ${ref}`;
+                                            const body = `Hola ${currentQuoteLead.name},\n\nEs un gusto saludarte de Zeticas.\n\nAdjuntamos la cotización ${ref} de los productos solicitados por un total de $${result.quoteData.total.toLocaleString()} (incluye flete a ${currentQuoteLead.city}).\n\nQuedamos atentos a tus comentarios para proceder con el despacho.\n\nAtentamente,\nEquipo Zeticas`;
+                                            const mailLink = `mailto:${currentQuoteLead.email || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                                            window.location.href = mailLink;
+                                        }
                                     }} 
                                     style={{ padding: '1.1rem 2rem', borderRadius: '16px', border: 'none', background: '#334155', color: '#fff', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 10px 20px rgba(51, 65, 85, 0.2)' }}
                                 >

@@ -6,7 +6,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../lib/firebase';
 
 const Products = () => {
-    const { items, refreshData, loading, recalculatePTCosts, addItem, updateItem, deleteItem, units } = useBusiness();
+    const { items, refreshData, loading, recalculatePTCosts, addItem, updateItem, deleteItem } = useBusiness();
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('Todos');
     const [selectedLineFilter, setSelectedLineFilter] = useState('Todos');
@@ -155,12 +155,13 @@ const Products = () => {
                 unit_measure: normalizeUnit(product.unit_measure),
                 purchase_unit: normalizeUnit(product.purchase_unit),
                 barcode_text: product.barcode_text || '',
-                conversion_factor: product.conversion_factor || 1
+                conversion_factor: product.conversion_factor || 1,
+                purchase_cost: (parseFloat(product.cost) || 0) * (parseFloat(product.conversion_factor) || 1)
             });
         } else {
             setEditingProduct(null);
             setFormData({
-                sku: '', name: '', category: 'Producto Terminado', product_type: 'Sal', price: '', cost: '', stock: '0', min_stock_level: 0, unit_measure: 'und', purchase_unit: 'und', conversion_factor: 1, type: 'PT', barcode_text: '', batch_size: 1, published: true
+                sku: '', name: '', category: 'Producto Terminado', product_type: 'Sal', price: '', cost: '', purchase_cost: '', stock: '0', min_stock_level: 0, unit_measure: 'und', purchase_unit: 'und', conversion_factor: 1, type: 'PT', barcode_text: '', batch_size: 1, published: true
             });
         }
         setSelectedFile(null);
@@ -451,7 +452,7 @@ const Products = () => {
                                             <span style={{ padding: '4px 10px', borderRadius: '8px', fontSize: '0.7rem', fontWeight: '900', background: p.product_type === 'Sal' ? '#f1f5f9' : p.product_type === 'Dulce' ? '#fff7ed' : '#f8fafc', color: p.product_type === 'Sal' ? '#475569' : p.product_type === 'Dulce' ? '#c2410c' : '#94a3b8', border: '1px solid currentColor', opacity: p.product_type === 'Insumo' ? 0.3 : 1 }}>{p.product_type}</span>
                                         </td>
                                         <td style={{ padding: '1rem', fontSize: '0.85rem' }}>{p.category}</td>
-                                        <td style={{ padding: '1rem', color: '#666' }}>${p.cost?.toLocaleString()}</td>
+                                        <td style={{ padding: '1rem', color: '#666' }}>${p.cost?.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 1 })}</td>
                                         <td style={{ padding: '1rem', fontWeight: 'bold', color: 'var(--color-primary)' }}>
                                             {p.category === 'Producto Terminado' ? `$${p.price?.toLocaleString()}` : <span style={{ color: '#cbd5e1', fontWeight: 'normal' }}>-</span>}
                                         </td>
@@ -512,53 +513,9 @@ const Products = () => {
                                     </div>
                                 </div>
 
-                                {/* 3. Valores financieros */}
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                                        <div style={{ flex: 1 }}>
-                                            <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.4rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                                                {formData.category !== 'Producto Terminado' ? 'COSTO UNITARIO RECETA' : 'COSTO DE PRODUCCIÓN'}
-                                            </label>
-                                            <div style={{ fontSize: '0.65rem', color: '#64748b', marginBottom: '0.6rem', fontWeight: '600', minHeight: '1.5rem' }}>
-                                                {formData.category !== 'Producto Terminado' && `Valor por 1 ${formData.unit_measure || 'unidad de uso'}`}
-                                            </div>
-                                        </div>
-                                        <div style={{ position: 'relative', marginTop: 'auto' }}>
-                                            <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', fontWeight: '900', color: '#94a3b8' }}>$</span>
-                                            <input type="number" value={formData.cost} onChange={(e) => setFormData({ ...formData, cost: e.target.value })} style={{ width: '100%', padding: '1rem 1rem 1rem 2rem', borderRadius: '16px', border: '1px solid #e2e8f0', fontWeight: '700', boxSizing: 'border-box' }} />
-                                        </div>
-                                    </div>
-
-                                    {formData.category === 'Producto Terminado' ? (
-                                        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                                            <div style={{ flex: 1 }}>
-                                                <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.4rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>PRECIO VENTA</label>
-                                                <div style={{ fontSize: '0.65rem', color: '#64748b', marginBottom: '0.6rem', fontWeight: '600', minHeight: '1.5rem' }}>
-                                                    Precio final al cliente
-                                                </div>
-                                            </div>
-                                            <div style={{ marginTop: 'auto' }}>
-                                                <input type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', fontWeight: '700', boxSizing: 'border-box' }} />
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                                            <div style={{ flex: 1 }}>
-                                                <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#10b981', marginBottom: '0.4rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>COSTO TOTAL COMPRA</label>
-                                                <div style={{ fontSize: '0.65rem', color: '#047857', marginBottom: '0.6rem', fontWeight: '600', minHeight: '1.5rem' }}>
-                                                    {`Valor por 1 ${formData.purchase_unit || 'unidad'}`}
-                                                </div>
-                                            </div>
-                                            <div style={{ marginTop: 'auto', padding: '0.9rem 1rem', background: '#ecfdf5', border: '2px solid rgba(16, 185, 129, 0.2)', borderRadius: '16px', color: '#047857', fontWeight: '900', display: 'flex', alignItems: 'center', boxSizing: 'border-box', height: '54px' }}>
-                                                ${((parseFloat(formData.cost) || 0) * (parseFloat(formData.conversion_factor) || 1)).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* 4. UNIDADES DE MEDIDA - Lógica Dual para Materia Prima / Insumos */}
                                 {formData.category !== 'Producto Terminado' ? (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+                                        {/* Row 1: Units */}
                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                             <div>
                                                 <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>UNIDAD DE COMPRA</label>
@@ -582,6 +539,73 @@ const Products = () => {
                                             </div>
                                         </div>
 
+                                        {/* Row 2: Costs (Crossed to match units) */}
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                                                <div style={{ flex: 1 }}>
+                                                    <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#10b981', marginBottom: '0.4rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>COSTO TOTAL COMPRA</label>
+                                                    <div style={{ fontSize: '0.65rem', color: '#047857', marginBottom: '0.6rem', fontWeight: '600', minHeight: '1.5rem' }}>
+                                                        {`Valor por 1 ${formData.purchase_unit || 'unidad'}`}
+                                                    </div>
+                                                </div>
+                                                <div style={{ position: 'relative', marginTop: 'auto' }}>
+                                                    <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', fontWeight: '900', color: '#059669' }}>$</span>
+                                                    <input
+                                                        type="number"
+                                                        step="any"
+                                                        value={formData.purchase_cost}
+                                                        onChange={(e) => {
+                                                            const newVal = e.target.value;
+                                                            const factor = parseFloat(formData.conversion_factor) || 1;
+                                                            setFormData({ 
+                                                                ...formData, 
+                                                                purchase_cost: newVal, 
+                                                                cost: newVal ? Number((parseFloat(newVal) / factor).toFixed(4)) : '' 
+                                                            });
+                                                        }}
+                                                        style={{
+                                                            width: '100%',
+                                                            padding: '1rem 1rem 1rem 2rem',
+                                                            borderRadius: '16px',
+                                                            background: '#ecfdf5',
+                                                            border: '2px solid rgba(16, 185, 129, 0.4)',
+                                                            color: '#059669',
+                                                            fontWeight: '900',
+                                                            boxSizing: 'border-box',
+                                                            outline: 'none'
+                                                        }}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                                                <div style={{ flex: 1 }}>
+                                                    <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.4rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>COSTO UNITARIO RECETA</label>
+                                                    <div style={{ fontSize: '0.65rem', color: '#64748b', marginBottom: '0.6rem', fontWeight: '600', minHeight: '1.5rem' }}>
+                                                        {`Valor por 1 ${formData.unit_measure || 'unidad de uso'}`}
+                                                    </div>
+                                                </div>
+                                                <div style={{ position: 'relative', marginTop: 'auto' }}>
+                                                    <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', fontWeight: '900', color: '#94a3b8' }}>$</span>
+                                                    <input 
+                                                        type="number" 
+                                                        step="any"
+                                                        value={formData.cost} 
+                                                        onChange={(e) => {
+                                                            const newVal = e.target.value;
+                                                            const factor = parseFloat(formData.conversion_factor) || 1;
+                                                            setFormData({ 
+                                                                ...formData, 
+                                                                cost: newVal, 
+                                                                purchase_cost: newVal ? Number((parseFloat(newVal) * factor).toFixed(2)) : '' 
+                                                            });
+                                                        }} 
+                                                        style={{ width: '100%', padding: '1rem 1rem 1rem 2rem', borderRadius: '16px', border: '1px solid #e2e8f0', fontWeight: '700', boxSizing: 'border-box' }} 
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+
                                         {formData.purchase_unit && formData.unit_measure && formData.purchase_unit !== formData.unit_measure && (
                                             <div style={{ background: '#f8fafc', padding: '1.2rem', borderRadius: '16px', border: '1px dashed #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', animation: 'fadeIn 0.3s' }}>
                                                 <div style={{ fontSize: '0.75rem', color: '#64748b', lineHeight: '1.4' }}>
@@ -595,7 +619,15 @@ const Products = () => {
                                                         min="0.0001"
                                                         step="any"
                                                         value={formData.conversion_factor}
-                                                        onChange={(e) => setFormData({ ...formData, conversion_factor: e.target.value })}
+                                                        onChange={(e) => {
+                                                            const newFactor = e.target.value;
+                                                            const currentCost = parseFloat(formData.cost) || 0;
+                                                            setFormData({ 
+                                                                ...formData, 
+                                                                conversion_factor: newFactor,
+                                                                purchase_cost: currentCost ? Number((currentCost * parseFloat(newFactor)).toFixed(2)) : formData.purchase_cost
+                                                            });
+                                                        }}
                                                         style={{ width: '80px', padding: '0.6rem', borderRadius: '8px', border: '2px solid #D4785A', fontWeight: '900', textAlign: 'center', color: '#023636', outline: 'none' }}
                                                     />
                                                     <span style={{ fontSize: '0.8rem', fontWeight: '900', color: '#023636' }}>{formData.unit_measure}</span>
@@ -604,13 +636,42 @@ const Products = () => {
                                         )}
                                     </div>
                                 ) : (
-                                    <div>
-                                        <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>UNIDAD DE MEDIDA</label>
-                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                            <select value={formData.unit_measure} onChange={(e) => setFormData({ ...formData, unit_measure: e.target.value })} style={{ flex: 1, padding: '1rem', borderRadius: '16px', border: '1px solid #ddd', background: '#fff', fontWeight: 'bold' }}>
-                                                {finalUnitOptions.map(u => <option key={u} value={u}>{u}</option>)}
-                                            </select>
-                                            <button type="button" onClick={() => setShowUnitManager(!showUnitManager)} style={{ padding: '0 1.2rem', borderRadius: '16px', border: '1px solid #ddd', background: '#fff', cursor: 'pointer' }}><Plus size={20} /></button>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                                                <div style={{ flex: 1 }}>
+                                                    <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.4rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>COSTO DE PRODUCCIÓN</label>
+                                                    <div style={{ fontSize: '0.65rem', color: '#64748b', marginBottom: '0.6rem', fontWeight: '600', minHeight: '1.5rem' }}>
+                                                        Precio base calculado
+                                                    </div>
+                                                </div>
+                                                <div style={{ position: 'relative', marginTop: 'auto' }}>
+                                                    <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', fontWeight: '900', color: '#94a3b8' }}>$</span>
+                                                    <input type="number" value={formData.cost} onChange={(e) => setFormData({ ...formData, cost: e.target.value })} style={{ width: '100%', padding: '1rem 1rem 1rem 2rem', borderRadius: '16px', border: '1px solid #e2e8f0', fontWeight: '700', boxSizing: 'border-box' }} />
+                                                </div>
+                                            </div>
+
+                                            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                                                <div style={{ flex: 1 }}>
+                                                    <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.4rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>PRECIO VENTA</label>
+                                                    <div style={{ fontSize: '0.65rem', color: '#64748b', marginBottom: '0.6rem', fontWeight: '600', minHeight: '1.5rem' }}>
+                                                        Precio final al cliente
+                                                    </div>
+                                                </div>
+                                                <div style={{ marginTop: 'auto' }}>
+                                                    <input type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', fontWeight: '700', boxSizing: 'border-box' }} />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>UNIDAD DE MEDIDA</label>
+                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                <select value={formData.unit_measure} onChange={(e) => setFormData({ ...formData, unit_measure: e.target.value })} style={{ flex: 1, padding: '1rem', borderRadius: '16px', border: '1px solid #ddd', background: '#fff', fontWeight: 'bold' }}>
+                                                    {finalUnitOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                                                </select>
+                                                <button type="button" onClick={() => setShowUnitManager(!showUnitManager)} style={{ padding: '0 1.2rem', borderRadius: '16px', border: '1px solid #ddd', background: '#fff', cursor: 'pointer' }}><Plus size={20} /></button>
+                                            </div>
                                         </div>
                                     </div>
                                 )}

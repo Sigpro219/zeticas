@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ChefHat, RefreshCw, Plus, Edit3, Trash2, X, PlusCircle, MinusCircle, Save, AlertTriangle, Search } from 'lucide-react';
+import { ChefHat, RefreshCw, Plus, Edit3, Trash2, X, PlusCircle, MinusCircle, Save, AlertTriangle, Search, AlertCircle } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
 
 // ── Conversión de unidades ──────────────────────────────────────────────
@@ -81,6 +81,7 @@ const Recipes = () => {
 
     const [isSaving, setIsSaving] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [showIssuesOnly, setShowIssuesOnly] = useState(false);
     const [doubleConfirm, setDoubleConfirm] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingRecipe, setEditingRecipe] = useState(null);
@@ -99,10 +100,22 @@ const Recipes = () => {
     const loading = false; // BusinessContext handles loading externally if needed, but here we can assume it's live
 
     const filteredRecipes = useMemo(() => {
-        if (!searchTerm) return recipesList;
+        let list = recipesList;
+        if (showIssuesOnly) {
+            list = list.filter(recipe => {
+                const hasNoIngredients = recipe.ingredients.length === 0;
+                const hasIssues = recipe.ingredients.some(ing => 
+                    !ing.name || ing.name.trim() === '' || 
+                    !ing.qty || 
+                    (ing.rm_id && !items.find(m => m.id === ing.rm_id))
+                );
+                return hasNoIngredients || hasIssues;
+            });
+        }
+        if (!searchTerm) return list;
         const q = searchTerm.toLowerCase();
-        return recipesList.filter(recipe => recipe.name.toLowerCase().includes(q));
-    }, [recipesList, searchTerm]);
+        return list.filter(recipe => recipe.name.toLowerCase().includes(q));
+    }, [recipesList, searchTerm, showIssuesOnly, items]);
 
     const handleDeleteClick = (recipe) => {
         setDoubleConfirm(false);
@@ -211,13 +224,7 @@ const Recipes = () => {
             // Insert new rows — normalizando a la unidad de compra del insumo
             for (const i of formData.ingredients) {
                 if (i.rm_id && i.qty) {
-                    // Unidad de compra del insumo (fuente de verdad para almacenar)
-                    const mat = materials.find(m => m.id === i.rm_id);
-                    const purchaseUnit = mat?.purchase_unit || mat?.unit_measure || mat?.unit || i.unit;
-
-                    // Convertir la cantidad ingresada a la unidad de compra
-                    const normalizedQty = convertQty(parseFloat(i.qty), i.unit, purchaseUnit);
-
+                    // Guardar la receta con los datos ingresados
                     await addRecipe({
                         finished_good_id: formData.id,
                         finished_good_name: formData.name,
@@ -255,6 +262,27 @@ const Recipes = () => {
                 </div>
 
                 <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                    <button 
+                        onClick={() => setShowIssuesOnly(!showIssuesOnly)}
+                        title="Audita recetas sin ingredientes o con errores de configuración"
+                        style={{ 
+                            padding: '0.5rem 1rem', 
+                            borderRadius: '10px', 
+                            border: showIssuesOnly ? '2px solid #ef4444' : '1px solid #e2e8f0',
+                            background: showIssuesOnly ? '#fef2f2' : '#fff',
+                            color: showIssuesOnly ? '#b91c1c' : '#64748b',
+                            fontSize: '0.85rem',
+                            fontWeight: 'bold',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            cursor: 'pointer',
+                            transition: 'all 0.3s'
+                        }}
+                    >
+                        <AlertCircle size={16} />
+                        {showIssuesOnly ? 'Viendo Problemas' : 'Auditar Recetas'}
+                    </button>
                     <div style={{ position: 'relative' }}>
                         <Search size={16} style={{ position: 'absolute', left: '0.8rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                         <input
@@ -322,12 +350,32 @@ const Recipes = () => {
 
                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
                                 {recipe.ingredients.length > 0 ? (
-                                    recipe.ingredients.map((ing, idx) => (
-                                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '0.5rem', borderBottom: '1px solid #f1f5f9', fontSize: '0.9rem' }}>
-                                            <span style={{ color: '#475569' }}>{ing.name}</span>
-                                            <span style={{ fontWeight: '700', color: 'var(--color-primary)' }}>{ing.qty} {ing.unit}</span>
-                                        </div>
-                                    ))
+                                    recipe.ingredients.map((ing, idx) => {
+                                        const materialMissing = ing.rm_id && !items.find(m => m.id === ing.rm_id);
+                                        const nameMissing = !ing.name || ing.name.trim() === '';
+                                        const hasIssue = materialMissing || nameMissing;
+
+                                        return (
+                                            <div key={idx} style={{ 
+                                                display: 'flex', 
+                                                justifyContent: 'space-between', 
+                                                padding: '0.6rem 0.5rem', 
+                                                borderBottom: '1px solid #f1f5f9', 
+                                                fontSize: '0.9rem',
+                                                background: hasIssue ? '#fff5f5' : 'transparent',
+                                                borderRadius: hasIssue ? '8px' : '0'
+                                            }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                    {hasIssue && <AlertCircle size={14} color="#ef4444" />}
+                                                    <span style={{ color: hasIssue ? '#b91c1c' : '#475569', fontWeight: hasIssue ? 'bold' : 'normal' }}>
+                                                        {nameMissing ? (ing.rm_id || 'Ingrediente sin nombre') : ing.name}
+                                                        {materialMissing && <span style={{ fontSize: '0.7rem', opacity: 0.7, marginLeft: '5px' }}>(No encontrado en Insumos)</span>}
+                                                    </span>
+                                                </div>
+                                                <span style={{ fontWeight: '700', color: hasIssue ? '#ef4444' : 'var(--color-primary)' }}>{ing.qty} {ing.unit}</span>
+                                            </div>
+                                        );
+                                    })
                                 ) : (
                                     <div style={{ padding: '1.5rem', background: '#f8fafc', borderRadius: '12px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem', border: '1px dashed #cbd5e1' }}>
                                         Sin ingredientes configurados
@@ -477,61 +525,83 @@ const Recipes = () => {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {formData.ingredients.map((ing, index) => (
-                                            <tr key={index}>
-                                                <td style={{ padding: '0.5rem' }}>
-                                                    <select
-                                                        value={ing.rm_id}
-                                                        onChange={(e) => handleIngredientChange(index, 'rm_id', e.target.value)}
-                                                        style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem' }}
-                                                    >
-                                                        <option value="">Seleccionar...</option>
-                                                        {materials.length > 0 ? (
-                                                            materials.map(m => (
-                                                                <option key={m.id} value={m.id}>{m.name}</option>
-                                                            ))
-                                                        ) : (
-                                                            <option value="" disabled>No existe en Módulo de Datos Maestros de Productos, Crealo primero</option>
-                                                        )}
-                                                    </select>
-                                                </td>
-                                                <td style={{ padding: '0.5rem' }}>
-                                                    <input
-                                                        type="number"
-                                                        value={ing.qty}
-                                                        onChange={(e) => handleIngredientChange(index, 'qty', e.target.value)}
-                                                        placeholder="0.00"
-                                                        style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem' }}
-                                                    />
-                                                    {/* Hint de conversión en tiempo real */}
-                                                    {(() => {
-                                                        const mat = materials.find(m => m.id === ing.rm_id);
-                                                        const pu = mat?.purchase_unit || mat?.unit_measure || mat?.unit;
-                                                        if (!pu || !ing.qty || pu === ing.unit) return null;
-                                                        const conv = convertQty(parseFloat(ing.qty), ing.unit, pu);
-                                                        return (
-                                                            <div style={{ fontSize: '0.65rem', color: '#10b981', fontWeight: '700', marginTop: '2px', paddingLeft: '2px' }}>
-                                                                → se guardará como {conv} {pu}
-                                                            </div>
-                                                        );
-                                                    })()}
-                                                </td>
-                                                <td style={{ padding: '0.5rem' }}>
-                                                    <select
-                                                        value={ing.unit}
-                                                        onChange={(e) => handleIngredientChange(index, 'unit', e.target.value)}
-                                                        style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem', background: '#f8fafc' }}
-                                                    >
-                                                        {(units || []).map(u => (
-                                                            <option key={u.id} value={u.id}>{u.id}</option>
-                                                        ))}
-                                                    </select>
-                                                </td>
-                                                <td style={{ padding: '0.5rem', textAlign: 'center' }}>
-                                                    <MinusCircle size={18} color="#fca5a5" style={{ cursor: 'pointer' }} onClick={() => removeIngredientRow(index)} />
-                                                </td>
-                                            </tr>
-                                        ))}
+                                        {formData.ingredients.map((ing, index) => {
+                                            const hasIssue = !ing.rm_id || !ing.qty;
+                                            return (
+                                                <tr key={index} style={{ background: hasIssue ? '#fff1f2' : 'transparent', transition: 'background 0.3s' }}>
+                                                    <td style={{ padding: '0.5rem' }}>
+                                                        <select
+                                                            value={ing.rm_id}
+                                                            onChange={(e) => handleIngredientChange(index, 'rm_id', e.target.value)}
+                                                            style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: hasIssue && !ing.rm_id ? '1px solid #fda4af' : '1px solid #e2e8f0', fontSize: '0.9rem', background: '#fff' }}
+                                                        >
+                                                            <option value="">Seleccionar...</option>
+                                                            {materials.length > 0 ? (
+                                                                materials.map(m => (
+                                                                    <option key={m.id} value={m.id}>{m.name}</option>
+                                                                ))
+                                                            ) : (
+                                                                <option value="" disabled>No existe en Módulo de Datos Maestros de Productos, Crealo primero</option>
+                                                            )}
+                                                        </select>
+                                                    </td>
+                                                    <td style={{ padding: '0.5rem' }}>
+                                                        <input
+                                                            type="number"
+                                                            value={ing.qty}
+                                                            onChange={(e) => handleIngredientChange(index, 'qty', e.target.value)}
+                                                            placeholder="0.00"
+                                                            style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: hasIssue && !ing.qty ? '1px solid #fda4af' : '1px solid #e2e8f0', fontSize: '0.9rem', background: '#fff' }}
+                                                        />
+                                                        {/* Hint de conversión en tiempo real */}
+                                                        {(() => {
+                                                            const mat = materials.find(m => m.id === ing.rm_id);
+                                                            const unitTarget = (mat?.unit_measure || mat?.unit || mat?.purchase_unit || '').toLowerCase();
+                                                            const unitSource = (ing.unit || '').toLowerCase();
+                                                            
+                                                            if (!unitTarget || !ing.qty || unitTarget === unitSource) return null;
+
+                                                            // Lógica de conversión sincronizada con BusinessContext
+                                                            let conv = parseFloat(ing.qty);
+                                                            const factor = parseFloat(mat?.conversion_factor) || 1;
+
+                                                            // Si uno es und y el otro es la base (ml/gr), usar el factor de equivalencia
+                                                            if (unitSource === 'und' && (unitTarget === 'ml' || unitTarget === 'gr' || unitTarget === 'g')) {
+                                                                conv = conv * factor;
+                                                            } else if (unitTarget === 'und' && (unitSource === 'ml' || unitSource === 'gr' || unitSource === 'g')) {
+                                                                conv = conv / factor;
+                                                            } else {
+                                                                // Si no, usar la lógica estándar SI (kg <-> gr, etc)
+                                                                conv = convertQty(conv, unitSource, unitTarget);
+                                                            }
+
+                                                            // Solo mostrar si el número cambió significativamente
+                                                            if (Math.abs(conv - parseFloat(ing.qty)) < 0.00001) return null;
+
+                                                            return (
+                                                                <div style={{ fontSize: '0.65rem', color: '#10b981', fontWeight: '700', marginTop: '2px', paddingLeft: '2px' }}>
+                                                                    → equivale a {Number(conv.toFixed(3))} {unitTarget} (costeo)
+                                                                </div>
+                                                            );
+                                                        })()}
+                                                    </td>
+                                                    <td style={{ padding: '0.5rem' }}>
+                                                        <select
+                                                            value={ing.unit}
+                                                            onChange={(e) => handleIngredientChange(index, 'unit', e.target.value)}
+                                                            style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem', background: '#f8fafc' }}
+                                                        >
+                                                            {(units || []).map(u => (
+                                                                <option key={u.id} value={u.id}>{u.id}</option>
+                                                            ))}
+                                                        </select>
+                                                    </td>
+                                                    <td style={{ padding: '0.5rem', textAlign: 'center' }}>
+                                                        <MinusCircle size={18} color="#fca5a5" style={{ cursor: 'pointer' }} onClick={() => removeIngredientRow(index)} />
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
                             </div>

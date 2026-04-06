@@ -1,11 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useBusiness } from '../context/BusinessContext';
 import DocumentBuilder from '../components/DocumentBuilder';
-// import { products } from '../data/products'; // Removed unused import
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { RefreshCw, FileText, Download, TrendingUp, Calendar, Plus, Trash2, Filter, ShoppingCart, Globe, Users, Briefcase, Search, ChevronDown, X, Save, AlertTriangle, ArrowRight, Mail, Phone, CheckCircle, ChefHat, DollarSign } from 'lucide-react';
-const CheckCircle2 = CheckCircle;
+import { RefreshCw, FileText, Download, TrendingUp, Calendar, Plus, Trash2, Filter, ShoppingCart, Globe, Users, Briefcase, Search, ChevronDown, X, Save, AlertTriangle, ArrowRight, Mail, Phone, CheckCircle, ChefHat, DollarSign, PenTool, CheckCircle2, AlertCircle } from 'lucide-react';
+import { db } from '../firebase/config';
+import { collection, addDoc } from 'firebase/firestore';
 
 const Orders = ({ orders }) => {
     useEffect(() => {
@@ -76,35 +76,6 @@ const Orders = ({ orders }) => {
         return availableProducts.filter(p => p.name.toLowerCase().includes(q));
     }, [availableProducts, productSearchTerm]);
 
-    // Filtering logic
-    const filteredOrders = useMemo(() => {
-        let result = orders || [];
-
-        // Date filtering
-        if (filterType === 'week') {
-            const lastWeek = new Date();
-            lastWeek.setDate(lastWeek.getDate() - 7);
-            result = result.filter(o => new Date(o.date) >= lastWeek);
-        } else if (filterType === 'month') {
-            const thisMonth = new Date();
-            thisMonth.setDate(1);
-            result = result.filter(o => new Date(o.date) >= thisMonth);
-        } else if (filterType === 'custom' && customRange.from && customRange.to) {
-            result = result.filter(o => o.date >= customRange.from && o.date <= customRange.to);
-        }
-
-        // Search filtering
-        if (searchTerm) {
-            const query = searchTerm.toLowerCase();
-            result = result.filter(o =>
-                (o.client || '').toLowerCase().includes(query) ||
-                String(o.id || '').toLowerCase().includes(query) ||
-                (o.items || []).some(item => (item.name || '').toLowerCase().includes(query))
-            );
-        }
-
-        return result;
-    }, [orders, filterType, customRange, searchTerm]);
 
 
     // Metrics
@@ -205,6 +176,31 @@ const Orders = ({ orders }) => {
             setSelectedOrders(selectedOrders.filter(sid => sid !== id));
         } else {
             setSelectedOrders([...selectedOrders, id]);
+        }
+    };
+
+    const handleResetStatus = async () => {
+        if (selectedOrders.length === 0) {
+            alert('Selecciona los pedidos que deseas resetear a Pendiente.');
+            return;
+        }
+        setIsLoading(true);
+        try {
+            const dbIds = orders
+                .filter(o => selectedOrders.includes(o.id))
+                .map(o => o.dbId)
+                .filter(Boolean);
+            
+            for (const dbId of dbIds) {
+                await updateOrder(dbId, { status: 'Pendiente' });
+            }
+            await refreshData();
+            setSelectedOrders([]);
+            alert('¡Estados reseteados! Todos los pedidos seleccionados están ahora en PENDIENTE.');
+        } catch (e) {
+            console.error("Error resetting orders:", e);
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -366,6 +362,23 @@ const Orders = ({ orders }) => {
     };
 
     const handleGeneratePOPreviews = () => {
+        // 1. Determinar el camino inteligente
+        const needsProduction = ptExplosionData.some(pt => pt.manualProduce > 0);
+        const needsPurchases = explosionPreview.some(i => i.quantityToBuy > 0);
+
+        if (!needsProduction) {
+            // CAMINO A: Producto ya en estantería
+            handleAutomaticTransition('Listo para Despacho', '📦 ¡Stock suficiente! Los pedidos han sido movidos directamente a "Listo para Despacho".');
+            return;
+        }
+
+        if (needsProduction && !needsPurchases) {
+            // CAMINO B: Producir con insumos existentes
+            handleAutomaticTransition('En Producción', '🏭 Insumos disponibles. Los pedidos han sido movidos directamente a "En Producción".');
+            return;
+        }
+
+        // CAMINO C: Flujo tradicional de compras
         const newPurchaseOrders = [];
         const byProvider = {};
 
@@ -410,6 +423,30 @@ const Orders = ({ orders }) => {
         setPoPreviewList(newPurchaseOrders);
         setIsExplosionModalOpen(false);
         setIsPoModalOpen(true);
+    };
+
+    const handleAutomaticTransition = async (newStatus, successMessage) => {
+        setIsLoading(true);
+        try {
+            const selectedDbIds = orders
+                .filter(o => selectedOrders.includes(o.id))
+                .map(o => o.dbId)
+                .filter(Boolean);
+
+            for (const dbId of selectedDbIds) {
+                await updateOrder(dbId, { status: newStatus });
+            }
+
+            await refreshData();
+            setSelectedOrders([]);
+            setIsExplosionModalOpen(false);
+            alert(successMessage);
+        } catch (error) {
+            console.error(`Error automating transition to ${newStatus}:`, error);
+            alert(`No se pudieron actualizar los pedidos.`);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleSendAndSavePOs = async () => {
@@ -535,51 +572,6 @@ const Orders = ({ orders }) => {
         }
     };
 
-    const handleSaveOrder = async (e) => {
-        e.preventDefault();
-        if (!newOrder.client || newOrder.items.length === 0) {
-            alert('Por favor completa el cliente y añade al menos un producto.');
-            return;
-        }
-
-        setIsLoading(true);
-        try {
-            const total = newOrder.items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
-            let prefix = 'WEB-';
-            if (newOrder.source === 'Clientes') prefix = 'CLI-';
-            if (newOrder.source === 'Distribuidores') prefix = 'DIS-';
-            if (newOrder.source === 'Recurrentes') prefix = 'REC-';
-
-            const orderId = `${prefix}${Math.floor(100 + Math.random() * 900)}`;
-
-            const preparedOrder = {
-                id: orderId,
-                client: newOrder.client,
-                clientId: newOrder.clientId,
-                amount: total,
-                date: new Date().toISOString().split('T')[0],
-                status: 'Pendiente',
-                source: newOrder.source,
-                items: newOrder.items
-            };
-
-            // Persist to DB
-            const res = await addOrder(preparedOrder);
-            if (res.success) {
-                alert('¡Pedido procesado con éxito!');
-                setIsModalOpen(false);
-                setNewOrder({ client: '', source: 'Clientes', items: [] });
-                await refreshData();
-            } else {
-                throw new Error(res.error || 'Error desconocido al guardar');
-            }
-        } catch (error) {
-            console.error("Error saving order:", error);
-            alert('Error al guardar el pedido: ' + error.message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
 
     const handleUpdateViewedOrder = async () => {
         const total = viewingOrder.items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
@@ -751,6 +743,66 @@ const Orders = ({ orders }) => {
         }
     };
 
+    const [viewMode, setViewMode] = useState('pending'); // 'pending' or 'processed'
+
+    const handleSaveOrder = async () => {
+        if (!newOrder.client || newOrder.items.length === 0) {
+            alert("Por favor selecciona un cliente y agrega al menos un producto.");
+            return;
+        }
+
+        try {
+            const orderData = {
+                ...newOrder,
+                status: 'Pendiente',
+                date: new Date().toLocaleDateString(),
+                realDate: new Date().toISOString(),
+                source: 'Manual' // Sello de origen manual
+            };
+            
+            await addDoc(collection(db, 'orders'), orderData);
+            setIsModalOpen(false);
+            setNewOrder({ client: '', clientId: '', items: [], status: 'Pendiente' });
+        } catch (error) {
+            console.error("Error saving order:", error);
+            alert("Error al guardar el pedido.");
+        }
+    };
+
+    const filteredOrders = useMemo(() => {
+        let baseFiltered = orders || [];
+
+        // Date filtering (Time Range)
+        if (filterType === 'week') {
+            const lastWeek = new Date();
+            lastWeek.setDate(lastWeek.getDate() - 7);
+            baseFiltered = baseFiltered.filter(o => new Date(o.date) >= lastWeek);
+        } else if (filterType === 'month') {
+            const thisMonth = new Date();
+            thisMonth.setDate(1);
+            baseFiltered = baseFiltered.filter(o => new Date(o.date) >= thisMonth);
+        } else if (filterType === 'custom' && customRange.from && customRange.to) {
+            baseFiltered = baseFiltered.filter(o => o.date >= customRange.from && o.date <= customRange.to);
+        }
+
+        // Search filtering
+        if (searchTerm) {
+            const query = searchTerm.toLowerCase();
+            baseFiltered = baseFiltered.filter(o =>
+                (o.client || '').toLowerCase().includes(query) ||
+                String(o.id || '').toLowerCase().includes(query) ||
+                (o.items || []).some(i => (i.name || '').toLowerCase().includes(query))
+            );
+        }
+
+        // Tab Filtering (Pendientes vs Procesados)
+        if (viewMode === 'pending') {
+            return baseFiltered.filter(o => o.status === 'Pendiente' || o.status === 'PENDIENTE');
+        } else {
+            return baseFiltered.filter(o => o.status !== 'Pendiente' && o.status !== 'PENDIENTE');
+        }
+    }, [orders, viewMode, searchTerm, filterType, customRange]);
+
     return (
         <div className="orders-module" style={{
             padding: '0 0.5rem',
@@ -857,253 +909,136 @@ const Orders = ({ orders }) => {
                 </div>
             </div>
 
-            {/* Action Bar & Filter Section - Premium Glass Design */}
+            {/* TAB SELECTOR - PENDIENTES VS PROCESADOS */}
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem', background: '#F1F5F9', padding: '0.4rem', borderRadius: '14px', width: 'fit-content' }}>
+                <button
+                    onClick={() => setViewMode('pending')}
+                    style={{
+                        padding: '0.7rem 1.8rem',
+                        borderRadius: '10px',
+                        border: 'none',
+                        background: viewMode === 'pending' ? '#fff' : 'transparent',
+                        color: viewMode === 'pending' ? deepTeal : '#64748b',
+                        fontWeight: '800',
+                        fontSize: '0.85rem',
+                        cursor: 'pointer',
+                        boxShadow: viewMode === 'pending' ? '0 4px 12px rgba(0,0,0,0.05)' : 'none',
+                        transition: 'all 0.2s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.6rem'
+                    }}
+                >
+                    <AlertCircle size={16} /> 
+                    PENDIENTES 
+                    <span style={{ 
+                        background: viewMode === 'pending' ? deepTeal : '#cbd5e1', 
+                        color: '#fff', 
+                        padding: '2px 8px', 
+                        borderRadius: '20px', 
+                        fontSize: '0.7rem' 
+                    }}>
+                        {orders.filter(o => o.status === 'Pendiente' || o.status === 'PENDIENTE').length}
+                    </span>
+                </button>
+                <button
+                    onClick={() => setViewMode('processed')}
+                    style={{
+                        padding: '0.7rem 1.8rem',
+                        borderRadius: '10px',
+                        border: 'none',
+                        background: viewMode === 'processed' ? '#fff' : 'transparent',
+                        color: viewMode === 'processed' ? deepTeal : '#64748b',
+                        fontWeight: '800',
+                        fontSize: '0.85rem',
+                        cursor: 'pointer',
+                        boxShadow: viewMode === 'processed' ? '0 4px 12px rgba(0,0,0,0.05)' : 'none',
+                        transition: 'all 0.2s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.6rem'
+                    }}
+                >
+                    <CheckCircle2 size={16} /> 
+                    PROCESADOS / HISTÓRICO
+                </button>
+            </div>
+
+            {/* UI Actions & Search Toolbar */}
             <div style={{
                 display: 'flex',
-                flexDirection: 'column',
+                flexDirection: window.innerWidth < 1024 ? 'column' : 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
                 gap: '1.5rem',
                 marginBottom: '1.5rem',
                 background: glassWhite,
-                backdropFilter: 'blur(10px)',
-                padding: window.innerWidth < 768 ? '1rem' : '1.5rem 2rem',
+                padding: '1rem 2rem',
                 borderRadius: '24px',
                 border: '1px solid rgba(2, 83, 87, 0.05)',
-                boxShadow: '0 10px 25px rgba(0,0,0,0.01)',
-                animation: 'fadeUp 0.6s ease-out'
+                boxShadow: '0 10px 25px rgba(0,0,0,0.01)'
             }}>
-                <div style={{
-                    display: 'flex',
-                    flexDirection: window.innerWidth < 1024 ? 'column' : 'row',
-                    justifyContent: 'space-between',
-                    alignItems: window.innerWidth < 1024 ? 'stretch' : 'center',
-                    gap: '1.5rem'
-                }}>
-                    <div style={{
-                        display: 'flex',
-                        flexDirection: window.innerWidth < 500 ? 'column' : 'row',
-                        gap: '1rem'
-                    }}>
-                        <div style={{
-                            display: 'flex',
-                            background: 'rgba(2, 83, 87, 0.05)',
-                            padding: '6px',
-                            borderRadius: '22px',
-                            border: '1px solid rgba(2, 83, 87, 0.08)',
-                            overflowX: 'auto',
-                            scrollbarWidth: 'none'
-                        }}>
-                            {['week', 'month', 'custom'].map(type => (
-                                <button
-                                    key={type}
-                                    onClick={() => setFilterType(type)}
-                                    style={{
-                                        padding: '0.8rem 1.8rem',
-                                        borderRadius: '14px',
-                                        border: 'none',
-                                        fontSize: '0.75rem',
-                                        fontWeight: '900',
-                                        cursor: 'pointer',
-                                        background: filterType === type ? deepTeal : 'transparent',
-                                        color: filterType === type ? '#fff' : '#64748b',
-                                        transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-                                        textTransform: 'uppercase',
-                                        letterSpacing: '1px',
-                                        boxShadow: filterType === type ? '0 8px 15px rgba(2, 83, 87, 0.15)' : 'none'
-                                    }}
-                                >{type === 'week' ? 'Semana' : type === 'month' ? 'Mes' : 'Personalizado'}</button>
-                            ))}
-                        </div>
-
-                        {filterType === 'custom' && (
-                            <div style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '1rem',
-                                background: '#fcfcfc',
-                                padding: '0 1.2rem',
-                                height: '52px',
-                                borderRadius: '16px',
-                                border: '1px solid #f1f5f9',
-                                animation: 'slideInRight 0.4s ease-out',
-                                boxShadow: '0 4px 10px rgba(0,0,0,0.01)'
-                            }}>
-                                <input
-                                    type="date"
-                                    value={customRange.from}
-                                    onChange={(e) => setCustomRange({ ...customRange, from: e.target.value })}
-                                    style={{ border: 'none', background: 'transparent', fontSize: '0.95rem', fontWeight: '800', color: deepTeal, outline: 'none' }}
-                                />
-                                <ArrowRight size={18} color="#94a3b8" />
-                                <input
-                                    type="date"
-                                    value={customRange.to}
-                                    onChange={(e) => setCustomRange({ ...customRange, to: e.target.value })}
-                                    style={{ border: 'none', background: 'transparent', fontSize: '0.95rem', fontWeight: '800', color: deepTeal, outline: 'none' }}
-                                />
-                            </div>
-                        )}
-                    </div>
-
-                    <div style={{
-                        display: 'flex',
-                        gap: '1rem',
-                        justifyContent: window.innerWidth < 768 ? 'space-between' : 'flex-end'
-                    }}>
+                <div style={{ display: 'flex', background: 'rgba(2, 83, 87, 0.05)', padding: '6px', borderRadius: '22px', border: '1px solid rgba(2, 83, 87, 0.08)' }}>
+                    {['week', 'month', 'custom'].map(type => (
                         <button
-                            onClick={async () => {
-                                setIsLoading(true);
-                                await refreshData();
-                                setIsLoading(false);
-                            }}
-                            disabled={isLoading}
+                            key={type}
+                            onClick={() => setFilterType(type)}
                             style={{
-                                background: '#fff',
-                                color: deepTeal,
-                                width: '52px',
-                                height: '52px',
-                                borderRadius: '16px',
-                                border: '1px solid #f1f5f9',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: 'pointer',
-                                transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-                                boxShadow: '0 4px 10px rgba(0,0,0,0.01)'
+                                padding: '0.6rem 1.4rem', borderRadius: '14px', border: 'none', fontSize: '0.75rem', fontWeight: '950',
+                                cursor: 'pointer', background: filterType === type ? deepTeal : 'transparent',
+                                color: filterType === type ? '#fff' : '#64748b', transition: 'all 0.3s', textTransform: 'uppercase'
                             }}
-                            onMouseEnter={(e) => { e.currentTarget.style.borderColor = deepTeal; e.currentTarget.style.transform = 'rotate(180deg) scale(1.1)'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#f1f5f9'; e.currentTarget.style.transform = 'rotate(0deg) scale(1)'; }}
-                        >
-                            <RefreshCw size={26} className={isLoading ? 'spin' : ''} />
-                        </button>
-                        <button
-                            onClick={() => setIsModalOpen(true)}
-                            style={{
-                                background: `linear-gradient(135deg, ${deepTeal}, #037075)`,
-                                color: 'white',
-                                padding: '0 2rem',
-                                height: '52px',
-                                borderRadius: '18px',
-                                border: 'none',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '1rem',
-                                fontWeight: '900',
-                                fontSize: '0.85rem',
-                                textTransform: 'uppercase',
-                                letterSpacing: '1px',
-                                boxShadow: `0 8px 20px ${deepTeal}20`,
-                                transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
-                            }}
-                            onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = `0 25px 45px ${deepTeal}45`; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = `0 15px 30px ${deepTeal}30`; }}
-                        >
-                            <Plus size={24} /> Nuevo Pedido
-                        </button>
-                    </div>
+                        >{type === 'week' ? 'Semana' : type === 'month' ? 'Mes' : 'Rango'}</button>
+                    ))}
                 </div>
 
-                <div style={{ position: 'relative' }}>
-                    <Search size={20} style={{ position: 'absolute', left: '1.5rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                <div style={{ position: 'relative', flex: 1, px: '1rem' }}>
+                    <Search size={20} style={{ position: 'absolute', left: '1.2rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                     <input
                         type="text"
-                        placeholder="Buscar por cliente, pedido, referencia o producto..."
+                        placeholder="Buscar cliente, pedido o producto..."
+                        style={{ width: '100%', padding: '0.9rem 1rem 0.9rem 3.5rem', borderRadius: '16px', border: '1px solid #f1f5f9', outline: 'none', fontSize: '0.95rem', fontWeight: '600' }}
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        style={{
-                            width: '100%',
-                            padding: '1.2rem 3.5rem 1.2rem 4rem',
-                            borderRadius: '18px',
-                            border: '1px solid #f1f5f9',
-                            outline: 'none',
-                            fontSize: '0.95rem',
-                            fontWeight: '600',
-                            background: '#fcfcfc',
-                            color: '#1e293b',
-                            transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
-                        }}
-                        onFocus={(e) => { e.target.style.borderColor = deepTeal; e.target.style.boxShadow = `0 12px 40px ${deepTeal}10`; }}
-                        onBlur={(e) => { e.target.style.borderColor = '#f1f5f9'; e.target.style.boxShadow = 'none'; }}
                     />
-                    {searchTerm && (
-                        <button
-                            onClick={() => setSearchTerm('')}
-                            style={{
-                                position: 'absolute',
-                                right: '1.5rem',
-                                top: '50%',
-                                transform: 'translateY(-50%)',
-                                background: 'none',
-                                border: 'none',
-                                color: '#94a3b8',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center'
-                            }}
-                        >
-                            <X size={20} />
-                        </button>
-                    )}
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.8rem' }}>
+                    <button onClick={refreshData} style={{ background: '#fff', border: '1px solid #f1f5f9', padding: '12px', borderRadius: '16px', color: deepTeal, cursor: 'pointer' }}>
+                        <RefreshCw size={22} className={isLoading ? 'spin' : ''} />
+                    </button>
+                    <button onClick={() => { setNewOrder({ client: '', source: 'Clientes', items: [] }); setIsModalOpen(true); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 1.5rem', height: '52px', borderRadius: '16px', background: deepTeal, color: '#fff', border: 'none', fontWeight: '950', cursor: 'pointer', fontSize: '0.85rem' }}>
+                        <Plus size={20} /> NUEVO PEDIDO
+                    </button>
                 </div>
             </div>
 
-            {/* Selection Operative Bar - Floating Style */}
+            {/* Comando de Lote Flotante - Aparece al seleccionar órdenes */}
             <div style={{
                 background: institutionOcre,
-                padding: '1.5rem 3rem',
-                borderRadius: '30px',
+                padding: '1.2rem 2.5rem',
+                borderRadius: '24px',
+                display: selectedOrders.length > 0 ? 'flex' : 'none',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 boxShadow: `0 20px 40px ${institutionOcre}30`,
-                marginBottom: '2.5rem',
-                transform: selectedOrders.length > 0 ? 'translateY(0)' : 'translateY(20px)',
-                opacity: selectedOrders.length > 0 ? 1 : 0,
-                pointerEvents: selectedOrders.length > 0 ? 'auto' : 'none',
-                transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-                border: '1px solid rgba(255,255,255,0.2)',
-                display: selectedOrders.length > 0 ? 'flex' : 'none'
+                marginBottom: '2rem',
+                animation: 'fadeUp 0.4s ease-out',
+                border: '2px solid rgba(255,255,255,0.2)'
             }}>
                 <div>
-                    <span style={{ fontSize: '0.8rem', fontWeight: '900', color: '#fff', textTransform: 'uppercase', opacity: 0.9, letterSpacing: '1.5px' }}>Comando de Lote</span>
-                    <div style={{ fontSize: '1.6rem', fontWeight: '900', color: '#fff', marginTop: '0.3rem' }}>{selectedOrders.length} <span style={{ fontSize: '1rem', opacity: 0.7 }}>PEDIDOS EN COLA</span></div>
+                    <span style={{ fontSize: '0.7rem', fontWeight: '950', color: '#fff', textTransform: 'uppercase', opacity: 0.8, letterSpacing: '1px' }}>Gestión Masiva</span>
+                    <div style={{ fontSize: '1.3rem', fontWeight: '950', color: '#fff' }}>{selectedOrders.length} PEDIDOS SELECCIONADOS</div>
                 </div>
-                <div style={{ display: 'flex', gap: '1.2rem' }}>
-                    <button
-                        onClick={handleExplosion}
-                        style={{
-                            padding: '1rem 2.2rem',
-                            background: '#fff',
-                            color: institutionOcre,
-                            border: 'none',
-                            borderRadius: '18px',
-                            cursor: 'pointer',
-                            fontWeight: '900',
-                            fontSize: '0.9rem',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.8rem',
-                            transition: 'all 0.3s ease'
-                        }}
-                        onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.boxShadow = '0 10px 20px rgba(0,0,0,0.1)'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = 'none'; }}
-                    >
-                        <ShoppingCart size={20} /> EXPLOSIONAR MP
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                    <button onClick={handleResetStatus} style={{ padding: '0.8rem 1.5rem', background: 'rgba(255,255,255,0.2)', color: '#fff', border: 'none', borderRadius: '14px', cursor: 'pointer', fontWeight: '950', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <RefreshCw size={16} /> RESETEAR A PENDIENTE
                     </button>
-                    <button
-                        onClick={handleBulkDelete}
-                        style={{
-                            padding: '1rem',
-                            background: 'rgba(255,255,255,0.25)',
-                            color: '#fff',
-                            border: 'none',
-                            borderRadius: '18px',
-                            cursor: 'pointer',
-                            transition: 'all 0.3s ease'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.35)'}
-                        onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.25)'}
-                    >
-                        <Trash2 size={24} />
+                    <button onClick={handleExplosion} style={{ padding: '0.8rem 1.8rem', background: '#fff', color: institutionOcre, border: 'none', borderRadius: '14px', cursor: 'pointer', fontWeight: '950', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 10px 20px rgba(0,0,0,0.1)' }}>
+                        <ArrowRight size={18} /> EXPLOSIONAR MATERIA PRIMA
+                    </button>
+                    <button onClick={handleBulkDelete} style={{ background: 'rgba(255,255,255,0.2)', color: '#fff', padding: '10px', borderRadius: '12px', border: 'none', cursor: 'pointer' }}>
+                        <Trash2 size={20} />
                     </button>
                 </div>
             </div>
@@ -1169,7 +1104,7 @@ const Orders = ({ orders }) => {
                                     </td>
                                     <td style={{ padding: '1.2rem 1.5rem' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.75rem', fontWeight: '800', color: '#475569', background: '#f8fafc', padding: '6px 12px', borderRadius: '10px', width: 'fit-content', border: '1px solid #f1f5f9' }}>
-                                            {getSourceIcon(order.source)}
+                                            {order.source === 'Manual' ? <PenTool size={14} /> : getSourceIcon(order.source)}
                                             {order.source?.toUpperCase()}
                                         </div>
                                     </td>
@@ -1302,7 +1237,7 @@ const Orders = ({ orders }) => {
                                                             ...newOrder,
                                                             client: client.name,
                                                             clientId: client.id,
-                                                            source: client.source || 'CRM'
+                                                            source: 'Manual'
                                                         });
                                                     } else {
                                                         setNewOrder({ ...newOrder, client: '', clientId: '' });
@@ -1382,94 +1317,6 @@ const Orders = ({ orders }) => {
                                         )}
                                     </div>
                                 </div>
-
-                                {/* Right side: Product Catalog */}
-                                <div style={{
-                                    flex: 1,
-                                    borderLeft: window.innerWidth < 768 ? 'none' : '1px solid rgba(2, 83, 87, 0.05)',
-                                    paddingLeft: window.innerWidth < 768 ? '0' : '2.5rem',
-                                    borderTop: window.innerWidth < 768 ? '1px solid rgba(2, 83, 87, 0.05)' : 'none',
-                                    paddingTop: window.innerWidth < 768 ? '1.5rem' : '0'
-                                }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.2rem' }}>
-                                        <label style={{ fontSize: '0.65rem', fontWeight: '900', color: institutionOcre, textTransform: 'uppercase', letterSpacing: '1px' }}>Catálogo de Despacho</label>
-                                    </div>
-
-                                    <div style={{ position: 'relative', marginBottom: '1.5rem' }}>
-                                        <Search size={16} style={{ position: 'absolute', left: '0.8rem', top: '50%', transform: 'translateY(-50%)', color: '#cbd5e1' }} />
-                                        <input
-                                            type="text"
-                                            placeholder="Buscar productos..."
-                                            value={productSearchTerm}
-                                            onChange={(e) => setProductSearchTerm(e.target.value)}
-                                            style={{
-                                                width: '100%',
-                                                padding: '0.7rem 2.8rem 0.7rem 2.8rem',
-                                                borderRadius: '12px',
-                                                border: '1px solid #f1f5f9',
-                                                fontSize: '0.85rem',
-                                                fontWeight: '800',
-                                                outline: 'none',
-                                                background: '#fcfcfc',
-                                                color: deepTeal
-                                            }}
-                                        />
-                                        {productSearchTerm && (
-                                            <button
-                                                onClick={() => setProductSearchTerm('')}
-                                                style={{
-                                                    position: 'absolute',
-                                                    right: '0.8rem',
-                                                    top: '50%',
-                                                    transform: 'translateY(-50%)',
-                                                    background: 'none',
-                                                    border: 'none',
-                                                    color: '#cbd5e1',
-                                                    cursor: 'pointer',
-                                                    display: 'flex',
-                                                    alignItems: 'center'
-                                                }}
-                                            >
-                                                <X size={16} />
-                                            </button>
-                                        )}
-                                    </div>
-
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', maxHeight: '450px', overflowY: 'auto', paddingRight: '0.5rem' }}>
-                                        {filteredCatalog.length > 0 ? (
-                                            filteredCatalog.map(prod => (
-                                                <div key={prod.id} style={{ padding: '1rem', border: '1px solid #f1f5f9', borderRadius: '16px', background: '#fff', transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.01)' }}>
-                                                    <div style={{ fontWeight: '800', fontSize: '0.85rem', marginBottom: '0.4rem', color: '#1e293b' }}>{prod.name}</div>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                        <span style={{ fontSize: '0.9rem', color: deepTeal, fontWeight: '900' }}>${(prod.price || 0).toLocaleString()}</span>
-                                                        <button
-                                                            onClick={() => handleAddProductToOrder(prod.id)}
-                                                            style={{
-                                                                background: `linear-gradient(135deg, ${deepTeal}, #014346)`,
-                                                                color: '#fff',
-                                                                border: 'none',
-                                                                borderRadius: '10px',
-                                                                padding: '0.5rem 1rem',
-                                                                fontSize: '0.7rem',
-                                                                fontWeight: '900',
-                                                                cursor: 'pointer',
-                                                                textTransform: 'uppercase',
-                                                                boxShadow: '0 4px 10px rgba(2, 83, 87, 0.1)'
-                                                            }}
-                                                        >
-                                                            + Añadir
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ))
-                                        ) : (
-                                            <div style={{ padding: '2.5rem 1.5rem', textAlign: 'center', background: 'rgba(212, 120, 90, 0.03)', borderRadius: '20px', border: '1px solid rgba(212, 120, 90, 0.1)', color: premiumSalmon }}>
-                                                <AlertTriangle size={24} style={{ marginBottom: '0.8rem' }} />
-                                                <div style={{ fontSize: '0.8rem', fontWeight: '800', lineHeight: '1.4' }}>No se encontraron productos en Datos Maestros</div>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
                             </div>
                         </div>
 
@@ -1501,237 +1348,6 @@ const Orders = ({ orders }) => {
                             >
                                 <Save size={18} /> Procesar Pedido
                             </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Explosion Preview Modal */}
-            {isExplosionModalOpen && (
-                <div style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    background: 'rgba(15, 23, 42, 0.4)',
-                    backdropFilter: 'blur(8px)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    zIndex: 3000,
-                    padding: '2rem'
-                }}>
-                    <div style={{
-                        background: '#fff',
-                        width: '100%',
-                        maxWidth: '1000px',
-                        maxHeight: '90vh',
-                        borderRadius: '24px',
-                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        overflow: 'hidden'
-                    }}>
-                        <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff9f2' }}>
-                            <div>
-                                <h3 style={{ margin: 0, fontSize: '1.4rem', color: '#ea580c', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                                    <ShoppingCart size={24} />
-                                    Previsualización de Órdenes (BOM)
-                                </h3>
-                                <p style={{ margin: '0.3rem 0 0', fontSize: '0.85rem', color: '#9a3412' }}>Revisa, ajusta cantidades y proveedores antes de generar las Órdenes de Compra.</p>
-                            </div>
-                            <button onClick={() => setIsExplosionModalOpen(false)} style={{ background: '#fff', border: '1px solid #fed7aa', borderRadius: '50%', padding: '0.5rem', cursor: 'pointer', color: '#ea580c', display: 'flex' }}><X size={20} /></button>
-                        </div>
-
-                        <div style={{ padding: '2rem', overflowY: 'auto', flex: 1, background: '#f8fafc' }}>
-                            {/* PT Requirement Adjustments */}
-                            <div style={{ marginBottom: '2rem', background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-                                <div style={{ padding: '1rem 1.5rem', background: '#fef3c7', borderBottom: '1px solid #fde68a', display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-                                    <ChefHat size={20} color="#d97706" />
-                                    <h4 style={{ margin: 0, color: '#b45309', fontSize: '1rem', fontWeight: '900' }}>SKUs a Fabricar (Demanda Neta)</h4>
-                                </div>
-                                <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                    {ptExplosionData.map(pt => (
-                                        <div key={pt.ptId} style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 1fr) auto', gap: '2rem', alignItems: 'center', paddingBottom: '1rem', borderBottom: '1px dashed #e2e8f0' }}>
-                                            <div>
-                                                <div style={{ fontWeight: '800', color: '#1e293b', fontSize: '1.05rem', marginBottom: '0.3rem' }}>{pt.label}</div>
-                                                <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                                                    Pedidos (<span style={{ fontWeight: 'bold' }}>{pt.totalDemand}</span>)
-                                                    - Inv (<span style={{ fontWeight: 'bold' }}>{pt.inventoryPT}</span>)
-                                                    + Saf (<span style={{ fontWeight: 'bold' }}>{pt.safety}</span>)
-                                                    = Fórmula (<span style={{ fontWeight: 'bold', color: '#0f172a' }}>{pt.suggestedProduce}</span>)
-                                                    | <span style={{ opacity: 0.8 }}>Lote PT: {pt.batchSize}</span>
-                                                </div>
-                                            </div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem' }}>
-                                                    <label style={{ fontSize: '0.7rem', fontWeight: '800', color: deepTeal, textTransform: 'uppercase' }}>A PRODUCIR</label>
-                                                    <input
-                                                        type="number"
-                                                        value={pt.manualProduce}
-                                                        onChange={(e) => handleUpdatePtProduction(pt.ptId, Number(e.target.value))}
-                                                        style={{
-                                                            width: '100px',
-                                                            padding: '0.6rem',
-                                                            borderRadius: '10px',
-                                                            border: `2px solid ${pt.manualProduce !== pt.suggestedProduce ? '#ea580c' : '#cbd5e1'}`,
-                                                            outline: 'none',
-                                                            textAlign: 'center',
-                                                            fontWeight: '900',
-                                                            fontSize: '1rem',
-                                                            color: pt.manualProduce !== pt.suggestedProduce ? '#ea580c' : '#0f172a'
-                                                        }}
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div style={{ padding: '0 0 1rem 0' }}>
-                                <h4 style={{ margin: 0, color: '#334155', fontSize: '1rem', fontWeight: '900', letterSpacing: '-0.5px' }}>Materias Primas Requeridas</h4>
-                                <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '4px 0 0 0' }}>Se aplica conversión dinámica a <strong>Unidad de Compra</strong>.</p>
-                            </div>
-
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                {explosionPreview.map(item => (
-                                    <div key={item.id} style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-                                        <div
-                                            onClick={() => setExpandedExplosionItem(expandedExplosionItem === item.id ? null : item.id)}
-                                            style={{ padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', borderBottom: expandedExplosionItem === item.id ? '1px solid #f1f5f9' : 'none' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1 }}>
-                                                <div style={{ background: '#f0fdf4', padding: '0.8rem', borderRadius: '12px', color: '#16a34a' }}>
-                                                    <Briefcase size={20} />
-                                                </div>
-                                                <div>
-                                                    <div style={{ fontWeight: '800', fontSize: '1.1rem', color: item.isMissing ? '#e11d48' : 'var(--color-primary)' }}>{item.name}</div>
-                                                    {item.isMissing ? (
-                                                        <div style={{ fontSize: '0.75rem', color: '#e11d48', fontWeight: 'bold', background: '#fff1f2', padding: '2px 8px', borderRadius: '4px', border: '1px solid #fecaca', display: 'inline-block', marginTop: '4px' }}>
-                                                            No existe en Módulo de Datos Maestros de Productos, Crealo primero
-                                                        </div>
-                                                    ) : (
-                                                        <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                                                            Uso Total: <span style={{ fontWeight: 'bold' }}>{parseFloat(item.requiredQtyUsage.toFixed(4))} {item.unitUse}</span> |
-                                                            Inv: <span style={{ fontWeight: 'bold' }}>{parseFloat((item.currentInvUsage || 0).toFixed(4))} {item.unitUse}</span> |
-                                                            Safety: <span style={{ fontWeight: 'bold' }}>{item.safetyUsage} {item.unitUse}</span>
-                                                            <span style={{ fontSize: '1rem', fontWeight: 'bold', color: '#ea580c', marginLeft: '0.8rem' }}>
-                                                                = {Math.max(0, item.requiredQtyUsage - item.currentInvUsage + item.safetyUsage).toFixed(4).replace(/\.?0+$/, '')} {item.unitUse}
-                                                            </span>
-                                                            <div style={{ marginTop: '0.5rem', padding: '0.4rem 0.8rem', background: '#fff7ed', borderRadius: '6px', borderLeft: '4px solid #ea580c', color: '#9a3412', fontWeight: '800' }}>
-                                                                = {item.exactQuantityToBuy} <span style={{ fontSize: '0.75rem', fontWeight: 'normal' }}>{item.unit}</span> a comprar
-                                                                <span style={{ margin: '0 0.5rem', color: '#c2410c' }}>→</span>
-                                                                <span style={{ fontSize: '1.05rem' }}>{item.quantityToBuy}</span> <span style={{ fontSize: '0.75rem', fontWeight: 'normal' }}>{item.unit}</span> (Redondeado)
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
-                                                <div style={{
-                                                    background: (item.providerId && item.unitCost > 0) ? '#16a34a' : (item.quantityToBuy > 0 ? '#ea580c' : '#fff7ed'),
-                                                    border: (item.providerId && item.unitCost > 0) ? '1px solid #16a34a' : (item.quantityToBuy > 0 ? '1px solid #ea580c' : '1px solid #fed7aa'),
-                                                    padding: '0.8rem 1.2rem',
-                                                    borderRadius: '10px',
-                                                    textAlign: 'center',
-                                                    transition: 'all 0.3s'
-                                                }}>
-                                                    <div style={{ fontSize: '0.7rem', color: item.quantityToBuy > 0 ? '#fff' : '#ea580c', fontWeight: 'bold', textTransform: 'uppercase' }}>A Comprar</div>
-                                                    <div style={{ fontSize: '1.2rem', fontWeight: '900', color: item.quantityToBuy > 0 ? '#fff' : '#c2410c' }}>{item.quantityToBuy} <span style={{ fontSize: '0.8rem' }}>{item.unit}</span></div>
-                                                </div>
-                                                <ChevronDown size={20} color="#94a3b8" style={{ transform: expandedExplosionItem === item.id ? 'rotate(180deg)' : 'none', transition: '0.2s' }} />
-                                            </div>
-                                        </div>
-
-                                        {expandedExplosionItem === item.id && (
-                                            <div style={{ padding: '1.5rem', background: '#fcfcfc' }}>
-                                                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.5fr) 1fr', gap: '2rem' }}>
-                                                    <div>
-                                                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Fórmula de Cálculo (BOM)</label>
-                                                        <div style={{ fontSize: '0.85rem', color: '#475569', background: '#f1f5f9', padding: '1rem', borderRadius: '8px', lineHeight: '1.6' }}>
-                                                            {item.bomBreakdown.split(' | ').map((line, idx) => <div key={idx}>• {line}</div>)}
-                                                        </div>
-                                                        <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: '#0f172a', fontWeight: 'bold' }}>
-                                                            Sugerido Neto de Uso ({item.requiredQtyUsage.toFixed(4)} - {item.currentInvUsage} + {item.safetyUsage} = <span style={{ color: '#ea580c' }}>{Math.max(0, item.requiredQtyUsage - item.currentInvUsage + item.safetyUsage).toFixed(4)} {item.unitUse}</span>)
-                                                            <br />
-                                                            Conversión: ÷ {item.conversionFactor} = <span style={{ color: '#16a34a' }}>{item.exactQuantityToBuy} {item.unit} a comprar</span>
-                                                        </div>
-                                                    </div>
-
-                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                                        <div style={{ display: 'flex', gap: '1rem' }}>
-                                                            <div style={{ flex: 1 }}>
-                                                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Cant. Final</label>
-                                                                <input
-                                                                    type="number"
-                                                                    value={item.quantityToBuy}
-                                                                    onChange={(e) => handleUpdatePreviewItem(item.id, 'quantityToBuy', Number(e.target.value))}
-                                                                    style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none' }}
-                                                                />
-                                                            </div>
-                                                            <div style={{ flex: 1 }}>
-                                                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Precio Sug. ($)</label>
-                                                                <input
-                                                                    type="number"
-                                                                    value={item.unitCost}
-                                                                    onChange={(e) => handleUpdatePreviewItem(item.id, 'unitCost', Number(e.target.value))}
-                                                                    style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none' }}
-                                                                />
-                                                            </div>
-                                                        </div>
-                                                        <div>
-                                                            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Asignar Proveedor</label>
-                                                            <select
-                                                                value={item.providerId}
-                                                                onChange={(e) => handleUpdatePreviewItem(item.id, 'providerId', e.target.value)}
-                                                                style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', background: '#fff' }}
-                                                            >
-                                                                <option value="">Selecciona un proveedor...</option>
-                                                                {providers.filter(p => !(p.is_own_company === true || (p.name || '').toLowerCase().includes('zeticas'))).map(p => (
-                                                                    <option key={p.id} value={p.id}>{p.name} ({p.group || ''})</option>
-                                                                ))}
-                                                            </select>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div style={{ padding: '1.5rem 2rem', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff' }}>
-                            <div style={{ fontSize: '0.9rem', color: '#64748b' }}>
-                                Total Estimado OCs: <span style={{ fontSize: '1.4rem', fontWeight: '900', color: 'var(--color-primary)' }}>${((explosionPreview.reduce((sum, item) => sum + ((item.quantityToBuy || 0) * (item.unitCost || 0)), 0) || 0) || 0).toLocaleString()}</span>
-                            </div>
-                            <div style={{ display: 'flex', gap: '1rem' }}>
-                                <button
-                                    onClick={() => setIsExplosionModalOpen(false)}
-                                    style={{ padding: '0.8rem 2rem', borderRadius: '12px', border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontWeight: '600', color: '#475569' }}
-                                >
-                                    Cerrar y Cancelar
-                                </button>
-                                <button
-                                    onClick={handleGeneratePOPreviews}
-                                    style={{
-                                        padding: '0.8rem 2.5rem',
-                                        borderRadius: '12px',
-                                        border: 'none',
-                                        background: (explosionPreview || []).every(i => i.providerId && i.unitCost > 0) ? '#16a34a' : '#ea580c',
-                                        color: '#fff',
-                                        cursor: 'pointer',
-                                        fontWeight: 'bold',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '0.6rem',
-                                        boxShadow: (explosionPreview || []).every(i => i.providerId && i.unitCost > 0) ? '0 4px 12px rgba(22, 163, 74, 0.3)' : '0 4px 12px rgba(234, 88, 12, 0.3)'
-                                    }}
-                                >
-                                    <ShoppingCart size={18} /> Previsualizar OC y Enviar
-                                </button>
-                            </div>
                         </div>
                     </div>
                 </div>

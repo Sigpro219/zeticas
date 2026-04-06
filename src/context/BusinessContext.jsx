@@ -256,16 +256,14 @@ export const BusinessProvider = ({ children }) => {
             updateSyncTime();
         }, (error) => console.error("Snapshot Purchases Error:", error));
 
-        const unsubExpenses = onSnapshot(query(collection(db, 'expenses'), orderBy('expense_date', 'desc')), (snapshot) => {
-            setExpenses(snapshot.docs.map(doc => ({
-                id: doc.id, ...doc.data()
-            })));
+        const unsubExpenses = onSnapshot(query(collection(db, 'expenses'), orderBy('date', 'desc')), (snapshot) => {
+            setExpenses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            updateSyncTime();
         }, (error) => console.error("Snapshot Expenses Error:", error));
 
         const unsubBanks = onSnapshot(collection(db, 'banks'), (snapshot) => {
-            setBanks(snapshot.docs.map(doc => ({
-                id: doc.id, ...doc.data()
-            })));
+            setBanks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            updateSyncTime();
         }, (error) => console.error("Snapshot Banks Error:", error));
 
         const unsubCMS = onSnapshot(collection(db, 'site_content'), (snapshot) => {
@@ -352,13 +350,12 @@ export const BusinessProvider = ({ children }) => {
         }
     }, []);
 
-    const addOrder = useCallback(async (order) => {
+    const addOrder = useCallback(async (orderData) => {
         try {
             const docRef = await addDoc(collection(db, 'orders'), {
-                ...order,
+                ...orderData,
                 created_at: new Date().toISOString()
             });
-
             return { success: true, id: docRef.id };
         } catch (err) {
             console.error("Error adding order:", err);
@@ -502,10 +499,19 @@ export const BusinessProvider = ({ children }) => {
     const updateOrder = useCallback(async (id, data) => {
         try {
             const orderRef = doc(db, 'orders', id);
+            const snap = await getDoc(orderRef);
+            const oldData = snap.exists() ? snap.data() : {};
 
-            // Si el estado cambia a Finalizado o Entregado, descontamos el stock físico (sales)
+            // Auto-Tracking of Time in Stage
+            if (data.status && data.status !== oldData.status) {
+                const now = new Date().toISOString();
+                data.last_status_at = now;
+                const history = oldData.status_history || [];
+                data.status_history = [...history, { status: data.status, at: now }];
+            }
+
+            // physical stock deduction (sales) logic...
             if (data.status === 'Finalizado' || data.status === 'Entregado' || data.status === 'Cobrado') {
-                const snap = await getDoc(orderRef);
                 if (snap.exists() && snap.data().status !== 'Finalizado' && snap.data().status !== 'Entregado' && snap.data().status !== 'Cobrado') {
                     const orderData = snap.data();
                     if (orderData.items) {
@@ -577,6 +583,13 @@ export const BusinessProvider = ({ children }) => {
     const addQuotation = useCallback(async (quoteData) => {
         try { await addDoc(collection(db, 'quotations'), quoteData); return { success: true }; }
         catch (err) { console.error("Error adding quote:", err); return { success: false, error: err.message }; }
+    }, []);
+
+    const deleteQuotation = useCallback(async (id) => {
+        try {
+            await deleteDoc(doc(db, 'quotations', id));
+            return { success: true };
+        } catch (err) { return { success: false, error: err.message }; }
     }, []);
 
     const updateLead = useCallback(async (id, data) => {
@@ -974,16 +987,16 @@ export const BusinessProvider = ({ children }) => {
     }, [providers, clients]);
 
     const value = useMemo(() => ({
-        loading, items, recipes, providers, orders, expenses, purchaseOrders, banks, taxSettings, clients, siteContent, lastUpdate, lastPublish: buildInfo.lastPublish, productionOrders, users, units, unitConversions, ownCompany, leads,
+        loading, items, recipes, providers, orders, expenses, purchaseOrders, banks, taxSettings, clients, siteContent, lastUpdate, lastPublish: buildInfo.lastPublish, productionOrders, users, units, unitConversions, ownCompany, leads, quotations,
         setItems, setOrders, setExpenses, setPurchaseOrders, setBanks, setClients, setSiteContent, setProductionOrders, setLeads, setUsers, setUnits, setUnitConversions, setTaxSettings,
         refreshData, addClient, addOrder, deleteOrders, updateSiteContent, recalculatePTCosts, updateBankBalance, updateClient, deleteClient,
-        addItem, updateItem, deleteItem, addSupplier, updateSupplier, deleteSupplier, updateOrder, addPurchase, addRecipe, deleteRecipeByProduct, saveOdp, addExpense, updateExpense, deleteExpense, addBank, updateBank, deleteBank, receivePurchase, payPurchase, updateLead, addLead, deleteLead,
+        addItem, updateItem, deleteItem, addSupplier, updateSupplier, deleteSupplier, updateOrder, addPurchase, addRecipe, deleteRecipeByProduct, saveOdp, addExpense, updateExpense, deleteExpense, addBank, updateBank, deleteBank, receivePurchase, payPurchase, updateLead, addLead, deleteLead, addQuotation, deleteQuotation,
         addUser, updateUser, deleteUser, consumeMaterials, loadFinishedGoods, saveConversion, convertUnit, saveWebCheckout, getWebCheckout, updateWebCheckoutStatus
     }), [
-        loading, items, recipes, providers, orders, expenses, purchaseOrders, banks, taxSettings, clients, siteContent, lastUpdate, productionOrders, leads, users, units, unitConversions, ownCompany,
+        loading, items, recipes, providers, orders, expenses, purchaseOrders, banks, taxSettings, clients, siteContent, lastUpdate, productionOrders, leads, quotations, users, units, unitConversions, ownCompany,
         setItems, setOrders, setExpenses, setPurchaseOrders, setBanks, setClients, setSiteContent, setProductionOrders, setLeads, setUsers, setUnits, setUnitConversions, setTaxSettings,
         refreshData, addClient, addOrder, deleteOrders, updateSiteContent, recalculatePTCosts, updateBankBalance, updateClient, deleteClient,
-        addItem, updateItem, deleteItem, addSupplier, updateSupplier, deleteSupplier, updateOrder, addPurchase, addRecipe, deleteRecipeByProduct, saveOdp, addExpense, updateExpense, deleteExpense, addBank, updateBank, deleteBank, receivePurchase, payPurchase, updateLead, addLead, deleteLead,
+        addItem, updateItem, deleteItem, addSupplier, updateSupplier, deleteSupplier, updateOrder, addPurchase, addRecipe, deleteRecipeByProduct, saveOdp, addExpense, updateExpense, deleteExpense, addBank, updateBank, deleteBank, receivePurchase, payPurchase, updateLead, addLead, deleteLead, addQuotation, deleteQuotation,
         addUser, updateUser, deleteUser, consumeMaterials, loadFinishedGoods, saveConversion, convertUnit, saveWebCheckout, getWebCheckout, updateWebCheckoutStatus
     ]);
 
