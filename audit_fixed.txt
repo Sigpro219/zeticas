@@ -1,0 +1,24 @@
+﻿--- INICIANDO AUDITORIA DE PRODUCCION (7 PEDIDOS) ---
+node : Error: Could not load the default credentials. Browse to https://cloud.google.com/docs/authentication/getting-started for more information.
+En línea: 1 Carácter: 1
++ node c:\Users\Usuario\zeticas\scripts\test_firestore.cjs > audit_fina ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Error: Could no...re information.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+    at GoogleAuth.getApplicationDefaultAsync (c:\Users\Usuario\zeticas\node_modules\google-gax\node_modules\google-auth-library\build\src\auth\googleauth.js:287:15)
+    at async GoogleAuth._GoogleAuth_determineClient (c:\Users\Usuario\zeticas\node_modules\google-gax\node_modules\google-auth-library\build\src\auth\googleauth.js:834:32)
+    at async GoogleAuth.getClient (c:\Users\Usuario\zeticas\node_modules\google-gax\node_modules\google-auth-library\build\src\auth\googleauth.js:698:20)
+    at async GrpcClient._getCredentials (c:\Users\Usuario\zeticas\node_modules\google-gax\build\src\grpc.js:145:24)
+    at async GrpcClient.createStub (c:\Users\Usuario\zeticas\node_modules\google-gax\build\src\grpc.js:318:23)
+Caused by: Error
+    at QueryUtil._getResponse (c:\Users\Usuario\zeticas\node_modules\@google-cloud\firestore\build\src\reference\query-util.js:44:23)
+    at Query._getResponse (c:\Users\Usuario\zeticas\node_modules\@google-cloud\firestore\build\src\reference\query.js:784:32)
+    at Query._get (c:\Users\Usuario\zeticas\node_modules\@google-cloud\firestore\build\src\reference\query.js:777:35)
+    at c:\Users\Usuario\zeticas\node_modules\@google-cloud\firestore\build\src\reference\query.js:745:43
+    at c:\Users\Usuario\zeticas\node_modules\@google-cloud\firestore\build\src\telemetry\enabled-trace-util.js:110:30
+    at NoopContextManager.with (c:\Users\Usuario\zeticas\node_modules\@opentelemetry\api\build\src\context\NoopContextManager.js:14:19)
+    at ContextAPI.with (c:\Users\Usuario\zeticas\node_modules\@opentelemetry\api\build\src\api\context.js:51:46)
+    at NoopTracer.startActiveSpan (c:\Users\Usuario\zeticas\node_modules\@opentelemetry\api\build\src\trace\NoopTracer.js:54:31)
+    at ProxyTracer.startActiveSpan (c:\Users\Usuario\zeticas\node_modules\@opentelemetry\api\build\src\trace\ProxyTracer.js:27:24)
+    at EnabledTraceUtil.startActiveSpan (c:\Users\Usuario\zeticas\node_modules\@google-cloud\firestore\build\src\telemetry\enabled-trace-util.js:102:28)

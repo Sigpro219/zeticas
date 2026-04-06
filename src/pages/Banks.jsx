@@ -320,25 +320,34 @@ const Banks = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {bankTransactions && bankTransactions.map((t, idx) => (
-                                        <tr key={t.id || idx} style={{ borderBottom: '1px solid #f8fafc' }}>
-                                            <td style={{ padding: '1rem', fontSize: '0.85rem', color: '#64748b', fontWeight: '700' }}>{t.date}</td>
-                                            <td style={{ padding: '1rem' }}>
-                                                <div style={{ fontSize: '0.9rem', fontWeight: '800', color: '#1e293b' }}>{t.description}</div>
-                                                <div style={{ fontSize: '0.7rem', color: institutionOcre, fontWeight: '900', textTransform: 'uppercase' }}>{t.category}</div>
-                                            </td>
-                                            <td style={{ padding: '1rem', fontSize: '0.85rem', fontWeight: '800', color: deepTeal }}>{t.bank_name}</td>
-                                            <td style={{ padding: '1rem', textAlign: 'right' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.4rem', color: t.type === 'income' ? '#10b981' : '#ef4444', fontWeight: '900' }}>
-                                                    {t.type === 'income' ? <ArrowUpRight size={14} /> : <ArrowDownLeft size={14} />}
-                                                    ${(t.amount || 0).toLocaleString()}
-                                                </div>
-                                            </td>
-                                            <td style={{ padding: '1rem', textAlign: 'right', fontSize: '0.9rem', fontWeight: '900', color: '#1e293b' }}>
-                                                ${(t.end_balance || 0).toLocaleString()}
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {bankTransactions && bankTransactions.map((t, idx) => {
+                                        const dateTime = t.created_at ? new Date(t.created_at).toLocaleString('es-CO', {
+                                            day: '2-digit', month: '2-digit', year: 'numeric',
+                                            hour: '2-digit', minute: '2-digit', hour12: true
+                                        }) : t.date;
+
+                                        return (
+                                            <tr key={t.id || idx} style={{ borderBottom: '1px solid #f8fafc' }}>
+                                                <td style={{ padding: '1rem', fontSize: '0.85rem', color: '#64748b', fontWeight: '700' }}>
+                                                    {dateTime}
+                                                </td>
+                                                <td style={{ padding: '1rem' }}>
+                                                    <div style={{ fontSize: '0.9rem', fontWeight: '800', color: '#1e293b' }}>{t.description}</div>
+                                                    <div style={{ fontSize: '0.7rem', color: institutionOcre, fontWeight: '900', textTransform: 'uppercase' }}>{t.category}</div>
+                                                </td>
+                                                <td style={{ padding: '1rem', fontSize: '0.85rem', fontWeight: '800', color: deepTeal }}>{t.bank_name}</td>
+                                                <td style={{ padding: '1rem', textAlign: 'right' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.4rem', color: t.type === 'income' ? '#10b981' : '#ef4444', fontWeight: '900' }}>
+                                                        {t.type === 'income' ? <ArrowUpRight size={14} /> : <ArrowDownLeft size={14} />}
+                                                        ${(t.amount || 0).toLocaleString()}
+                                                    </div>
+                                                </td>
+                                                <td style={{ padding: '1rem', textAlign: 'right', fontSize: '0.9rem', fontWeight: '900', color: '#1e293b' }}>
+                                                    ${(t.end_balance || 0).toLocaleString()}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                     {(!bankTransactions || bankTransactions.length === 0) && (
                                         <tr>
                                             <td colSpan="5" style={{ padding: '4rem', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>

@@ -291,21 +291,49 @@ const Clients = () => {
                         No hay clientes que coincidan con la búsqueda.
                     </div>
                 )}
-                {filtered.map(c => {
+                {filtered
+                    .sort((a, b) => {
+                        const aIsMain = (a.name || '').toLowerCase().includes('zeticas sas bic');
+                        const bIsMain = (b.name || '').toLowerCase().includes('zeticas sas bic');
+                        if (aIsMain) return -1;
+                        if (bIsMain) return 1;
+                        return 0;
+                    })
+                    .map(c => {
                     const nOrders = orderCountFor(c);
+                    const isMainCompany = (c.name || '').toLowerCase().includes('zeticas sas bic');
+                    
                     return (
                         <div
                             key={c.id}
-                            className="supplier-card"
+                            className={`supplier-card ${isMainCompany ? 'own-company-card' : ''}`}
                             style={{
-                                background: '#fff', padding: '1.8rem', borderRadius: '24px',
-                                border: '1px solid #f1f5f9', boxShadow: '0 4px 15px rgba(0,0,0,0.02)',
-                                transition: 'all 0.25s ease', opacity: c.status === 'Inactive' ? 0.6 : 1
+                                background: isMainCompany ? 'rgba(2, 54, 54, 0.02)' : '#fff', 
+                                padding: '1.8rem', 
+                                borderRadius: '24px',
+                                border: isMainCompany ? `2.5px solid var(--color-primary)` : '1px solid #f1f5f9', 
+                                boxShadow: isMainCompany ? '0 10px 30px rgba(2, 54, 54, 0.1)' : '0 4px 15px rgba(0,0,0,0.02)',
+                                transition: 'all 0.25s ease', 
+                                opacity: c.status === 'Inactive' ? 0.6 : 1,
+                                position: 'relative'
                             }}
                         >
                             {/* Top row: badge + status */}
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                                <SubBadge sub={c.subType} />
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                    <SubBadge sub={c.subType} />
+                                    {isMainCompany && (
+                                        <span style={{
+                                            background: 'var(--color-primary)',
+                                            color: 'white',
+                                            padding: '3px 12px',
+                                            borderRadius: '20px',
+                                            fontSize: '0.65rem',
+                                            fontWeight: '900',
+                                            letterSpacing: '0.5px'
+                                        }}>TU EMPRESA</span>
+                                    )}
+                                </div>
                                 <span style={{
                                     padding: '3px 10px', borderRadius: '20px', fontSize: '0.65rem', fontWeight: 700,
                                     background: c.status === 'Archived' ? '#f1f5f9' : (c.status === 'Active' ? '#dcfce7' : '#fef2f2'),

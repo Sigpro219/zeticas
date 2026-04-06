@@ -73,6 +73,7 @@ const Gestion = () => {
         orders, setOrders,
         expenses, setExpenses,
         purchaseOrders, setPurchaseOrders,
+        productionOrders,
         banks, setBanks,
         taxSettings, setTaxSettings,
         recipes, providers,
@@ -535,6 +536,7 @@ const Gestion = () => {
                     {activeTab === 'kanban' && (
                         <Kanban 
                             orders={orders} 
+                            productionOrders={productionOrders}
                             items={items} 
                             onOpenModal={() => setIsKanbanModalOpen(true)} 
                         />

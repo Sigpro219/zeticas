@@ -21,33 +21,29 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 // supabase import removed
 
+import logo from '../assets/logo.png';
+
 const Shipping = () => {
     useEffect(() => {
         window.scrollTo(0, 0);
     }, []);
-    const { orders, items, refreshData, updateOrder } = useBusiness();
+    const { orders, items, refreshData, updateOrder, ownCompany } = useBusiness();
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState('month');
     const [customRange, setCustomRange] = useState({ from: '', to: '' });
 
-
-    const zeticasInfo = {
-        name: 'ZETICAs S.A.S.',
-        nit: '901.234.567-8',
-        address: 'Carrera 45 # 100-24, Bogotá, Colombia',
-        phone: '312 456 7890',
-        email: 'ventas@zeticas.com'
-    };
-
-    // Calculate inventory availability for an order
-    const checkAvailability = React.useCallback((orderItems) => {
+    // Calculate stock fulfillment percentage
+    const getStockFulfillment = React.useCallback((orderItems) => {
+        if (!orderItems?.length) return 0;
+        let totalNeeded = 0;
+        let totalReady = 0;
         for (const item of orderItems) {
+            totalNeeded += (Number(item.quantity) || 0);
             const inventoryItem = items.find(i => i.name === item.name || i.id === item.id);
-            if (!inventoryItem) return false;
-            const currentStock = (inventoryItem.initial || 0) + (inventoryItem.purchases || 0) - (inventoryItem.sales || 0);
-            if (currentStock < item.quantity) return false;
+            const currentStock = inventoryItem ? ((inventoryItem.initial || 0) + (inventoryItem.purchases || 0) - (inventoryItem.sales || 0)) : 0;
+            totalReady += Math.min((Number(item.quantity) || 0), Math.max(0, currentStock));
         }
-        return true;
+        return (totalReady / totalNeeded) * 100;
     }, [items]);
 
     // Calculate days since order
@@ -66,88 +62,156 @@ const Shipping = () => {
     };
     const handleCreateInvoice = async (order) => {
         const invNum = generateInvoiceNumber();
-
-        // Generate PDF
         const doc = new jsPDF();
+        const primaryColor = [2, 54, 54]; // Deep Teal Zeticas
 
-        // Invoice Header
-        doc.setFontSize(20);
-        doc.setTextColor(26, 54, 54);
-        doc.text('FACTURA DE VENTA', 14, 20);
-        doc.setFontSize(10);
-        doc.text(`No. ${invNum}`, 14, 28);
-        doc.text(`Fecha Emisión: ${new Date().toLocaleDateString()}`, 14, 33);
-
-        // Zeticas Info
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'bold');
-        doc.text(zeticasInfo.name, 120, 20);
+        // 1. Header & ID
+        // Official Logo Injection
+        try {
+            doc.addImage(logo, 'PNG', 14, 12, 40, 15);
+        } catch {
+            doc.setFont('times', 'bold');
+            doc.setFontSize(24);
+            doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+            doc.text('zeticas', 14, 22);
+        }
+        
         doc.setFont('helvetica', 'normal');
-        doc.text(`NIT: ${zeticasInfo.nit}`, 120, 25);
-        doc.text(zeticasInfo.address, 120, 30);
-        doc.text(`Tel: ${zeticasInfo.phone}`, 120, 35);
+        doc.setFontSize(8);
+        doc.setTextColor(100, 116, 139);
+        doc.text(ownCompany?.name || 'ZETICAs SAS BIC', 14, 32);
+        doc.text(`NIT: ${ownCompany?.nit || '901.531.875-4'}`, 14, 36);
+        doc.text(ownCompany?.address || 'Guasca', 14, 40);
+        if (ownCompany?.phone || ownCompany?.email) {
+            doc.text(`${ownCompany.phone || ''} ${ownCompany.email ? '| ' + ownCompany.email : ''}`, 14, 44);
+        }
 
+
+        // 3. Document Title and Reference (Right Aligned)
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(18);
+        doc.setTextColor(15, 23, 42);
+        doc.text('FACTURA DE VENTA', 196, 25, { align: 'right' });
+
+        doc.setFontSize(14);
+        doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.text(invNum, 196, 33, { align: 'right' });
+
+        doc.setFontSize(9);
+        doc.setTextColor(100, 116, 139);
+        doc.text(`Fecha Emisión: ${new Date().toLocaleDateString()}`, 196, 39, { align: 'right' });
+
+        // Horizontal Separator
+        doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.setLineWidth(0.8);
         doc.line(14, 45, 196, 45);
 
-        // Client Info
-        doc.setFont('helvetica', 'bold');
-        doc.text('FACTURAR A:', 14, 55);
-        doc.setFont('helvetica', 'normal');
-        doc.text(order.client, 14, 62);
-        doc.text('Bogotá, Colombia', 14, 67);
-        doc.text(`Pedido Ref: ${order.id}`, 14, 72);
+        // 4. Client Info Card (Using Rounded Rect like OC)
+        doc.setFillColor(248, 250, 252);
+        doc.roundedRect(14, 52, 182, 35, 2, 2, 'F');
+        doc.setDrawColor(241, 245, 249);
+        doc.roundedRect(14, 52, 182, 35, 2, 2, 'S');
 
-        // Table
-        // Table
-        const tableColumn = ["Ref / SKU", "Descripción", "Cantidad", "Valor Unit.", "Total"];
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(148, 163, 184);
+        doc.text('FACTURAR A:', 18, 57);
+
+        doc.setFontSize(11);
+        doc.setTextColor(30, 41, 59);
+        doc.text(order.client?.toUpperCase() || 'CLIENTE', 18, 64);
+        
+        doc.setFontSize(8.5);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 116, 139);
+        doc.text(`Dirección: ${order.shipping_address || order.address || 'N/A'}`, 18, 70);
+        doc.text(`Ciudad: ${order.shipping_city || order.city || 'Bogotá, Col'}`, 18, 75);
+        doc.text(`Teléfono: ${order.shipping_phone || order.phone || 'N/A'}`, 18, 80);
+        
+        // Right side info (Order reference)
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(148, 163, 184);
+        doc.text('REFERENCIA PEDIDO:', 140, 57);
+        doc.setFontSize(12);
+        doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.text(order.id || 'N/A', 140, 65);
+
+        // 5. Items Table (No SKU, centered/right aligned columns)
+        const tableColumn = ["DESCRIPCIÓN", "CANTIDAD", "VALOR UNIT.", "TOTAL"];
         const tableRows = (order.items || []).map(item => [
-            item.sku || item.id || 'N/A',
-            item.name,
+            item.name?.toUpperCase(),
             item.quantity,
             `$${(item.price || 0).toLocaleString()}`,
             `$${((item.price || 0) * (item.quantity || 0)).toLocaleString()}`
         ]);
 
         autoTable(doc, {
-            startY: 80,
+            startY: 95,
             head: [tableColumn],
             body: tableRows,
-            theme: 'striped',
-            headStyles: { fillColor: [26, 54, 54] },
+            theme: 'grid',
+            styles: { fontSize: 8.5, cellPadding: 4, textColor: [30, 41, 59] },
+            headStyles: { fillColor: primaryColor, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
+            columnStyles: {
+                0: { cellWidth: 'auto' },
+                1: { halign: 'center', cellWidth: 30 },
+                2: { halign: 'right', cellWidth: 35 },
+                3: { halign: 'right', cellWidth: 35 }
+            },
+            alternateRowStyles: { fillColor: [248, 250, 252] },
             margin: { left: 14, right: 14 }
         });
 
+        // 6. Totals & Tax Detail
         const subtotal = order.amount || 0;
+        const shippingCost = order.shipping_cost || 0;
         const iva = subtotal * 0.19;
-        const total = subtotal + iva;
+        const total = subtotal + iva + shippingCost;
 
-        let finalY = (doc).lastAutoTable.finalY + 15;
-        const labelX = 140;
+        let finalY = (doc).lastAutoTable.finalY + 12;
+        const labelX = 145;
         const valueX = 196;
 
-        doc.setFontSize(10);
-        doc.text(`Subtotal:`, labelX, finalY);
+        doc.setFontSize(9);
+        doc.setTextColor(100, 116, 139);
+        doc.text(`Subtotal:`, labelX, finalY, { align: 'right' });
+        doc.setTextColor(51, 65, 85);
         doc.text(`$${subtotal.toLocaleString()}`, valueX, finalY, { align: 'right' });
 
-        finalY += 8;
-        doc.text(`IVA (19%):`, labelX, finalY);
+        if (shippingCost > 0) {
+            finalY += 7;
+            doc.setTextColor(100, 116, 139);
+            doc.text(`Envío:`, labelX, finalY, { align: 'right' });
+            doc.setTextColor(51, 65, 85);
+            doc.text(`$${shippingCost.toLocaleString()}`, valueX, finalY, { align: 'right' });
+        }
+
+        finalY += 7;
+        doc.setTextColor(100, 116, 139);
+        doc.text(`IVA (19%):`, labelX, finalY, { align: 'right' });
+        doc.setTextColor(51, 65, 85);
         doc.text(`$${iva.toLocaleString()}`, valueX, finalY, { align: 'right' });
 
-        finalY += 10;
+        finalY += 12;
+        // Clean Total View (No background box, just Bold & High contrast)
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(12);
-        doc.text(`TOTAL FACTURA:`, labelX, finalY);
+        doc.setFontSize(13);
+        doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.text(`TOTAL FACTURA:`, labelX, finalY, { align: 'right' });
         doc.text(`$${total.toLocaleString()}`, valueX, finalY, { align: 'right' });
 
-        doc.setFontSize(8);
+        // Footer Legal
+        doc.setFontSize(7);
+        doc.setTextColor(148, 163, 184);
         doc.setFont('helvetica', 'italic');
         doc.text('Esta factura se asimila en todos sus efectos a una letra de cambio según el Art. 774 del Código de Comercio.', 105, 280, { align: 'center' });
 
         doc.save(`Factura_${invNum}_${order.client}.pdf`);
 
-        // Update in Firestore
+        // Update in Firestore with link table logic (Metadata on order)
         await updateOrder(order.dbId, {
             invoice_number: invNum,
+            invoice_date: new Date().toISOString(),
             status: 'Facturado'
         });
 
@@ -173,7 +237,7 @@ const Shipping = () => {
         doc.setFontSize(10);
         doc.text('REMITENTE:', 10, 25);
         doc.setFont('helvetica', 'normal');
-        doc.text(zeticasInfo.address, 10, 30);
+        doc.text(ownCompany?.address || 'Guasca', 10, 30);
 
         doc.line(10, 35, 140, 35);
 
@@ -263,17 +327,15 @@ const Shipping = () => {
         };
 
         filteredOrders.forEach(o => {
-            if (o.dispatchedAt) stats.despachados++;
+            if (o.dispatchedAt || o.status === 'Despachado') stats.despachados++;
 
-            const isAvail = checkAvailability(o.items || []);
+            const isAvail = getStockFulfillment(o.items || []) >= 100;
             if (isAvail) stats.disponibles++;
             else stats.noDisponibles++;
 
-            if (o.invoiceNum) {
-                // Assuming invoice date was date order was moved to this module
-                const days = Math.ceil(Math.abs(new Date() - new Date(o.date)) / (1000 * 60 * 60 * 24));
-                stats.times.push(days);
-            }
+            // Calculate Lead Time for all active orders in this module
+            const days = Math.ceil(Math.abs(new Date() - new Date(o.date)) / (1000 * 60 * 60 * 24));
+            stats.times.push(days);
         });
 
         const avg = stats.times.length > 0 ? (stats.times.reduce((a, b) => a + b, 0) / stats.times.length).toFixed(1) : 0;
@@ -281,7 +343,7 @@ const Shipping = () => {
         const min = stats.times.length > 0 ? Math.min(...stats.times) : 0;
 
         return { ...stats, avg, max, min };
-    }, [filteredOrders, checkAvailability]);
+    }, [filteredOrders, getStockFulfillment]);
 
     // Premium Style Constants
     const deepTeal = "#025357";
@@ -506,7 +568,7 @@ const Shipping = () => {
                                 </td>
                             </tr>
                         ) : filteredOrders.map(order => {
-                            const isAvailable = checkAvailability(order.items || []);
+                            const isAvailable = getStockFulfillment(order.items || []) >= 100;
                             const days = getDaysSince(order.date);
 
                             return (
@@ -521,12 +583,15 @@ const Shipping = () => {
                                     </td>
                                     <td style={{ padding: '1.2rem 1.5rem' }}>
                                         <div style={{ fontSize: '1rem', color: '#1e293b', fontWeight: '900', letterSpacing: '-0.2px' }}>{order.client}</div>
-                                        <div style={{ display: 'flex', gap: '8px', marginTop: '0.3rem' }}>
+                                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '0.3rem' }}>
                                             <span style={{ fontSize: '0.65rem', color: institutionOcre, fontWeight: '900', background: `${institutionOcre}10`, padding: '2px 8px', borderRadius: '6px' }}>
                                                 {order.items?.length || 0} SKUs
                                             </span>
+                                            <span style={{ fontSize: '0.65rem', color: deepTeal, fontWeight: '900', background: 'rgba(2, 100, 110, 0.08)', padding: '2px 8px', borderRadius: '6px' }}>
+                                                {(order.items || []).reduce((acc, i) => acc + (Number(i.quantity) || 0), 0)} Unidades
+                                            </span>
                                             <span style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: '900', background: 'rgba(2, 83, 87, 0.04)', padding: '2px 8px', borderRadius: '6px' }}>
-                                                ${order.amount.toLocaleString()}
+                                                {order.id?.toString().startsWith('WEB-') ? 'WEB' : 'MANUAL'}
                                             </span>
                                         </div>
                                     </td>
@@ -546,23 +611,28 @@ const Shipping = () => {
                                             <div style={{ fontSize: '0.55rem', fontWeight: '900', textTransform: 'uppercase' }}>Días</div>
                                         </div>
                                     </td>
-                                    <td style={{ padding: '1.2rem 1rem', textAlign: 'center' }}>
-                                        <div style={{ 
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '0.4rem',
-                                            color: isAvailable ? '#10b981' : premiumSalmon, 
-                                            fontWeight: '900', 
-                                            fontSize: '0.65rem',
-                                            textTransform: 'uppercase',
-                                            padding: '0.4rem 0.8rem',
-                                            borderRadius: '10px',
-                                            background: isAvailable ? 'rgba(16, 185, 129, 0.05)' : `${premiumSalmon}05`,
-                                            border: `1px solid ${isAvailable ? 'rgba(16, 185, 129, 0.1)' : `${premiumSalmon}15`}`
-                                        }}>
-                                            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: isAvailable ? '#10b981' : premiumSalmon, boxShadow: `0 0 8px ${isAvailable ? '#10b981' : premiumSalmon}` }} />
-                                            {isAvailable ? 'OK' : 'S. Quiebre'}
-                                        </div>
+                                    <td style={{ padding: '1.2rem 1rem', textAlign: 'center', minWidth: '160px' }}>
+                                        {(() => {
+                                            const fulfillment = getStockFulfillment(order.items || []);
+                                            const isDone = fulfillment >= 100;
+                                            return (
+                                                <div style={{ padding: '0 1rem' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.6rem', fontWeight: '900', color: isDone ? '#10b981' : (fulfillment > 0 ? institutionOcre : premiumSalmon) }}>
+                                                        <span>{isDone ? 'LISTO' : (fulfillment > 0 ? 'PARCIAL' : 'SIN STOCK')}</span>
+                                                        <span>{Math.round(fulfillment)}%</span>
+                                                    </div>
+                                                    <div style={{ width: '100%', height: '6px', background: 'rgba(0,0,0,0.05)', borderRadius: '10px', overflow: 'hidden' }}>
+                                                        <div style={{ 
+                                                            width: `${fulfillment}%`, 
+                                                            height: '100%', 
+                                                            background: isDone ? '#10b981' : (fulfillment > 0 ? institutionOcre : premiumSalmon),
+                                                            boxShadow: isDone ? '0 0 10px rgba(16, 185, 129, 0.2)' : 'none',
+                                                            transition: 'width 1s cubic-bezier(0.16, 1, 0.3, 1)'
+                                                        }} />
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
                                     </td>
                                     <td style={{ padding: '1.2rem 1rem', textAlign: 'center' }}>
                                         {order.invoiceNum ? (

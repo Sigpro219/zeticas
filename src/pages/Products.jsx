@@ -570,94 +570,93 @@ const Products = () => {
                                     </div>
                                 </div>
 
-                                {/* FOTOGRAFÍAS - SOPORTE PARA DOS IMÁGENES */}
-                                {formData.category === 'Producto Terminado' && (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                        <div style={{ background: '#f8fafc', padding: '1.2rem', borderRadius: '20px', border: '1px solid #e2e8f0', display: 'flex', gap: '1.2rem', alignItems: 'center' }}>
-                                            <div style={{ 
-                                                width: '80px', 
-                                                height: '80px', 
-                                                borderRadius: '16px', 
-                                                border: '2px dashed #cbd5e1', 
-                                                overflow: 'hidden', 
-                                                background: '#fff', 
-                                                display: 'flex', 
-                                                alignItems: 'center', 
-                                                justifyContent: 'center',
-                                                boxShadow: '0 8px 20px rgba(0,0,0,0.05)',
-                                                flexShrink: 0
-                                            }}>
-                                                {previewUrl || formData.image_url ? (
-                                                    <img src={previewUrl || formData.image_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                ) : (
-                                                    <Image size={24} color="#cbd5e1" />
-                                                )}
-                                            </div>
-                                            <div style={{ flex: 1 }}>
-                                                <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.2rem', display: 'block', textTransform: 'uppercase' }}>Fotografía Principal</label>
-                                                <input type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} id="img-main-upload" />
-                                                <label 
-                                                    htmlFor="img-main-upload" 
-                                                    style={{ 
-                                                        display: 'inline-block',
-                                                        padding: '0.5rem 1rem', 
-                                                        background: '#023636', 
-                                                        color: '#fff', 
-                                                        borderRadius: '10px', 
-                                                        fontSize: '0.65rem', 
-                                                        fontWeight: '800', 
-                                                        cursor: 'pointer',
-                                                        boxShadow: '0 4px 10px rgba(2, 54, 54, 0.2)'
-                                                    }}
-                                                >
-                                                    CAMBIAR IMAGEN 1
-                                                </label>
-                                            </div>
+                                {/* FOTOGRAFÍAS - DISPONIBLES PARA TODO SKU */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                    <div style={{ background: '#f8fafc', padding: '1.2rem', borderRadius: '20px', border: '1px solid #e2e8f0', display: 'flex', gap: '1.2rem', alignItems: 'center' }}>
+                                        <div style={{ 
+                                            width: '80px', 
+                                            height: '80px', 
+                                            borderRadius: '16px', 
+                                            border: '2px dashed #cbd5e1', 
+                                            overflow: 'hidden', 
+                                            background: '#fff', 
+                                            display: 'flex', 
+                                            alignItems: 'center', 
+                                            justifyContent: 'center',
+                                            boxShadow: '0 8px 20px rgba(0,0,0,0.05)',
+                                            flexShrink: 0
+                                        }}>
+                                            {previewUrl || formData.image_url ? (
+                                                <img src={previewUrl || formData.image_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                            ) : (
+                                                <Image size={24} color="#cbd5e1" />
+                                            )}
                                         </div>
-
-                                        <div style={{ background: '#f8fafc', padding: '1.2rem', borderRadius: '20px', border: '1px solid #e2e8f0', display: 'flex', gap: '1.2rem', alignItems: 'center' }}>
-                                            <div style={{ 
-                                                width: '80px', 
-                                                height: '80px', 
-                                                borderRadius: '16px', 
-                                                border: '2px dashed #cbd5e1', 
-                                                overflow: 'hidden', 
-                                                background: '#fff', 
-                                                display: 'flex', 
-                                                alignItems: 'center', 
-                                                justifyContent: 'center',
-                                                boxShadow: '0 8px 20px rgba(0,0,0,0.05)',
-                                                flexShrink: 0
-                                            }}>
-                                                {previewUrl2 || formData.image_url_2 ? (
-                                                    <img src={previewUrl2 || formData.image_url_2} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                ) : (
-                                                    <Image size={24} color="#cbd5e1" />
-                                                )}
-                                            </div>
-                                            <div style={{ flex: 1 }}>
-                                                <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.2rem', display: 'block', textTransform: 'uppercase' }}>Fotografía de Referencia / Uso</label>
-                                                <input type="file" accept="image/*" onChange={handleFileChange2} style={{ display: 'none' }} id="img-secondary-upload" />
-                                                <label 
-                                                    htmlFor="img-secondary-upload" 
-                                                    style={{ 
-                                                        display: 'inline-block',
-                                                        padding: '0.5rem 1rem', 
-                                                        background: '#D4785A', 
-                                                        color: '#fff', 
-                                                        borderRadius: '10px', 
-                                                        fontSize: '0.65rem', 
-                                                        fontWeight: '800', 
-                                                        cursor: 'pointer',
-                                                        boxShadow: '0 4px 10px rgba(212, 120, 90, 0.2)'
-                                                    }}
-                                                >
-                                                    CAMBIAR IMAGEN 2
-                                                </label>
-                                            </div>
+                                        <div style={{ flex: 1 }}>
+                                            <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.2rem', display: 'block', textTransform: 'uppercase' }}>Fotografía Principal</label>
+                                            <input type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} id="img-main-upload" />
+                                            <label 
+                                                htmlFor="img-main-upload" 
+                                                style={{ 
+                                                    display: 'inline-block',
+                                                    padding: '0.5rem 1rem', 
+                                                    background: '#023636', 
+                                                    color: '#fff', 
+                                                    borderRadius: '10px', 
+                                                    fontSize: '0.65rem', 
+                                                    fontWeight: '800', 
+                                                    cursor: 'pointer',
+                                                    boxShadow: '0 4px 10px rgba(2, 54, 54, 0.2)'
+                                                }}
+                                            >
+                                                CAMBIAR IMAGEN 1
+                                            </label>
                                         </div>
                                     </div>
-                                )}
+
+                                    <div style={{ background: '#f8fafc', padding: '1.2rem', borderRadius: '20px', border: '1px solid #e2e8f0', display: 'flex', gap: '1.2rem', alignItems: 'center' }}>
+                                        <div style={{ 
+                                            width: '80px', 
+                                            height: '80px', 
+                                            borderRadius: '16px', 
+                                            border: '2px dashed #cbd5e1', 
+                                            overflow: 'hidden', 
+                                            background: '#fff', 
+                                            display: 'flex', 
+                                            alignItems: 'center', 
+                                            justifyContent: 'center',
+                                            boxShadow: '0 8px 20px rgba(0,0,0,0.05)',
+                                            flexShrink: 0
+                                        }}>
+                                            {previewUrl2 || formData.image_url_2 ? (
+                                                <img src={previewUrl2 || formData.image_url_2} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                            ) : (
+                                                <Image size={24} color="#cbd5e1" />
+                                            )}
+                                        </div>
+                                        <div style={{ flex: 1 }}>
+                                            <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.2rem', display: 'block', textTransform: 'uppercase' }}>Fotografía de Referencia / Uso</label>
+                                            <input type="file" accept="image/*" onChange={handleFileChange2} style={{ display: 'none' }} id="img-secondary-upload" />
+                                            <label 
+                                                htmlFor="img-secondary-upload" 
+                                                style={{ 
+                                                    display: 'inline-block',
+                                                    padding: '0.5rem 1rem', 
+                                                    background: '#D4785A', 
+                                                    color: '#fff', 
+                                                    borderRadius: '10px', 
+                                                    fontSize: '0.65rem', 
+                                                    fontWeight: '800', 
+                                                    cursor: 'pointer',
+                                                    boxShadow: '0 4px 10px rgba(212, 120, 90, 0.2)'
+                                                }}
+                                            >
+                                                CAMBIAR IMAGEN 2
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
 
                                 {formData.category !== 'Producto Terminado' ? (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
@@ -874,6 +873,29 @@ const Products = () => {
                                     </div>
                                 </div>
 
+                                {/* DESCRIPCIÓN Y BENEFICIOS - SIEMPRE VISIBLES */}
+                                <div>
+                                    <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>DESCRIPCIÓN COMERCIAL (TIENDA)</label>
+                                    <textarea
+                                        rows="2"
+                                        placeholder="Ej: Mermelada gourmet..."
+                                        value={formData.description}
+                                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                        style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', outline: 'none', fontFamily: 'inherit', fontSize: '0.85rem' }}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>NOTAS Y BENEFICIOS (TIENDA)</label>
+                                    <textarea
+                                        rows="2"
+                                        placeholder="Ej: Rico en antioxidantes..."
+                                        value={formData.benefits}
+                                        onChange={(e) => setFormData({ ...formData, benefits: e.target.value })}
+                                        style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', outline: 'none', fontFamily: 'inherit', fontSize: '0.85rem' }}
+                                    />
+                                </div>
+
                                 {/* 6. Campos Pro (Producto Terminado) */}
                                 {formData.category === 'Producto Terminado' && (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
@@ -895,27 +917,7 @@ const Products = () => {
                                             </div>
                                         </div>
 
-                                        <div>
-                                            <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>DESCRIPCIÓN COMERCIAL (TIENDA)</label>
-                                            <textarea
-                                                rows="3"
-                                                placeholder="Ej: Mermelada gourmet endulzada con stevia..."
-                                                value={formData.description}
-                                                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                                style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', outline: 'none', fontFamily: 'inherit' }}
-                                            />
-                                        </div>
 
-                                        <div>
-                                            <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>NOTAS Y BENEFICIOS (TIENDA)</label>
-                                            <textarea
-                                                rows="3"
-                                                placeholder="Ej: Rico en antioxidantes, libre de gluten..."
-                                                value={formData.benefits}
-                                                onChange={(e) => setFormData({ ...formData, benefits: e.target.value })}
-                                                style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', outline: 'none', fontFamily: 'inherit' }}
-                                            />
-                                        </div>
 
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f0fdf4', padding: '1rem', borderRadius: '16px', border: '1px solid #bcf0da' }}>
                                             <div>

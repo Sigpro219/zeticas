@@ -3,7 +3,6 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useBusiness } from '../context/BusinessContext';
 import DocumentBuilder from '../components/DocumentBuilder';
-// supabase import removed
 import {
     ShoppingCart,
     Calendar,
@@ -29,15 +28,18 @@ import {
     AlertTriangle,
     CreditCard
 } from 'lucide-react';
+import logo from '../assets/logo.png';
 
 const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, providers }) => {
-    const { orders, setOrders, banks, updateBankBalance, recalculatePTCosts, receivePurchase, payPurchase, ownCompany, addPurchase, refreshData, clients, updateOrder } = useBusiness();
+    const { orders, setOrders, banks, recalculatePTCosts, receivePurchase, payPurchase, ownCompany, addPurchase, refreshData, clients, updateOrder } = useBusiness();
     // Local State for BOM Explosion & OC Generation
     const [viewingOC, setViewingOC] = useState(null); // Modal state for OC
     const [invEntryOC, setInvEntryOC] = useState(null);
     const [paymentModalOC, setPaymentModalOC] = useState(null);
     const [paymentBankId, setPaymentBankId] = useState('');
     const [viewingRelatedOrder, setViewingRelatedOrder] = useState(null);
+    const [receivingItems, setReceivingItems] = useState([]);
+
 
     // Filters and UI State
     const [filterType, setFilterType] = useState('month');
@@ -212,21 +214,28 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
 
     const handleDownloadOCPDF = async (oc) => {
         const doc = new jsPDF();
-        const primaryColor = [2, 54, 54]; // #023636
+        const primaryColor = [2, 54, 54]; // Deep Teal Zeticas
 
-        // 1. Logo "zeticas" in serif
-        doc.setFont('times', 'bold');
-        doc.setFontSize(30);
-        doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-        doc.text('zeticas', 14, 25);
-
-        // 2. Document Title and Number
+        // 1. Header & ID
+        // Official Logo Injection
+        try {
+            doc.addImage(logo, 'PNG', 14, 12, 40, 15);
+        } catch {
+            doc.setFont('times', 'bold');
+            doc.setFontSize(24);
+            doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+            doc.text('zeticas', 14, 22);
+        }
+        
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(10);
+        doc.setFontSize(8);
         doc.setTextColor(100, 116, 139);
-        doc.text(ownCompany.name, 14, 32);
-        doc.text(`NIT: ${ownCompany.nit}`, 14, 36);
-        doc.text(`${ownCompany.city || 'Bogotá D.C.'}, Colombia`, 14, 40);
+        doc.text(ownCompany?.name || 'ZETICAs SAS BIC', 14, 32);
+        doc.text(`NIT: ${ownCompany?.nit || '901.531.875-4'}`, 14, 36);
+        doc.text(ownCompany?.address || 'Guasca', 14, 40);
+        if (ownCompany?.phone || ownCompany?.email) {
+            doc.text(`${ownCompany.phone || ''} ${ownCompany.email ? '| ' + ownCompany.email : ''}`, 14, 44);
+        }
 
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(18);
@@ -287,7 +296,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
         doc.setFontSize(8);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(100, 116, 139);
-        doc.text(`${ownCompany.city || 'Bogotá D.C.'}, Colombia`, 112, 71);
+        doc.text(`${ownCompany.city || 'Guasca'}, Colombia`, 112, 71);
 
         // 4. Items Table
         const tableColumn = ["DESCRIPCIÓN", "CANTIDAD", "V. UNITARIO", "V. TOTAL"];
@@ -321,36 +330,36 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
         });
 
         // 5. Totals
-        const finalY = doc.lastAutoTable?.finalY || 100;
+        const finalYTable = doc.lastAutoTable?.finalY || 100;
         const subtotal = (oc.items || []).reduce((sum, item) => sum + (item.total_cost || ((item.quantity || item.toBuy || 0) * (item.unit_cost || item.purchasePrice || 0))), 0);
         const tax = subtotal * 0.19;
-        const total = subtotal + tax;
+        const totalAmount = subtotal + tax;
 
         const numFormat = (num) => `$${(Number(num)).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 
         doc.setFontSize(9);
         doc.setTextColor(100, 116, 139);
-        doc.text('Subtotal:', 145, finalY + 12, { align: 'right' });
+        doc.text('Subtotal:', 145, finalYTable + 12, { align: 'right' });
         doc.setTextColor(51, 65, 85);
         doc.setFont('helvetica', 'bold');
-        doc.text(numFormat(subtotal), 196, finalY + 12, { align: 'right' });
+        doc.text(numFormat(subtotal), 196, finalYTable + 12, { align: 'right' });
 
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(100, 116, 139);
-        doc.text('IVA (19%):', 145, finalY + 18, { align: 'right' });
+        doc.text('IVA (19%):', 145, finalYTable + 18, { align: 'right' });
         doc.setTextColor(51, 65, 85);
         doc.setFont('helvetica', 'bold');
-        doc.text(numFormat(tax), 196, finalY + 18, { align: 'right' });
+        doc.text(numFormat(tax), 196, finalYTable + 18, { align: 'right' });
 
         // Total badge in PDF
         doc.setFillColor(240, 253, 244); // #f0fdf4 (Light green)
-        doc.roundedRect(125, finalY + 24, 71, 10, 2, 2, 'F');
+        doc.roundedRect(125, finalYTable + 24, 71, 10, 2, 2, 'F');
 
         doc.setFontSize(11);
         doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-        doc.text('TOTAL:', 145, finalY + 30, { align: 'right' });
+        doc.text('TOTAL:', 145, finalYTable + 30, { align: 'right' });
         doc.setFontSize(13);
-        doc.text(numFormat(total), 196, finalY + 30, { align: 'right' });
+        doc.text(numFormat(totalAmount), 196, finalYTable + 30, { align: 'right' });
 
         doc.save(`${oc.id}.pdf`);
     };
@@ -367,13 +376,15 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
 
             // 1. Update Inventory MP (purchases column) AND Cost (Weighted Average)
             const updatedInventory = [...items];
-            oc.items.forEach(ocItem => {
+            receivingItems.forEach(ocItem => {
                 const invItemIndex = updatedInventory.findIndex(i => i.id === ocItem.id || i.name === ocItem.name);
                 if (invItemIndex !== -1) {
                     const item = updatedInventory[invItemIndex];
                     const currentStock = (item.initial || 0) + (item.purchases || 0) - (item.sales || 0);
                     const currentTotalValue = currentStock * (item.avgCost || 0);
-                    const purchaseValue = (ocItem.toBuy || ocItem.quantity || 0) * (ocItem.purchasePrice || ocItem.unit_cost || 0);
+                    
+                    // Priority: Use realPrice (invoice) from the modal input
+                    const purchaseValue = (ocItem.toBuy || ocItem.quantity || 0) * (Number(ocItem.realPrice) || ocItem.purchasePrice || ocItem.unit_cost || 0);
 
                     const newTotalQty = currentStock + (ocItem.toBuy || ocItem.quantity || 0);
                     const newAvgCost = newTotalQty > 0 ? (currentTotalValue + purchaseValue) / newTotalQty : item.avgCost;
@@ -407,7 +418,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
 
             // 4. Persist Inventory & OC changes to Context DB Map
             // Use dbId (Firestore UUID) as primary, fallback to alphanumeric id
-            const res = await receivePurchase(oc.dbId || oc.id, oc.items, refs);
+            const res = await receivePurchase(oc.dbId || oc.id, receivingItems, refs);
             if (!res.success) {
                 console.error("Error persisting receipt:", res.error);
                 alert(`Error técnico: ${res.error}`);
@@ -415,6 +426,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                 setItems(updatedInventory);
                 setPurchaseOrders(updatedOCs);
                 setInvEntryOC(null); // Close modal ONLY on success
+                setReceivingItems([]);
                 await recalculatePTCosts();
                 alert(`✅ ¡Ingreso exitoso! Las materias primas de la OC ${oc.id} han sumado a la columna 'Compras' actualizando tu saldo final.`);
             }
@@ -424,6 +436,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
             alert(`Ocurrió un error inesperado: ${err.message}`);
         }
     };
+
 
     const handlePaymentOC = async () => {
         if (!paymentBankId) {
@@ -809,7 +822,14 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                             </div>
                                         ) : (
                                             <button
-                                                onClick={(e) => { e.stopPropagation(); setInvEntryOC(oc); }}
+                                                onClick={(e) => { 
+                                                    e.stopPropagation(); 
+                                                    setInvEntryOC(oc); 
+                                                    setReceivingItems(oc.items.map(i => ({ 
+                                                        ...i, 
+                                                        realPrice: i.purchasePrice || i.unit_cost || 0 
+                                                    })));
+                                                }}
                                                 style={{
                                                     background: '#fff', border: '1px solid #e2e8f0', padding: '0.6rem 1rem', borderRadius: '10px',
                                                     fontSize: '0.75rem', fontWeight: 'bold', color: '#475569', cursor: 'pointer', transition: '0.2s'
@@ -1419,42 +1439,102 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                     padding: '2rem', animation: 'fadeIn 0.3s'
                 }}>
                     <div style={{
-                        background: '#fff', padding: '2.5rem', borderRadius: '32px', width: '550px',
-                        boxShadow: '0 30px 60px rgba(0,0,0,0.2)', position: 'relative'
+                        background: '#fff', padding: '2.5rem', borderRadius: '32px', width: '700px',
+                        boxShadow: '0 30px 60px rgba(0,0,0,0.2)', position: 'relative',
+                        border: '1px solid rgba(255,255,255,0.2)'
                     }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', color: '#16a34a' }}>
-                                <Package size={24} />
-                                <h3 style={{ margin: 0, fontSize: '1.4rem', fontWeight: '900' }}>Ingreso de Materias Primas</h3>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', color: '#16a34a' }}>
+                                <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(22, 163, 74, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Package size={26} />
+                                </div>
+                                <div>
+                                    <h3 style={{ margin: 0, fontSize: '1.4rem', fontWeight: '900', color: '#1e293b' }}>Ingreso de Materias Primas</h3>
+                                    <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b', fontWeight: '600' }}>Confirmación técnica de recepción</p>
+                                </div>
                             </div>
-                            <button onClick={() => setInvEntryOC(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={24} /></button>
+                            <button onClick={() => setInvEntryOC(null)} style={{ border: 'none', background: '#f1f5f9', width: '36px', height: '36px', borderRadius: '50%', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={20} /></button>
                         </div>
 
-                        <p style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-                            Confirma la recepción física de los siguientes insumos de la <strong>OC {invEntryOC.id}</strong> para que ingresen al inventario:
+                        <p style={{ color: '#475569', fontSize: '0.9rem', marginBottom: '1.5rem', lineHeight: '1.5' }}>
+                            Confirma la recepción física para la <strong>{invEntryOC.id}</strong>. Si el precio de factura varió respecto al cotizado, ajústalo para mantener el costo de inventario preciso.
                         </p>
 
-                        <div style={{ maxHeight: '300px', overflowY: 'auto', background: '#f8fafc', borderRadius: '16px', padding: '1.2rem', marginBottom: '2rem' }}>
-                            {invEntryOC.items.map((item, i) => (
-                                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.8rem 0', borderBottom: i === invEntryOC.items.length - 1 ? 'none' : '1px solid #e2e8f0' }}>
-                                    <div style={{ fontWeight: '700', fontSize: '0.9rem', color: '#1e293b' }}>{item.name}</div>
-                                    <div style={{ fontWeight: '900', color: '#023636' }}>{item.toBuy || item.quantity} <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{item.unit}</span></div>
-                                </div>
-                            ))}
+                        <div style={{ maxHeight: '400px', overflowY: 'auto', background: '#f8fafc', borderRadius: '24px', padding: '1.5rem', marginBottom: '2rem', border: '1px solid #f1f5f9' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <thead>
+                                    <tr>
+                                        <th style={{ textAlign: 'left', fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', paddingBottom: '1rem' }}>Insumo</th>
+                                        <th style={{ textAlign: 'center', fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', paddingBottom: '1rem' }}>Cant.</th>
+                                        <th style={{ textAlign: 'right', fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', paddingBottom: '1rem' }}>Precio OC</th>
+                                        <th style={{ textAlign: 'right', fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', paddingBottom: '1rem' }}>Precio Factura</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {receivingItems.map((item, i) => (
+                                        <tr key={i} style={{ borderBottom: i === receivingItems.length - 1 ? 'none' : '1px solid #f1f5f9' }}>
+                                            <td style={{ padding: '1rem 0' }}>
+                                                <div style={{ fontWeight: '800', fontSize: '0.95rem', color: '#1e293b' }}>{item.name}</div>
+                                                <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '700' }}>SKU: {item.id?.split('-')[0] || '---'}</div>
+                                            </td>
+                                            <td style={{ textAlign: 'center', padding: '1rem 0' }}>
+                                                <div style={{ fontWeight: '900', color: '#023636', fontSize: '1rem' }}>
+                                                    {item.toBuy || item.quantity} <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{item.unit}</span>
+                                                </div>
+                                            </td>
+                                            <td style={{ textAlign: 'right', padding: '1rem 0', color: '#64748b', fontWeight: '700', fontSize: '0.9rem' }}>
+                                                ${(item.purchasePrice || item.unit_cost || 0).toLocaleString()}
+                                            </td>
+                                            <td style={{ textAlign: 'right', padding: '1rem 0' }}>
+                                                <div style={{ position: 'relative', width: '120px', marginLeft: 'auto' }}>
+                                                    <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.8rem', color: '#16a34a', fontWeight: '900' }}>$</span>
+                                                    <input 
+                                                        type="number"
+                                                        value={item.realPrice}
+                                                        onChange={(e) => {
+                                                            const newPrice = parseFloat(e.target.value) || 0;
+                                                            setReceivingItems(prev => prev.map((it, idx) => idx === i ? { ...it, realPrice: newPrice } : it));
+                                                        }}
+                                                        style={{
+                                                            width: '100%',
+                                                            padding: '0.6rem 0.6rem 0.6rem 1.8rem',
+                                                            borderRadius: '10px',
+                                                            border: '2px solid #e2e8f0',
+                                                            background: item.realPrice !== (item.purchasePrice || item.unit_cost) ? '#fff7ed' : '#fff',
+                                                            borderColor: item.realPrice !== (item.purchasePrice || item.unit_cost) ? '#fdba74' : '#e2e8f0',
+                                                            textAlign: 'right',
+                                                            fontWeight: '900',
+                                                            color: '#1e293b',
+                                                            fontSize: '0.95rem',
+                                                            outline: 'none'
+                                                        }}
+                                                    />
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
 
-                        <button
-                            onClick={() => handleReceiveOC(invEntryOC.id)}
-                            style={{
-                                width: '100%', padding: '1.2rem', background: '#16a34a', color: '#fff', border: 'none', borderRadius: '16px',
-                                fontWeight: '900', fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.8rem'
-                            }}
-                        >
-                            <Save size={20} /> INGRESO MP A INV.
-                        </button>
+                        <div style={{ display: 'flex', justifyContent: 'center' }}>
+                            <button
+                                onClick={() => handleReceiveOC(invEntryOC.id)}
+                                style={{
+                                    width: '100%', padding: '1.2rem', background: '#D4785A', color: '#fff', border: 'none', borderRadius: '16px',
+                                    fontWeight: '900', fontSize: '1.1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.8rem',
+                                    boxShadow: '0 10px 25px rgba(212, 120, 90, 0.25)', transition: '0.4s', textTransform: 'uppercase', letterSpacing: '0.5px'
+                                }}
+                                onMouseEnter={(e) => { e.target.style.transform = 'translateY(-2px)'; e.target.style.boxShadow = '0 15px 35px rgba(212, 120, 90, 0.4)'; e.target.style.background = '#e2886a'; }}
+                                onMouseLeave={(e) => { e.target.style.transform = 'translateY(0)'; e.target.style.boxShadow = '0 10px 25px rgba(212, 120, 90, 0.25)'; e.target.style.background = '#D4785A'; }}
+                            >
+                                <CheckCircle size={24} /> INGRESO DE MATERIA PRIMA A INVENTARIO
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
+
 
             {/* Related Order Detail Modal — SAME DESIGN AS SALES MODULE */}
             {viewingRelatedOrder && (

@@ -161,6 +161,16 @@ export const BusinessProvider = ({ children }) => {
         // but we'll keep it for bulk loads or initial state.
     }, []);
 
+    const enrichedOrders = useMemo(() => {
+        return orders.map(o => {
+            if ((!o.client || o.client === 'Sin Cliente') && o.client_id) {
+                const clientObj = clients.find(c => c.id === o.client_id || c.nit === o.client_id);
+                if (clientObj) return { ...o, client: clientObj.name };
+            }
+            return { ...o, client: o.client || 'Sin Cliente' };
+        });
+    }, [orders, clients]);
+
     useEffect(() => {
         setLoading(true);
 
@@ -365,6 +375,52 @@ export const BusinessProvider = ({ children }) => {
             unsubBankTrans();
         };
     }, [updateSyncTime]);
+
+    // ── MOTOR DE RECONCILIACIÓN DE ODPS (Semáforo Industrial) ──
+    useEffect(() => {
+        if (!loading && items.length > 0) {
+            console.log("🏭 [ODP Engine] Monitor de Semáforo Industrial Activo...");
+            
+            // 1. Obtener SKUs con producción activa para no duplicar
+            const activeProductionSKUs = (productionOrders || [])
+                .filter(po => po.status !== 'DONE' && !po.completed_at)
+                .map(po => po.sku.toLowerCase().trim());
+            
+            for (const product of items) {
+                const pName = (product.name || '').toLowerCase().trim();
+                const currentStock = (product.initial || 0) + (product.purchases || 0) - (product.sales || 0);
+                const safetyStock = Number(product.safety) || 0;
+                const batchSize = Number(product.batch_size) || 1;
+                
+                // LÓGICA DE SEMÁFORO:
+                // Zona Roja: Stock <= 50% del Stock de Seguridad
+                const redZoneLimit = safetyStock / 2;
+                
+                if (currentStock <= redZoneLimit && !activeProductionSKUs.includes(pName)) {
+                    // Solo disparar si tenemos una receta configurada
+                    const hasRecipe = recipes[product.name]?.length > 0 || recipes[product.id]?.length > 0;
+                    
+                    if (hasRecipe) {
+                        const odpId = `ODP-SYS-${Math.floor(Date.now() / 1000).toString().slice(-4)}`;
+                        console.log(`🚨 [ZONA ROJA] ${product.name} (Stock: ${currentStock} <= ${redZoneLimit}). Inyectando 1 Lote (${batchSize}).`);
+                        
+                        addDoc(collection(db, 'production_orders'), {
+                            odp_number: odpId,
+                            sku: product.name,
+                            qty: batchSize, // Siempre 1 lote completo como pidió el usuario
+                            status: 'PENDING',
+                            created_at: new Date().toISOString(),
+                            started_at: null,
+                            completed_at: null,
+                            inventorySynced: false
+                        }).catch(e => console.error("❌ Error Firestore ODP Auto:", e));
+                    } else {
+                        console.warn(`⚠️ [ODP Engine] ${product.name} en Zona Roja, pero no tiene receta configurada.`);
+                    }
+                }
+            }
+        }
+    }, [loading, items, productionOrders, recipes]);
 
     const addClient = useCallback(async (clientData) => {
         try {
@@ -1028,15 +1084,6 @@ export const BusinessProvider = ({ children }) => {
         };
     }, [providers, clients]);
 
-    const enrichedOrders = useMemo(() => {
-        return orders.map(o => {
-            if ((!o.client || o.client === 'Sin Cliente') && o.client_id) {
-                const clientObj = clients.find(c => c.id === o.client_id || c.nit === o.client_id);
-                if (clientObj) return { ...o, client: clientObj.name };
-            }
-            return { ...o, client: o.client || 'Sin Cliente' };
-        });
-    }, [orders, clients]);
 
     const value = useMemo(() => ({
         loading, items, recipes, providers, orders: enrichedOrders, expenses, purchaseOrders, banks, bankTransactions, taxSettings, clients, siteContent, lastUpdate, lastPublish: buildInfo.lastPublish, productionOrders, users, units, unitConversions, ownCompany, leads, quotations,

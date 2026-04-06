@@ -77,9 +77,20 @@ const Checkout = () => {
     const shippingCost = getShippingCost();
     const finalTotal = cartTotal + shippingCost;
     const missingForFree = Math.max(0, shipSettings.threshold_free - cartTotal);
-    const isFormValid = formData.nombreCompleto.trim() && formData.direccion.trim() && formData.ciudad.trim() && formData.telefono.trim();
 
-    const handleBoldCheckout = async () => {
+    // Validaciones estrictas
+    const isCityValid = colombia_cities.some(c => c.city.toLowerCase() === formData.ciudad.toLowerCase().trim());
+    const cleanPhone = formData.telefono.replace(/\D/g, '');
+    const isPhoneValid = cleanPhone.length === 10 && cleanPhone.startsWith('3');
+
+    const isFormValid = (
+        formData.nombreCompleto.trim().length > 3 && 
+        formData.direccion.trim().length > 5 && 
+        isCityValid && 
+        isPhoneValid
+    );
+
+    const handleBoldCheckout = useCallback(async () => {
         const isSandbox = shipSettings.bold_mode === 'sandbox';
         const apiKey = isSandbox ? shipSettings.bold_sandbox_identity : shipSettings.bold_prod_identity;
         const secretKey = isSandbox ? shipSettings.bold_sandbox_secret : shipSettings.bold_prod_secret;
@@ -147,7 +158,8 @@ const Checkout = () => {
             console.error("Error al abrir Bold Checkout", err);
             alert("Hubo un error al conectar con la pasarela de pago.");
         }
-    };
+    }, [shipSettings, finalTotal, formData, cart, cartTotal, shippingCost, saveWebCheckout]);
+
 
     const handleSuccess = useCallback(async (chkID = null) => {
         let draft = null;
@@ -233,7 +245,7 @@ const Checkout = () => {
             total_amount: finalTotalToUse,
             date: new Date().toISOString().split('T')[0],
             status: 'Pendiente',
-            paymentStatus: 'Pagado',
+            payment_status: 'Pagado',
             source: 'Pagina WEB',
             shipping_address: dataToUse.direccion || "",
             shipping_city: dataToUse.ciudad || "",
@@ -376,7 +388,9 @@ const Checkout = () => {
                                     </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2.5rem' }}>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                            <label style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#888' }}>Ciudad / Municipio</label>
+                                            <label style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#888' }}>
+                                                Ciudad / Municipio {formData.ciudad && !isCityValid && <span style={{ color: '#ef4444', fontSize: '0.65rem' }}>(No encontrada)</span>}
+                                            </label>
                                             <input
                                                 list="cities-list"
                                                 type="text"
@@ -384,7 +398,13 @@ const Checkout = () => {
                                                 value={formData.ciudad}
                                                 onChange={e => setFormData({ ...formData, ciudad: e.target.value })}
                                                 placeholder="Ej: Bogotá, Guasca..."
-                                                style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '4px', color: '#334155', fontWeight: 'bold' }}
+                                                style={{ 
+                                                    padding: '0.8rem', 
+                                                    border: `1px solid ${formData.ciudad ? (isCityValid ? '#10b981' : '#ef4444') : '#ddd'}`, 
+                                                    borderRadius: '4px', 
+                                                    color: '#334155', 
+                                                    fontWeight: 'bold' 
+                                                }}
                                             />
                                             <datalist id="cities-list">
                                                 {colombia_cities.map((c, i) => (
@@ -393,8 +413,22 @@ const Checkout = () => {
                                             </datalist>
                                         </div>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                            <label style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#888' }}>Teléfono</label>
-                                            <input type="tel" required value={formData.telefono} onChange={e => setFormData({ ...formData, telefono: e.target.value })} placeholder="310 000 0000" style={{ padding: '0.8rem', border: '1px solid #ddd', borderRadius: '4px' }} />
+                                            <label style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#888' }}>
+                                                Teléfono {formData.telefono && !isPhoneValid && <span style={{ color: '#ef4444', fontSize: '0.65rem' }}>(10 dígitos inicia en 3)</span>}
+                                            </label>
+                                            <input 
+                                                type="tel" 
+                                                required 
+                                                value={formData.telefono} 
+                                                onChange={e => setFormData({ ...formData, telefono: e.target.value })} 
+                                                placeholder="310 000 0000" 
+                                                style={{ 
+                                                    padding: '0.8rem', 
+                                                    border: `1px solid ${formData.telefono ? (isPhoneValid ? '#10b981' : '#ef4444') : '#ddd'}`, 
+                                                    borderRadius: '4px',
+                                                    fontWeight: 'bold'
+                                                }} 
+                                            />
                                         </div>
                                     </div>
 
@@ -429,15 +463,15 @@ const Checkout = () => {
                                             </div>
                                             <div>
                                                 <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#1e293b' }}>
-                                                    {formData.ciudad || 'Selecciona ciudad'}
+                                                    {isCityValid ? formData.ciudad : 'Selecciona ciudad'}
                                                 </div>
                                                 <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '600' }}>
-                                                    {shippingCost === 0 ? 'Aplica envío gratuito por monto' : 'Entrega nacional garantizada'}
+                                                    {isCityValid ? (shippingCost === 0 ? 'Aplica envío gratuito por monto' : 'Entrega nacional garantizada') : 'Ingresa una ciudad válida para calcular envío'}
                                                 </div>
                                             </div>
                                             <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
                                                 <div style={{ fontSize: '1.2rem', fontWeight: '900', color: 'var(--color-primary)' }}>
-                                                    {shippingCost === 0 ? '$0' : `$${shippingCost.toLocaleString('es-CO')}`}
+                                                    {!isCityValid ? '---' : (shippingCost === 0 ? '$0' : `$${shippingCost.toLocaleString('es-CO')}`)}
                                                 </div>
                                             </div>
                                         </div>
@@ -455,7 +489,9 @@ const Checkout = () => {
                                             filter: isFormValid ? 'none' : 'grayscale(1)'
                                         }}
                                     >
-                                        {isFormValid ? 'CONTINUAR AL PAGO' : 'COMPLETA LOS DATOS PARA PAGAR'}
+                                        {!formData.nombreCompleto || !formData.direccion || !formData.ciudad || !formData.telefono ? 'COMPLETA LOS DATOS PARA PAGAR' : 
+                                         (!isCityValid ? 'CIUDAD NO ENCONTRADA' : 
+                                          (!isPhoneValid ? 'TELÉFONO NO VÁLIDO' : 'CONTINUAR AL PAGO'))}
                                     </button>
                                 </div>
                             ) : (

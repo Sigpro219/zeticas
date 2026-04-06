@@ -46,7 +46,9 @@ const Orders = ({ orders }) => {
     const [productSearchTerm, setProductSearchTerm] = useState('');
     const [newOrder, setNewOrder] = useState({
         client: '',
+        clientId: '',
         source: 'Entrada Manual',
+        payment_status: 'Pendiente',
         items: []
     });
 
@@ -199,6 +201,7 @@ const Orders = ({ orders }) => {
                 amount: total,
                 total_amount: total,
                 status: 'Pendiente', // Estatus base para flujo
+                payment_status: newOrder.payment_status || 'Pendiente',
                 date: new Date().toISOString().split('T')[0],
                 created_at: new Date().toISOString()
             });
@@ -206,7 +209,13 @@ const Orders = ({ orders }) => {
             if (res.id) {
                 alert('¡Pedido creado exitosamente!');
                 setIsModalOpen(false);
-                setNewOrder({ client: '', clientId: '', source: 'Entrada Manual', items: [] });
+                setNewOrder({ 
+                    client: '', 
+                    clientId: '', 
+                    source: 'Entrada Manual', 
+                    payment_status: 'Pendiente', 
+                    items: [] 
+                });
                 if (typeof refreshData === 'function') await refreshData();
             }
         } catch (e) {
@@ -678,15 +687,19 @@ const Orders = ({ orders }) => {
     const handleSendAndSavePOs = async () => {
         setIsLoading(true);
         try {
-            // 1. Map selected orders to their Database IDs
+            // 1. Capture current list and clear state immediately to prevent re-runs
+            const listToSave = [...poPreviewList];
+            setPoPreviewList([]);
+            
+            // 2. Map selected orders to their Database IDs
             const selectedDbIds = orders
                 .filter(o => selectedOrders.includes(o.id))
                 .map(o => o.dbId)
                 .filter(Boolean);
 
-            // 2. Persist each Purchase Order - Mandatory Success Check
+            // 3. Persist each Purchase Order - Mandatory Success Check
             let savedCount = 0;
-            for (const po of poPreviewList) {
+            for (const po of listToSave) {
                 const purchaseData = {
                     id: po.id || `OC-ERR-${Date.now()}`,
                     provider_id: po.providerId || 'no-id',
@@ -713,16 +726,15 @@ const Orders = ({ orders }) => {
                 savedCount++;
             }
 
-            // 3. Update related orders status ONLY if POs were saved
+            // 4. Update related orders status ONLY if POs were saved
             for (const dbId of selectedDbIds) {
                 await updateOrder(dbId, { status: 'En Compras' });
             }
 
-            // 4. Success Feedback and state reset
+            // 5. Success Feedback and state reset
             await refreshData();
             setSelectedOrders([]);
             setIsPoModalOpen(false);
-            setPoPreviewList([]);
             setDownloadedIds([]);
             alert(`¡Éxito! Se han generado ${savedCount} órdenes de compra y los pedidos han pasado a "En Compras".`);
 
@@ -734,22 +746,6 @@ const Orders = ({ orders }) => {
         }
     };
 
-    const handleMoveToProduction = async (orderId) => {
-        try {
-            setIsLoading(true);
-            const orderDoc = orders.find(o => o.id === orderId);
-            if (orderDoc?.dbId) {
-                await updateOrder(orderDoc.dbId, { status: 'En Producción' });
-                await refreshData();
-                alert('¡Listo! El pedido ha sido movido exitosamente al tablero de Producción.');
-            }
-        } catch (error) {
-            console.error("Error moving to production:", error);
-            alert("No se pudieron mover los pedidos a producción.");
-        } finally {
-            setIsLoading(false);
-        }
-    };
 
     const handleSendWhatsApp = (po) => {
         const text = `Hola ${po.providerName}, somos ${ownCompany.name}. Adjuntamos nuestra orden de compra ${po.id} por un total de $${(po.total || 0).toLocaleString('es-CO')}. Quedamos atentos a confirmación.`;
@@ -1044,18 +1040,7 @@ const Orders = ({ orders }) => {
 
 
     const deepTeal = "#023636";
-    const getOrdersPerStatus = (status) => {
-        return filteredOrders.filter(o => {
-            const s = (o.status || '').toUpperCase();
-            if (status === 'PEDIDO') return s === 'PENDIENTE' || s === 'PAGADO';
-            if (status === 'COMPRAS') return s === 'EN COMPRAS' || s === 'COMPRAS';
-            if (status === 'PRODUCCIÓN') return s === 'EN PRODUCCIÓN' || s === 'PRODUCCIÓN';
-            if (status === 'DESPACHOS') return s === 'LISTO PARA DESPACHO' || s === 'DESPACHADO' || s === 'POR DESPACHAR';
-            if (status === 'CARTERA') return s === 'CARTERA' || s === 'POR COBRAR';
-            if (status === 'FINALIZADO') return s === 'FINALIZADO' || s === 'ENTREGADO' || s === 'COBRADO';
-            return false;
-        });
-    };
+
     const institutionOcre = "#D4785A";
     const premiumSalmon = "#E29783";
     const glassWhite = "rgba(255, 255, 255, 0.9)";
@@ -1387,48 +1372,52 @@ const Orders = ({ orders }) => {
                                     <td style={{ padding: '1.2rem 1.5rem', fontSize: '0.8rem', color: '#64748b', fontWeight: '700' }}>{order.date}</td>
                                     <td style={{ padding: '1.2rem 1.5rem', textAlign: 'right', fontWeight: '900', color: '#0f172a', fontSize: '1rem' }}>${(order.amount || 0).toLocaleString('es-CO')}</td>
                                     <td style={{ padding: '1.2rem 1.5rem', textAlign: 'center' }}>
-                                        <span style={{
-                                            padding: '6px 14px',
-                                            borderRadius: '12px',
-                                            fontSize: '0.65rem',
-                                            fontWeight: '900',
-                                            letterSpacing: '0.5px',
-                                            whiteSpace: 'nowrap',
-                                            display: 'inline-block',
-                                            background:
-                                                order.status === 'Entregado' || order.status === 'Finalizado' || order.status === 'Cobrado' ? 'rgba(22, 163, 74, 0.1)' :
-                                                    order.status === 'Pagado' || order.status === 'Pendiente' || order.status === 'En Producción' || order.status === 'En Compras' || order.status === 'PENDIENTE' ? 'rgba(214, 189, 152, 0.15)' : 'rgba(2, 83, 87, 0.05)',
-                                            color:
-                                                order.status === 'Entregado' || order.status === 'Finalizado' || order.status === 'Cobrado' ? '#16a34a' :
-                                                    order.status === 'Pagado' || order.status === 'Pendiente' || order.status === 'En Producción' || order.status === 'En Compras' || order.status === 'PENDIENTE' ? '#B8A07E' : deepTeal,
-                                            border: '1px solid currentColor'
-                                        }}>
-                                            {(order.status || 'PENDIENTE').toUpperCase()}
-                                        </span>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
+                                            <span style={{
+                                                padding: '6px 14px',
+                                                borderRadius: '12px',
+                                                fontSize: '0.65rem',
+                                                fontWeight: '900',
+                                                letterSpacing: '0.5px',
+                                                whiteSpace: 'nowrap',
+                                                display: 'inline-block',
+                                                background:
+                                                    order.status === 'Entregado' || order.status === 'Finalizado' || order.status === 'Cobrado' ? 'rgba(22, 163, 74, 0.1)' :
+                                                        order.status === 'Pagado' || order.status === 'Pendiente' || order.status === 'En Producción' || order.status === 'En Compras' || order.status === 'PENDIENTE' ? 'rgba(214, 189, 152, 0.15)' : 'rgba(2, 83, 87, 0.05)',
+                                                color:
+                                                    order.status === 'Entregado' || order.status === 'Finalizado' || order.status === 'Cobrado' ? '#16a34a' :
+                                                        order.status === 'Pagado' || order.status === 'Pendiente' || order.status === 'En Producción' || order.status === 'En Compras' || order.status === 'PENDIENTE' ? '#B8A07E' : deepTeal,
+                                                border: '1px solid currentColor',
+                                                width: '100%',
+                                                textAlign: 'center'
+                                            }}>
+                                                {(order.status || 'PENDIENTE').toUpperCase()}
+                                            </span>
+                                            {/* Payment status micro-badge */}
+                                            {(() => {
+                                                const isWebOrder = order.source === 'Pagina WEB';
+                                                const isPaid = order.payment_status === 'Pagado' || order.paymentStatus === 'Pagado' || isWebOrder;
+                                                const statusLabel = isPaid ? 'PAGADO' : (order.payment_status || order.paymentStatus || 'PENDIENTE').toUpperCase();
+                                                
+                                                return (
+                                                    <span style={{
+                                                        fontSize: '0.6rem',
+                                                        fontWeight: '950',
+                                                        color: isPaid ? '#10b981' : '#f59e0b',
+                                                        textTransform: 'uppercase',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '3px'
+                                                    }}>
+                                                        {isPaid ? <CheckCircle size={10} /> : <AlertCircle size={10} />}
+                                                        {statusLabel}
+                                                    </span>
+                                                );
+                                            })()}
+                                        </div>
                                     </td>
                                     <td style={{ padding: '1.2rem 1.5rem', textAlign: 'center' }}>
                                         <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', alignItems: 'center' }}>
-                                            {order.status === 'En Compras' && (
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); handleMoveToProduction(order.id); }}
-                                                    style={{
-                                                        background: deepTeal,
-                                                        color: '#fff',
-                                                        border: 'none',
-                                                        borderRadius: '8px',
-                                                        padding: '6px 12px',
-                                                        cursor: 'pointer',
-                                                        fontSize: '0.65rem',
-                                                        fontWeight: 'bold',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '0.4rem'
-                                                    }}
-                                                    title="Mover a Producción"
-                                                >
-                                                    <ChefHat size={14} /> PRODUCCIÓN
-                                                </button>
-                                            )}
                                             <button onClick={(e) => { e.stopPropagation(); handleDownloadPDF(order); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#cbd5e1' }} title="Descargar"><Download size={20} /></button>
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); handleDeleteOrder(order.id); }}
@@ -1701,8 +1690,39 @@ const Orders = ({ orders }) => {
                                                 </button>
                                             </div>
                                         )}
-                                    </div>
 
+                                        {/* Payment Status Toggle / Selector */}
+                                        <div style={{ marginTop: '2.5rem' }}>
+                                            <label style={{ display: 'block', fontSize: '0.65rem', fontWeight: '900', color: institutionOcre, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.8rem' }}>Estado del Pago</label>
+                                            <div style={{ display: 'flex', gap: '0.8rem' }}>
+                                                {['Pendiente', 'Pagado'].map(status => (
+                                                    <button
+                                                        key={status}
+                                                        onClick={() => setNewOrder({ ...newOrder, payment_status: status })}
+                                                        style={{
+                                                            flex: 1,
+                                                            padding: '0.8rem',
+                                                            borderRadius: '14px',
+                                                            border: (newOrder.payment_status === status) ? `2px solid ${deepTeal}` : '1px solid #f1f5f9',
+                                                            background: (newOrder.payment_status === status) ? `${deepTeal}08` : '#fff',
+                                                            color: (newOrder.payment_status === status) ? deepTeal : '#94a3b8',
+                                                            fontWeight: '900',
+                                                            fontSize: '0.8rem',
+                                                            cursor: 'pointer',
+                                                            transition: 'all 0.2s',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            gap: '8px'
+                                                        }}
+                                                    >
+                                                        {status === 'Pagado' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                                                        {status.toUpperCase()}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
                                     {/* Products in the order */}
                                     <div>
                                         <label style={{ display: 'block', fontSize: '0.65rem', fontWeight: '900', color: institutionOcre, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '1.2rem' }}>Resumen del Pedido</label>
@@ -1960,10 +1980,10 @@ const Orders = ({ orders }) => {
                                 return (
                                     <button
                                         onClick={handleSendAndSavePOs}
-                                        disabled={!allDownloaded}
+                                        disabled={!allDownloaded || isLoading}
                                         style={{ 
                                             padding: '0.8rem 2.5rem', 
-                                            background: allDownloaded ? deepTeal : '#cbd5e1', 
+                                            background: (allDownloaded && !isLoading) ? deepTeal : '#cbd5e1', 
                                             color: '#fff', 
                                             border: 'none', 
                                             borderRadius: '12px', 
@@ -1971,12 +1991,14 @@ const Orders = ({ orders }) => {
                                             display: 'flex', 
                                             alignItems: 'center', 
                                             gap: '0.5rem', 
-                                            cursor: allDownloaded ? 'pointer' : 'not-allowed',
-                                            boxShadow: allDownloaded ? '0 4px 12px rgba(26,54,54,0.3)' : 'none',
-                                            transition: 'all 0.3s ease'
+                                            cursor: (allDownloaded && !isLoading) ? 'pointer' : 'not-allowed',
+                                            boxShadow: (allDownloaded && !isLoading) ? '0 4px 12px rgba(26,54,54,0.3)' : 'none',
+                                            transition: 'all 0.3s ease',
+                                            opacity: isLoading ? 0.7 : 1
                                         }}
                                     >
-                                        <CheckCircle2 size={18} /> Confirmar y Enviar de Definitivo
+                                        {isLoading ? <RefreshCw size={18} className="spin" /> : <CheckCircle2 size={18} />}
+                                        {isLoading ? 'Guardando...' : 'Confirmar y Enviar de Definitivo'}
                                     </button>
                                 );
                             })()}
@@ -2050,33 +2072,57 @@ const Orders = ({ orders }) => {
                                 </div>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                <select
-                                    value={viewingOrder.status || 'Pendiente'}
-                                    onChange={(e) => setViewingOrder({ ...viewingOrder, status: e.target.value })}
-                                    style={{
-                                        padding: '0.6rem 1rem',
-                                        borderRadius: '10px',
-                                        border: '1px solid #cbd5e1',
-                                        fontSize: '0.8rem',
-                                        fontWeight: '950',
-                                        background: '#fff',
-                                        color: deepTeal,
-                                        cursor: 'pointer',
-                                        outline: 'none'
-                                    }}
-                                >
-                                    {['Pendiente', 'En Compras', 'En Producción', 'Listo para Despacho', 'Despachado', 'Entregado', 'Cancelado'].map(s => (
-                                        <option key={s} value={s}>{s}</option>
-                                    ))}
-                                </select>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    <label style={{ fontSize: '0.6rem', fontWeight: '900', color: '#64748b' }}>PEDIDO</label>
+                                    <select
+                                        value={viewingOrder.status || 'Pendiente'}
+                                        onChange={(e) => setViewingOrder({ ...viewingOrder, status: e.target.value })}
+                                        style={{
+                                            padding: '0.5rem 0.8rem',
+                                            borderRadius: '10px',
+                                            border: '1px solid #cbd5e1',
+                                            fontSize: '0.75rem',
+                                            fontWeight: '950',
+                                            background: '#fff',
+                                            color: deepTeal,
+                                            cursor: 'pointer',
+                                            outline: 'none'
+                                        }}
+                                    >
+                                        {['Pendiente', 'En Compras', 'En Producción', 'Listo para Despacho', 'Despachado', 'Entregado', 'Cancelado'].map(s => (
+                                            <option key={s} value={s}>{s}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    <label style={{ fontSize: '0.6rem', fontWeight: '900', color: '#64748b' }}>PAGO</label>
+                                    <select
+                                        value={viewingOrder.payment_status || viewingOrder.paymentStatus || 'Pendiente'}
+                                        onChange={(e) => setViewingOrder({ ...viewingOrder, payment_status: e.target.value })}
+                                        style={{
+                                            padding: '0.5rem 0.8rem',
+                                            borderRadius: '10px',
+                                            border: `1px solid ${(viewingOrder.payment_status === 'Pagado' || viewingOrder.paymentStatus === 'Pagado' || (viewingOrder.source === 'Pagina WEB' && !viewingOrder.payment_status)) ? '#10b981' : '#f59e0b'}`,
+                                            fontSize: '0.75rem',
+                                            fontWeight: '950',
+                                            background: (viewingOrder.payment_status === 'Pagado' || viewingOrder.paymentStatus === 'Pagado' || (viewingOrder.source === 'Pagina WEB' && !viewingOrder.payment_status)) ? '#f0fdf4' : '#fffbeb',
+                                            color: (viewingOrder.payment_status === 'Pagado' || viewingOrder.paymentStatus === 'Pagado' || (viewingOrder.source === 'Pagina WEB' && !viewingOrder.payment_status)) ? '#166534' : '#92400e',
+                                            cursor: 'pointer',
+                                            outline: 'none'
+                                        }}
+                                    >
+                                        <option value="Pendiente">Pendiente</option>
+                                        <option value="Pagado">Pagado</option>
+                                    </select>
+                                </div>
                                 <button
                                     onClick={handleDeleteViewedOrder}
-                                    style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '0.6rem', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                                    style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '0.6rem', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', marginTop: '14px' }}
                                     title="Eliminar Pedido"
                                 >
                                     <Trash2 size={18} />
                                 </button>
-                                <button onClick={() => setViewingOrder(null)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', padding: '0.6rem', cursor: 'pointer', color: '#64748b', display: 'flex' }}><X size={20} /></button>
+                                <button onClick={() => setViewingOrder(null)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', padding: '0.6rem', cursor: 'pointer', color: '#64748b', display: 'flex', marginTop: '14px' }}><X size={20} /></button>
                             </div>
                         </div>
 
@@ -2346,79 +2392,7 @@ const Orders = ({ orders }) => {
                 </div>
             )}
 
-            {/* Modal for viewing order, confirmation, etc. */}
-            {viewingOrder && (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '2rem' }}>
-                    <div style={{ background: '#fff', width: '100%', maxWidth: '800px', maxHeight: '90vh', borderRadius: '32px', boxShadow: '0 30px 60px rgba(0,0,0,0.4)', display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'scaleUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)' }}>
-                        <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F9FBFA' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                <div style={{ background: '#025357', color: '#fff', padding: '0.6rem', borderRadius: '12px' }}><ShoppingCart size={20} /></div>
-                                <div>
-                                    {(() => {
-                                        const clean = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-                                        const target = clean(viewingOrder.client);
-                                        const match = (clients || []).find(c => {
-                                            const n = clean(c.name);
-                                            return n === target || n.includes(target) || target.includes(n);
-                                        });
 
-                                        const city = viewingOrder.shipping_city || viewingOrder.city || match?.city || 'Ciudad por confirmar';
-                                        const addr = viewingOrder.shipping_address || viewingOrder.address || match?.address || 'Dirección por confirmar';
-                                        const phone = viewingOrder.shipping_phone || viewingOrder.phone || match?.phone || 'Teléfono no registrado';
-
-                                        return (
-                                            <>
-                                                <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#025357', fontWeight: '900' }}>#{viewingOrder.order_number || viewingOrder.id} - {viewingOrder.client}</h3>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '2px' }}>
-                                                    <span style={{ fontSize: '0.7rem', fontWeight: '800', color: '#94a3b8' }}>🗓️ {viewingOrder.date} | Origen: {viewingOrder.source}</span>
-                                                    <div style={{ display: 'flex', gap: '10px', fontSize: '0.72rem', fontWeight: '700', color: '#475569', marginTop: '3px' }}>
-                                                        <span style={{ color: '#025357' }}>📍 {city}</span>
-                                                        <span>🏠 {addr}</span>
-                                                        <span>📞 {phone}</span>
-                                                    </div>
-                                                </div>
-                                            </>
-                                        );
-                                    })()}
-                                </div>
-                            </div>
-                            <button onClick={() => setViewingOrder(null)} style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: '50%', padding: '0.5rem', cursor: 'pointer', color: '#cbd5e1' }}><X size={20} /></button>
-                        </div>
-                        <div style={{ padding: '2rem', overflowY: 'auto', flex: 1 }}>
-                            <label style={{ display: 'block', fontSize: '0.65rem', fontWeight: '900', color: '#b45309', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '1.2rem' }}>Artículos del Pedido</label>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                                {viewingOrder.items.map((item, idx) => (
-                                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '1.2rem', borderRadius: '16px', border: '1px solid #f1f5f9' }}>
-                                        <div>
-                                            <div style={{ fontWeight: '800', color: '#1e293b' }}>{item.name}</div>
-                                            <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '600' }}>Unitario: ${item.price?.toLocaleString()}</div>
-                                        </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem' }}>
-                                            <div style={{ fontWeight: '900', color: '#025357', background: 'rgba(2, 83, 87, 0.05)', padding: '4px 10px', borderRadius: '8px' }}>x{item.quantity}</div>
-                                            <div style={{ fontWeight: '900', color: '#0f172a', width: '100px', textAlign: 'right' }}>${(item.price * item.quantity).toLocaleString()}</div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                            <div style={{ marginTop: '2.5rem', textAlign: 'right' }}>
-                                <span style={{ fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', letterSpacing: '1px' }}>TOTAL CONSOLIDADO</span>
-                                <div style={{ fontSize: '2.5rem', fontWeight: '950', color: '#025357' }}>${(viewingOrder.amount || viewingOrder.items.reduce((s, i) => s + (i.price * i.quantity), 0)).toLocaleString()}</div>
-                            </div>
-                        </div>
-                        <div style={{ padding: '1.5rem 2rem', background: '#F9FBFA', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
-                            <button onClick={() => { handleDownloadPDF(viewingOrder); setViewingOrder(null); }} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '0.8rem 1.8rem', borderRadius: '14px', border: 'none', background: '#b45309', color: '#fff', fontWeight: '900', cursor: 'pointer', fontSize: '0.85rem' }}>
-                                <Download size={18} /> DESCARGAR NOTA
-                            </button>
-                            <div style={{ display: 'flex', gap: '1rem' }}>
-                                <button onClick={() => { handleDeleteOrder(viewingOrder.id); setViewingOrder(null); }} style={{ padding: '0.8rem 1.2rem', borderRadius: '14px', border: '1px solid #fee2e2', background: '#fff', color: '#ef4444', fontWeight: '900', cursor: 'pointer' }}>
-                                    <Trash2 size={18} />
-                                </button>
-                                <button onClick={() => setViewingOrder(null)} style={{ padding: '0.8rem 1.8rem', borderRadius: '14px', border: '1px solid #f1f5f9', background: '#fff', color: '#64748b', fontWeight: '900', cursor: 'pointer' }}>Cerrar</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {/* Explosion Preview Modal — Dashboard & Sorting Unified */}
             {isExplosionModalOpen && (

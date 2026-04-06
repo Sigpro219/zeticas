@@ -1,5 +1,4 @@
-import React from 'react';
-import { Phone, Mail, ShoppingCart, FileText, CheckCircle2, ChevronDown, Briefcase, X, Save } from 'lucide-react';
+import logo from '../assets/logo.png';
 
 const DocumentBuilder = ({ 
     type = 'ORDEN DE COMPRA',
@@ -46,8 +45,8 @@ const DocumentBuilder = ({
                 marginBottom: '1.5rem' 
             }}>
                 <div>
-                    <h1 style={{ margin: 0, fontFamily: 'serif', color: primaryColor, fontSize: '2.5rem', fontWeight: 'bold' }}>zeticas</h1>
-                    <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.5rem' }}>
+                    <img src={logo} alt="Zeticas Logo" style={{ height: '55px', marginBottom: '0.5rem', objectFit: 'contain' }} />
+                    <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
                         <strong>{client.detail1}</strong><br />
                         {client.detail2}<br />
                         {client.address}
@@ -87,41 +86,41 @@ const DocumentBuilder = ({
                 )}
             </div>
 
-            {/* Items Table */}
+            {/* Items Table - Compact Rows */}
             <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '2rem' }}>
                 <thead>
                     <tr style={{ background: primaryColor, color: '#fff', fontSize: '0.8rem' }}>
-                        <th style={{ padding: '0.8rem', textAlign: 'left', fontWeight: '600', borderRadius: '6px 0 0 6px' }}>DESCRIPCIÓN</th>
-                        <th style={{ padding: '0.8rem', textAlign: 'center', fontWeight: '600' }}>CANTIDAD</th>
-                        <th style={{ padding: '0.8rem', textAlign: 'right', fontWeight: '600' }}>V. UNITARIO</th>
-                        <th style={{ padding: '0.8rem', textAlign: 'right', fontWeight: '600', borderRadius: '0 6px 6px 0' }}>V. TOTAL</th>
+                        <th style={{ padding: '0.6rem 0.8rem', textAlign: 'left', fontWeight: '600', borderRadius: '6px 0 0 6px' }}>DESCRIPCIÓN</th>
+                        <th style={{ padding: '0.6rem 0.8rem', textAlign: 'center', fontWeight: '600' }}>CANTIDAD</th>
+                        <th style={{ padding: '0.6rem 0.8rem', textAlign: 'right', fontWeight: '600' }}>V. UNITARIO</th>
+                        <th style={{ padding: '0.6rem 0.8rem', textAlign: 'right', fontWeight: '600', borderRadius: '0 6px 6px 0' }}>V. TOTAL</th>
                     </tr>
                 </thead>
                 <tbody>
                     {items.map((item, idx) => (
-                        <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', fontSize: '0.9rem' }}>
-                            <td style={{ padding: '1rem 0.8rem', color: '#334155', fontWeight: '500' }}>{item.name}</td>
-                            <td style={{ padding: '1rem 0.8rem', textAlign: 'center', color: '#475569' }}>{item.quantity} {item.unit || ''}</td>
-                            <td style={{ padding: '1rem 0.8rem', textAlign: 'right', color: '#475569' }}>${(item.unitCost || 0).toLocaleString('es-CO')}</td>
-                            <td style={{ padding: '1rem 0.8rem', textAlign: 'right', fontWeight: '600', color: '#0f172a' }}>${((item.totalCost) || (item.quantity * item.unitCost) || 0).toLocaleString('es-CO')}</td>
+                        <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', fontSize: '0.85rem' }}>
+                            <td style={{ padding: '0.6rem 0.8rem', color: '#334155', fontWeight: '500' }}>{item.name}</td>
+                            <td style={{ padding: '0.6rem 0.8rem', textAlign: 'center', color: '#475569' }}>{item.quantity} {item.unit || ''}</td>
+                            <td style={{ padding: '0.6rem 0.8rem', textAlign: 'right', color: '#475569' }}>${(item.unitCost || 0).toLocaleString('es-CO')}</td>
+                            <td style={{ padding: '0.6rem 0.8rem', textAlign: 'right', fontWeight: '600', color: '#0f172a' }}>${((item.totalCost) || (item.quantity * item.unitCost) || 0).toLocaleString('es-CO')}</td>
                         </tr>
                     ))}
                 </tbody>
                 <tfoot>
                     <tr>
                         <td colSpan="2"></td>
-                        <td style={{ padding: '1rem 0.8rem', textAlign: 'right', fontSize: '0.85rem', color: '#64748b' }}>Subtotal:</td>
-                        <td style={{ padding: '1rem 0.8rem', textAlign: 'right', fontWeight: '600', color: '#334155' }}>${(totals.subtotal || 0).toLocaleString('es-CO')}</td>
+                        <td style={{ padding: '0.6rem 0.8rem', textAlign: 'right', fontSize: '0.8rem', color: '#64748b' }}>Subtotal:</td>
+                        <td style={{ padding: '0.6rem 0.8rem', textAlign: 'right', fontWeight: '600', color: '#334155' }}>${(totals.subtotal || 0).toLocaleString('es-CO')}</td>
                     </tr>
                     <tr>
                         <td colSpan="2"></td>
-                        <td style={{ padding: '0.5rem 0.8rem', textAlign: 'right', fontSize: '0.85rem', color: '#64748b' }}>{totals.taxLabel}:</td>
-                        <td style={{ padding: '0.5rem 0.8rem', textAlign: 'right', fontWeight: '600', color: '#334155' }}>${(totals.taxValue || 0).toLocaleString('es-CO')}</td>
+                        <td style={{ padding: '0.4rem 0.8rem', textAlign: 'right', fontSize: '0.8rem', color: '#64748b' }}>{totals.taxLabel}:</td>
+                        <td style={{ padding: '0.4rem 0.8rem', textAlign: 'right', fontWeight: '600', color: '#334155' }}>${(totals.taxValue || 0).toLocaleString('es-CO')}</td>
                     </tr>
-                    <tr>
+                    <tr style={{ borderTop: `1px solid ${primaryColor}20` }}>
                         <td colSpan="2"></td>
-                        <td style={{ padding: '1rem 0.8rem', textAlign: 'right', fontSize: '1.1rem', fontWeight: '900', color: primaryColor }}>TOTAL:</td>
-                        <td style={{ padding: '1rem 0.8rem', textAlign: 'right', fontSize: '1.3rem', fontWeight: '900', color: primaryColor, background: '#f0fdf4', borderRadius: '4px' }}>${(totals.total || 0).toLocaleString('es-CO')}</td>
+                        <td style={{ padding: '0.8rem 0.8rem', textAlign: 'right', fontSize: '1rem', fontWeight: '900', color: primaryColor }}>TOTAL:</td>
+                        <td style={{ padding: '0.8rem 0.8rem', textAlign: 'right', fontSize: '1.2rem', fontWeight: '900', color: primaryColor, background: '#f0fdf4', borderRadius: '4px' }}>${(totals.total || 0).toLocaleString('es-CO')}</td>
                     </tr>
                 </tfoot>
             </table>

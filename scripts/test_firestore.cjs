@@ -5,26 +5,23 @@ admin.initializeApp({
 const db = admin.firestore();
 
 async function test() {
-  console.log("Checking Firestore for 'recipes' for 'habas-untar'...");
-  const snapshot = await db.collection('recipes').where('finished_good_id', '==', 'habas-untar').get();
+  console.log("--- INICIANDO AUDITORIA DE PRODUCCION (7 PEDIDOS) ---");
+  const snapshot = await db.collection('orders').where('status', 'in', ['En Producción', 'En Producción (Iniciada)', 'En Compras', 'En Compras (OC Generadas)']).get();
+  
   if (snapshot.empty) {
-    console.log("⚠️ No ingredients found for 'habas-untar'.");
+    console.log("⚠️ No se encontraron pedidos en producción.");
   } else {
-    console.log(`✅ Found ${snapshot.size} ingredients for 'habas-untar':`);
+    console.log(`✅ Se encontraron ${snapshot.size} pedidos:`);
     snapshot.docs.forEach(doc => {
       const data = doc.data();
-      console.log(` - ID: ${doc.id}, Name: "${data.raw_material_name}", Qty: ${data.input_qty || data.quantity_required}, Unit: ${data.input_unit || data.unit}`);
+      const id = data.order_number || data.id || doc.id;
+      console.log(`\n📦 Pedido: ${id} | Cliente: ${data.client || data.customer_name || 'Web User'}`);
+      const items = data.items || [];
+      items.forEach(i => {
+        console.log(`  - ${i.name || i.product_name}: ${i.quantity}`);
+      });
     });
   }
-
-  console.log("\nSearching for empty ingredients in 'recipes'...");
-  const allRecipes = await db.collection('recipes').get();
-  allRecipes.docs.forEach(doc => {
-    const data = doc.data();
-    if (!data.raw_material_name || data.raw_material_name.trim() === "") {
-        console.log(`⚠️ EMPTY NAME in doc ${doc.id} (FG: ${data.finished_good_id})`);
-    }
-  });
 }
 
 test().catch(console.error);
