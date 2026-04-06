@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
     X, FileText, ShoppingCart, ChefHat, Truck, 
-    DollarSign, Info, Package, Calendar, LayoutGrid 
+    DollarSign, Info, Package, Calendar, LayoutGrid, CheckCircle 
 } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
 
@@ -28,7 +28,7 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
             label: 'Pedido',
             icon: <FileText size={18} />,
             inProcessStatuses: ['Pendiente'],
-            finishedStatuses: ['En Compras', 'En Compras (OC Generadas)']
+            finishedStatuses: ['En Compras']
         },
         {
             id: 'compras',
@@ -52,17 +52,10 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
             finishedStatuses: ['Entregado']
         },
         {
-            id: 'cartera',
-            label: 'Cartera',
-            icon: <DollarSign size={18} />,
-            inProcessStatuses: ['Entregado'],
-            finishedStatuses: ['Pagado']
-        },
-        {
             id: 'finalizado',
-            label: 'Finalizado',
-            icon: <Package size={18} />,
-            inProcessStatuses: ['Pagado'],
+            label: 'Entregado',
+            icon: <CheckCircle size={18} />,
+            inProcessStatuses: ['Entregado'],
             finishedStatuses: []
         }
     ];
@@ -71,9 +64,13 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
         let inProcess = 0;
         let finished = 0;
         orders.forEach(o => {
-            if (column.inProcessStatuses.includes(o.status)) {
+            const statusLower = (o.status || '').toLowerCase();
+            const inProcessLowers = column.inProcessStatuses.map(s => s.toLowerCase());
+            const finishedLowers = column.finishedStatuses.map(s => s.toLowerCase());
+
+            if (inProcessLowers.includes(statusLower)) {
                 inProcess++;
-            } else if (column.finishedStatuses.includes(o.status)) {
+            } else if (finishedLowers.includes(statusLower)) {
                 finished++;
             }
         });
@@ -158,7 +155,11 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
                                 </div>
                             </div>
                             <div style={{ flex: 1, padding: '0.8rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                {orders.filter(o => col.inProcessStatuses.includes(o.status)).map(order => {
+                                {orders.filter(o => {
+                                    const statusLower = (o.status || '').toLowerCase();
+                                    const inProcessLowers = col.inProcessStatuses.map(s => s.toLowerCase());
+                                    return inProcessLowers.includes(statusLower);
+                                }).map(order => {
                                     // 1. Lógica de Alerta Operativa (Stock y Entrada)
                                     const isNew = order.status === 'Pendiente';
                                     const needsMP = order.status === 'En Compras' || order.status === 'En Producción';

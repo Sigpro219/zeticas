@@ -14,10 +14,14 @@ const KanbanSummary = ({ orders = [], onOpenModal }) => {
         { label: 'Compras', status: 'En Compras', icon: <ShoppingCart size={16} />, color: '#f59e0b' },
         { label: 'Producción', status: 'En Producción', icon: <ChefHat size={16} />, color: premiumSalmon },
         { label: 'Despacho', status: 'Listo para Despacho', icon: <Truck size={16} />, color: '#3b82f6' },
-        { label: 'Cartera', status: 'Entregado', icon: <DollarSign size={16} />, color: '#10b981' }
+        { label: 'Cartera', status: 'Entregado', icon: <DollarSign size={16} />, color: '#10b981' },
+        { label: 'Finalizado', status: 'Pagado', icon: <CheckCircle2 size={16} />, color: '#94a3b8' }
     ];
 
-    const getCountByStatus = (status) => orders.filter(o => o.status === status).length;
+    const getCountByStatus = (status) => {
+        const statusLower = status.toLowerCase();
+        return orders.filter(o => (o.status || '').toLowerCase() === statusLower).length;
+    };
 
     return (
         <div style={{ animation: 'fadeIn 0.3s ease-out', maxWidth: '1000px', margin: '0 auto', paddingBottom: '2rem' }}>

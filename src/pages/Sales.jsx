@@ -61,6 +61,87 @@ const Orders = ({ orders }) => {
     });
     const [confirmText, setConfirmText] = useState('');
 
+    const handleAddProductToOrder = (product) => {
+        const existing = newOrder.items.find(i => i.id === product.id);
+        if (existing) {
+            setNewOrder({
+                ...newOrder,
+                items: newOrder.items.map(i => i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i)
+            });
+        } else {
+            setNewOrder({
+                ...newOrder,
+                items: [...newOrder.items, {
+                    id: product.id,
+                    name: product.name,
+                    price: product.price || 0,
+                    quantity: 1
+                }]
+            });
+        }
+    };
+
+    const handleUpdateQuantity = (id, delta) => {
+        setNewOrder(prev => ({
+            ...prev,
+            items: prev.items.map(i => {
+                if (id === i.id) {
+                    const newQty = Math.max(1, i.quantity + delta);
+                    return { ...i, quantity: newQty };
+                }
+                return i;
+            })
+        }));
+    };
+
+    const handleRemoveItem = (id) => {
+        setNewOrder(prev => ({
+            ...prev,
+            items: prev.items.filter(i => i.id !== id)
+        }));
+    };
+
+    const handleSaveOrder = async () => {
+        if (!newOrder.clientId || newOrder.items.length === 0) {
+            alert('Por favor selecciona un cliente y añade productos.');
+            return;
+        }
+
+        setIsLoading(true);
+        const total = newOrder.items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+        
+        // Generar un ID corto legible para manuales estilo MAN-0000
+        const shortId = Math.floor(1 + Math.random() * 9999);
+        const displayId = `MAN-${String(shortId).padStart(4, '0')}`;
+
+        try {
+            const res = await addDoc(collection(db, 'orders'), {
+                id: displayId, // ID humano estilo Zeticas
+                client: newOrder.client,
+                clientId: newOrder.clientId,
+                source: 'Manual',
+                items: newOrder.items.map(item => ({...item})),
+                amount: total,
+                total_amount: total,
+                status: 'Pendiente', // Estatus base para flujo
+                date: new Date().toISOString().split('T')[0],
+                created_at: new Date().toISOString()
+            });
+
+            if (res.id) {
+                alert('¡Pedido creado exitosamente!');
+                setIsModalOpen(false);
+                setNewOrder({ client: '', clientId: '', source: 'Entrada Manual', items: [] });
+                if (typeof refreshData === 'function') await refreshData();
+            }
+        } catch (e) {
+            console.error("Error saving order:", e);
+            alert("Error al guardar el pedido.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     // Available Products (PT) - Sync with context items
     const availableProducts = useMemo(() => {
         return (items || []).filter(i => i.type === 'product' || i.type === 'PT').map(p => ({
@@ -108,10 +189,12 @@ const Orders = ({ orders }) => {
         }
 
         // Tab Filtering (Pendientes vs Procesados)
+        const terminalStatuses = ['Finalizado', 'Cobrado', 'Entregado', 'Cancelado', 'FINALIZADO', 'COBRADO', 'ENTREGADO', 'CANCELADO'];
+        
         if (viewMode === 'Pending') {
-            return baseFiltered.filter(o => o.status === 'Pendiente' || o.status === 'PENDIENTE');
+            return baseFiltered.filter(o => !terminalStatuses.includes(o.status));
         } else {
-            return baseFiltered.filter(o => o.status !== 'Pendiente' && o.status !== 'PENDIENTE');
+            return baseFiltered.filter(o => terminalStatuses.includes(o.status));
         }
     }, [orders, viewMode, searchTerm, timeRange]);
 
@@ -620,22 +703,6 @@ const Orders = ({ orders }) => {
         }));
     };
 
-    const handleAddProductToOrder = (productId) => {
-        const product = availableProducts.find(p => p.id === productId);
-        const existingItem = newOrder.items.find(i => i.id === productId);
-
-        if (existingItem) {
-            setNewOrder({
-                ...newOrder,
-                items: newOrder.items.map(i => i.id === productId ? { ...i, quantity: i.quantity + 1 } : i)
-            });
-        } else {
-            setNewOrder({
-                ...newOrder,
-                items: [...newOrder.items, { ...product, quantity: 1 }]
-            });
-        }
-    };
 
 
     const handleUpdateViewedOrder = async () => {
@@ -658,37 +725,6 @@ const Orders = ({ orders }) => {
         setViewingOrder(null);
     };
 
-    const handleSaveOrder = async () => {
-        if (!newOrder.client || newOrder.items.length === 0) {
-            alert("Por favor selecciona un cliente y agrega al menos un producto.");
-            return;
-        }
-
-        setIsLoading(true);
-        try {
-            const orderData = {
-                ...newOrder,
-                status: 'Pendiente',
-                date: new Date().toLocaleDateString(),
-                realDate: new Date().toISOString(),
-                source: 'Entrada Manual', // Sello de origen manual
-                amount: newOrder.items.reduce((sum, i) => sum + (i.price * i.quantity), 0)
-            };
-            
-            // Integrar con Firebase directo para asegurar el tag 'Manual'
-            await addDoc(collection(db, 'orders'), orderData);
-            
-            await refreshData();
-            setIsModalOpen(false);
-            setNewOrder({ client: '', clientId: '', items: [], status: 'Pendiente' });
-            alert("¡Pedido manual creado con éxito!");
-        } catch (error) {
-            console.error("Error saving order:", error);
-            alert("Error al guardar el pedido en Firestore.");
-        } finally {
-            setIsLoading(false);
-        }
-    };
 
     const handleDeleteViewedOrder = () => {
         setConfirmModal({
@@ -827,6 +863,18 @@ const Orders = ({ orders }) => {
 
 
     const deepTeal = "#023636";
+    const getOrdersPerStatus = (status) => {
+        return filteredOrders.filter(o => {
+            const s = (o.status || '').toUpperCase();
+            if (status === 'PEDIDO') return s === 'PENDIENTE' || s === 'PAGADO';
+            if (status === 'COMPRAS') return s === 'EN COMPRAS' || s === 'COMPRAS';
+            if (status === 'PRODUCCIÓN') return s === 'EN PRODUCCIÓN' || s === 'PRODUCCIÓN';
+            if (status === 'DESPACHOS') return s === 'LISTO PARA DESPACHO' || s === 'DESPACHADO' || s === 'POR DESPACHAR';
+            if (status === 'CARTERA') return s === 'CARTERA' || s === 'POR COBRAR';
+            if (status === 'FINALIZADO') return s === 'FINALIZADO' || s === 'ENTREGADO' || s === 'COBRADO';
+            return false;
+        });
+    };
     const institutionOcre = "#D4785A";
     const premiumSalmon = "#E29783";
     const glassWhite = "rgba(255, 255, 255, 0.9)";
@@ -976,7 +1024,7 @@ const Orders = ({ orders }) => {
                         borderRadius: '20px', 
                         fontSize: '0.7rem' 
                     }}>
-                        {orders.filter(o => o.status === 'Pendiente' || o.status === 'PENDIENTE').length}
+                        {orders.filter(o => !['Finalizado', 'Cobrado', 'Entregado', 'Cancelado', 'Pagado', 'PAGADO', 'FINALIZADO', 'COBRADO', 'ENTREGADO', 'CANCELADO'].includes(o.status)).length}
                     </span>
                 </button>
                 <button
@@ -1133,7 +1181,9 @@ const Orders = ({ orders }) => {
                                             style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: deepTeal }}
                                         />
                                     </td>
-                                    <td style={{ padding: '1.2rem 0.5rem', textAlign: 'center', fontWeight: '900', fontSize: '0.85rem', color: deepTeal }}>#{order.id}</td>
+                                    <td style={{ padding: '1.2rem 1.5rem', fontSize: '0.8rem', color: '#164e63', fontWeight: '900' }}>
+                                        #{order.id && order.id.length > 15 ? order.id.slice(-8).toUpperCase() : (order.id || (order.dbId ? order.dbId.slice(-6).toUpperCase() : 'N/A'))}
+                                    </td>
                                     <td style={{ padding: '1.2rem 1.5rem' }}>
                                         <div style={{ fontWeight: '800', color: '#1e293b', fontSize: '0.95rem' }}>{order.client}</div>
                                         <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '600', marginTop: '2px' }}>
@@ -1158,11 +1208,11 @@ const Orders = ({ orders }) => {
                                             whiteSpace: 'nowrap',
                                             display: 'inline-block',
                                             background:
-                                                order.status === 'Pagado' || order.status === 'Entregado' ? 'rgba(22, 163, 74, 0.1)' :
-                                                    order.status === 'PENDIENTE' ? 'rgba(214, 189, 152, 0.15)' : 'rgba(2, 83, 87, 0.05)',
+                                                order.status === 'Entregado' || order.status === 'Finalizado' || order.status === 'Cobrado' ? 'rgba(22, 163, 74, 0.1)' :
+                                                    order.status === 'Pagado' || order.status === 'Pendiente' || order.status === 'En Producción' || order.status === 'En Compras' || order.status === 'PENDIENTE' ? 'rgba(214, 189, 152, 0.15)' : 'rgba(2, 83, 87, 0.05)',
                                             color:
-                                                order.status === 'Pagado' || order.status === 'Entregado' ? '#16a34a' :
-                                                    order.status === 'PENDIENTE' ? '#B8A07E' : deepTeal,
+                                                order.status === 'Entregado' || order.status === 'Finalizado' || order.status === 'Cobrado' ? '#16a34a' :
+                                                    order.status === 'Pagado' || order.status === 'Pendiente' || order.status === 'En Producción' || order.status === 'En Compras' || order.status === 'PENDIENTE' ? '#B8A07E' : deepTeal,
                                             border: '1px solid currentColor'
                                         }}>
                                             {(order.status || 'PENDIENTE').toUpperCase()}
@@ -1216,7 +1266,7 @@ const Orders = ({ orders }) => {
                 </div>
             </div>
 
-            {/* Modal for New Order - PT (Producto Terminado) */}
+            {/* Modal for New Order */}
             {isModalOpen && (
                 <div style={{
                     position: 'fixed',
@@ -1232,10 +1282,9 @@ const Orders = ({ orders }) => {
                     <div style={{
                         background: '#fff',
                         width: '100%',
-                        maxWidth: window.innerWidth < 768 ? '100%' : '1000px',
-                        height: window.innerWidth < 768 ? '100%' : 'auto',
-                        maxHeight: window.innerWidth < 768 ? '100%' : '92vh',
-                        borderRadius: window.innerWidth < 768 ? '0' : '40px',
+                        maxWidth: '1100px',
+                        maxHeight: '90vh',
+                        borderRadius: '40px',
                         boxShadow: '0 30px 60px rgba(0, 0, 0, 0.4)',
                         display: 'flex',
                         flexDirection: 'column',
@@ -1244,25 +1293,25 @@ const Orders = ({ orders }) => {
                         position: 'relative'
                     }}>
                         {/* Modal Header */}
-                        <div style={{ padding: '1.5rem 2.5rem', borderBottom: '1px solid rgba(2, 83, 87, 0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F9FBFA' }}>
+                        <div style={{ padding: '1.8rem 2.5rem', borderBottom: '1px solid rgba(2, 83, 87, 0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F9FBFA' }}>
                             <div>
-                                <h3 style={{ margin: 0, fontSize: '1.4rem', color: deepTeal, fontWeight: '900' }}>CREAR NUEVO PEDIDO PT</h3>
-                                <p style={{ margin: '0.2rem 0 0', fontSize: '0.85rem', color: '#64748b', fontWeight: '600' }}>Configura el despacho de Producto Terminado para cliente final.</p>
+                                <h3 style={{ margin: 0, fontSize: '1.4rem', color: deepTeal, fontWeight: '900', textTransform: 'uppercase' }}>CREAR NUEVO PEDIDO</h3>
+                                <p style={{ margin: '0.2rem 0 0', fontSize: '0.85rem', color: '#64748b', fontWeight: '600' }}>Configura el despacho para cliente final de forma rápida.</p>
                             </div>
-                            <button onClick={() => setIsModalOpen(false)} style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: '50%', padding: '0.6rem', cursor: 'pointer', color: '#cbd5e1', display: 'flex', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.color = premiumSalmon} onMouseLeave={e => e.currentTarget.style.color = '#cbd5e1'}><X size={20} /></button>
+                            <button onClick={() => setIsModalOpen(false)} style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: '50%', padding: '0.6rem', cursor: 'pointer', color: '#cbd5e1', display: 'flex' }}><X size={20} /></button>
                         </div>
 
                         {/* Modal Body */}
-                        <div style={{ padding: window.innerWidth < 768 ? '1.5rem' : '2.5rem', overflowY: 'auto', flex: 1 }}>
+                        <div style={{ padding: '2.5rem', overflowY: 'auto', flex: 1 }}>
                             <div style={{
                                 display: 'flex',
                                 flexDirection: window.innerWidth < 768 ? 'column' : 'row',
-                                gap: window.innerWidth < 768 ? '1.5rem' : '3rem'
+                                gap: '3rem'
                             }}>
                                 {/* Left side: Order Info & Items */}
-                                <div style={{ flex: 1.4, animation: 'fadeUp 0.4s ease-out' }}>
+                                <div style={{ flex: 1.4 }}>
                                     <div style={{ marginBottom: '2.5rem' }}>
-                                        <label style={{ display: 'block', fontSize: '0.65rem', fontWeight: '900', color: institutionOcre, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.8rem' }}>Selección de Cliente (Data Maestra)</label>
+                                        <label style={{ display: 'block', fontSize: '0.65rem', fontWeight: '900', color: institutionOcre, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.8rem' }}>Selección de Cliente</label>
                                         <div style={{ position: 'relative' }}>
                                             <Users size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', zIndex: 1 }} />
                                             <select
@@ -1274,85 +1323,57 @@ const Orders = ({ orders }) => {
                                                         setNewOrder({
                                                             ...newOrder,
                                                             client: client.name,
-                                                            clientId: client.id,
-                                                            source: 'Manual'
+                                                            clientId: client.id
                                                         });
-                                                    } else {
-                                                        setNewOrder({ ...newOrder, client: '', clientId: '' });
                                                     }
                                                 }}
-                                                style={{
-                                                    width: '100%',
-                                                    padding: '1.1rem 1rem 1.1rem 3rem',
-                                                    borderRadius: '18px',
-                                                    border: '1px solid #f1f5f9',
-                                                    fontSize: '0.95rem',
-                                                    fontWeight: '800',
-                                                    outline: 'none',
-                                                    background: '#fff',
-                                                    color: '#1e293b',
-                                                    appearance: 'none',
-                                                    cursor: 'pointer',
-                                                    boxShadow: '0 4px 15px rgba(0,0,0,0.02)'
-                                                }}
+                                                style={{ width: '100%', padding: '1.1rem 1rem 1.1rem 3rem', borderRadius: '18px', border: '1px solid #f1f5f9', fontSize: '0.95rem', fontWeight: '800', outline: 'none', background: '#fff', color: '#1e293b', appearance: 'none', cursor: 'pointer' }}
                                             >
-                                                <option value="">Seleccionar cliente del directorio...</option>
-                                                {(clients || [])
-                                                    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-                                                    .map(c => (
-                                                        <option key={c.id} value={c.id}>
-                                                            {c.name} {c.nit ? `(${c.nit})` : ''}
-                                                        </option>
-                                                    ))
-                                                }
+                                                <option value="">Buscar cliente...</option>
+                                                {(clients || []).map(c => <option key={c.id} value={c.id}>{c.name} {c.nit ? `(${c.nit})` : ''}</option>)}
                                             </select>
                                             <ChevronDown size={18} style={{ position: 'absolute', right: '1.2rem', top: '50%', transform: 'translateY(-50%)', color: '#cbd5e1', pointerEvents: 'none' }} />
                                         </div>
                                     </div>
 
                                     {/* Products in the order */}
-                                    <div style={{ marginTop: '2.5rem' }}>
-                                        <label style={{ display: 'block', fontSize: '0.65rem', fontWeight: '900', color: institutionOcre, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '1rem' }}>Productos en el Pedido</label>
-                                        {newOrder.items.length > 0 ? (
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                                                {newOrder.items.map(item => (
-                                                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', padding: '1rem 1.2rem', borderRadius: '16px', border: '1px solid #f1f5f9', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
-                                                        <div style={{ flex: 1 }}>
-                                                            <div style={{ fontWeight: '800', fontSize: '0.9rem', color: '#1e293b' }}>{item.name}</div>
-                                                            <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '600' }}>Precio Unit: <span style={{ color: deepTeal }}>${(item.price || 0).toLocaleString()}</span></div>
-                                                        </div>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                                                            <div style={{
-                                                                background: 'rgba(2, 83, 87, 0.05)',
-                                                                color: deepTeal,
-                                                                padding: '4px 10px',
-                                                                borderRadius: '8px',
-                                                                fontWeight: '900',
-                                                                fontSize: '0.8rem'
-                                                            }}>x{item.quantity}</div>
-                                                            <div style={{ fontWeight: '900', width: '90px', textAlign: 'right', color: '#0f172a', fontSize: '0.95rem' }}>${(((item.price || 0) * (item.quantity || 0)) || 0).toLocaleString()}</div>
-                                                            <button
-                                                                onClick={() => setNewOrder({ ...newOrder, items: newOrder.items.filter(i => i.id !== item.id) })}
-                                                                style={{ border: 'none', background: 'transparent', color: 'rgba(212, 120, 90, 0.4)', cursor: 'pointer', transition: 'all 0.2s' }}
-                                                                onMouseEnter={e => e.currentTarget.style.color = premiumSalmon}
-                                                                onMouseLeave={e => e.currentTarget.style.color = 'rgba(212, 120, 90, 0.4)'}
-                                                            ><Trash2 size={18} /></button>
-                                                        </div>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.65rem', fontWeight: '900', color: institutionOcre, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '1.2rem' }}>Resumen del Pedido</label>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                                            {newOrder.items.length > 0 ? newOrder.items.map(item => (
+                                                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', padding: '1.2rem', borderRadius: '20px', border: '1px solid #f1f5f9', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
+                                                    <div style={{ flex: 1 }}>
+                                                        <div style={{ fontWeight: '850', fontSize: '0.9rem', color: '#1e293b' }}>{item.name}</div>
+                                                        <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '700' }}>Precio: <span style={{ color: deepTeal }}>${(item.price || 0).toLocaleString()}</span></div>
                                                     </div>
-                                                ))}
-                                                <div style={{ marginTop: '1.5rem', borderTop: '2px dashed #f1f5f9', paddingTop: '1.5rem', textAlign: 'right' }}>
-                                                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Total Consolidado</div>
-                                                    <div style={{ fontSize: '2.2rem', fontWeight: '900', color: deepTeal, marginTop: '0.2rem' }}>
-                                                        ${((newOrder.items.reduce((sum, i) => sum + ((i.price || 0) * (i.quantity || 0)), 0)) || 0).toLocaleString()}
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', background: '#f8fafc', borderRadius: '12px', border: '1px solid #f1f5f9', padding: '4px' }}>
+                                                            <button onClick={() => handleUpdateQuantity(item.id, -1)} style={{ border: 'none', background: 'transparent', padding: '4px 12px', cursor: 'pointer', color: '#64748b', fontWeight: '900' }}>-</button>
+                                                            <span style={{ fontSize: '0.85rem', fontWeight: '900', color: deepTeal, minWidth: '20px', textAlign: 'center' }}>{item.quantity}</span>
+                                                            <button onClick={() => handleUpdateQuantity(item.id, 1)} style={{ border: 'none', background: 'transparent', padding: '4px 12px', cursor: 'pointer', color: '#64748b', fontWeight: '900' }}>+</button>
+                                                        </div>
+                                                        <div style={{ fontWeight: '900', width: '90px', textAlign: 'right', color: '#0f172a' }}>${((item.price || 0) * (item.quantity || 0)).toLocaleString()}</div>
+                                                        <button
+                                                            onClick={() => handleRemoveItem(item.id)}
+                                                            style={{ border: 'none', background: 'transparent', color: 'rgba(212, 120, 90, 0.4)', cursor: 'pointer' }}
+                                                        ><Trash2 size={18} /></button>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        ) : (
-                                            <div style={{ textAlign: 'center', padding: '3rem 2rem', background: '#fcfcfc', border: '2px dashed #f1f5f9', borderRadius: '20px', color: '#cbd5e1' }}>
-                                                <ShoppingCart size={40} style={{ opacity: 0.3, marginBottom: '0.8rem' }} />
-                                                <div style={{ fontSize: '0.85rem', fontWeight: '700' }}>El carrito de pedido está vacío</div>
-                                            </div>
-                                        )}
+                                            )) : (
+                                                <div style={{ textAlign: 'center', padding: '3rem 2rem', background: '#fcfcfc', border: '2px dashed #f1f5f9', borderRadius: '20px', color: '#cbd5e1' }}>
+                                                    <ShoppingCart size={40} style={{ opacity: 0.3, marginBottom: '0.8rem' }} />
+                                                    <div style={{ fontSize: '0.85rem', fontWeight: '700' }}>Selector de productos inteligente</div>
+                                                </div>
+                                            )}
+                                            {newOrder.items.length > 0 && (
+                                                <div style={{ marginTop: '1.5rem', borderTop: '2px dashed #f1f5f9', paddingTop: '1.5rem', textAlign: 'right' }}>
+                                                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '900', textTransform: 'uppercase' }}>Total con IVA</div>
+                                                    <div style={{ fontSize: '2.5rem', fontWeight: '900', color: deepTeal, marginTop: '0.2rem' }}>
+                                                        ${(newOrder.items.reduce((sum, i) => sum + (i.price * i.quantity), 0)).toLocaleString()}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 
@@ -1602,7 +1623,7 @@ const Orders = ({ orders }) => {
                                                 )
                                             }}
                                         >
-                                            {['Pendiente', 'En Compras', 'En Producción', 'Listo para Despacho', 'Despachado', 'Pagado', 'Entregado', 'Cancelado'].map(s => (
+                                            {['Pendiente', 'En Compras', 'En Producción', 'Listo para Despacho', 'Despachado', 'Entregado', 'Cancelado'].map(s => (
                                                 <option key={s} value={s}>{s}</option>
                                             ))}
                                         </select>

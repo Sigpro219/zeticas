@@ -232,7 +232,7 @@ const Checkout = () => {
             amount: finalTotalToUse,
             total_amount: finalTotalToUse,
             date: new Date().toISOString().split('T')[0],
-            status: 'Pagado',
+            status: 'Pendiente',
             paymentStatus: 'Pagado',
             source: 'Pagina WEB',
             shipping_address: dataToUse.direccion || "",
