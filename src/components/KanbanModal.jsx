@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { 
     X, FileText, ShoppingCart, ChefHat, Truck, 
     DollarSign, Info, Package, Calendar, LayoutGrid, CheckCircle 
@@ -6,15 +6,12 @@ import {
 import { useBusiness } from '../context/BusinessContext';
 
 const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
-    const { recipes, items: contextItems, updateOrder, refreshData, clients, leads, productionOrders } = useBusiness();
+    const { items: contextItems, clients, leads, productionOrders } = useBusiness();
     const [selectedOrder, setSelectedOrder] = useState(null);
-    const [hoveredOrder, setHoveredOrder] = useState(null);
-    const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
 
     if (!isOpen) return null;
 
     const currentItems = items.length > 0 ? items : contextItems;
-    const allContacts = [...(clients || []), ...(leads || [])];
     const deepTeal = "#025357";
     const institutionOcre = "#D6BD98";
 
@@ -87,7 +84,11 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
                             <div style={{ flex: 1, padding: '0.8rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                 {(() => {
                                     if (col.id === 'produccion') {
-                                        return (productionOrders || []).filter(po => !po.completed_at).map(odp => {
+                                        return (productionOrders || []).filter(po => {
+                                            const status = (po.status?.text || '').toLowerCase().trim();
+                                            // Solo mostrar lo que NO esté finalizado y no tenga fecha de completado
+                                            return status !== 'finalizada' && !po.completed_at;
+                                        }).map(odp => {
                                             const isStarted = !!odp.started_at;
                                             return (
                                                 <div key={odp.dbId || odp.id} style={{ background: '#fff', padding: '1.2rem', borderRadius: '16px', borderLeft: `6px solid ${isStarted ? '#10b981' : '#ef4444'}`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
