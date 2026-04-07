@@ -324,11 +324,10 @@ const Production = () => {
             let matchStatus = false;
             const currentFilter = (statusFilter || '').toLowerCase().trim();
             const odpStatusStr = (odp.status.text || '').toLowerCase().trim();
-            const finalizedStr = STATUS_FINALIZADA.toLowerCase().trim();
 
             if (currentFilter === STATUS_ALL.toLowerCase().trim() || currentFilter === '') {
-                // 'Todos' ahora muestra todo EXCEPTO finalized por instrucción del usuario
-                matchStatus = odpStatusStr !== finalizedStr;
+                // 'Todos' ahora muestra TODO (incluyendo finalizadas) para no ver la tabla vacía al entrar
+                matchStatus = true;
             } else if (currentFilter === 'en marcha') {
                 // Filtro especial para ver todo lo que no ha terminado
                 matchStatus = odpStatusStr !== STATUS_FINALIZADA.toLowerCase().trim();
@@ -784,7 +783,7 @@ const Production = () => {
 
                     {showWasteList && (
                         <div style={{ marginTop: '1.5rem', maxHeight: '180px', overflowY: 'auto', background: 'rgba(2, 54, 54, 0.02)', borderRadius: '12px', padding: '1rem', boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.02)' }}>
-                            {desperdicioStats.rows.map((r, idx) => {
+                            {desperdicioStats.rows.map((r) => {
                                 const isHighWaste = Number(r.avg) > (desperdicioStats.avg || 5);
                                 return (
                                     <div key={r.sku} style={{ 
