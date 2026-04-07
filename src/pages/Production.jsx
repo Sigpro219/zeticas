@@ -545,8 +545,11 @@ const Production = () => {
 
     const handleInventorySync = async (odp) => {
         try {
+            // Calculate NET quantity = Planned - Waste
+            const netQty = Math.max(0, Number(odp.finalQty || 0) - Number(odp.waste || 0));
+
             // 1. Charge Finished Goods to inventory
-            const result = await loadFinishedGoods(odp.sku, Number(odp.finalQty));
+            const result = await loadFinishedGoods(odp.sku, netQty);
             if (result.success) {
                 // 2. Stop timer at the EXACT moment 'Finalizar' was clicked and finalize ODP
                 const newSettings = {
@@ -579,9 +582,9 @@ const Production = () => {
                         let currentStock = inventoryItem ? ((inventoryItem.initial || 0) + (inventoryItem.purchases || 0) - (inventoryItem.sales || 0)) : 0;
                         
                         // If this is the SKU we just finished, it might not be in the context yet
-                        // so we add the new finalQty to the count
+                        // so we add the NEW netQty to the count
                         if (item.name === odp.sku) {
-                            currentStock += Number(odp.finalQty);
+                            currentStock += netQty;
                         }
 
                         totalReady += Math.min(qtyNeeded, Math.max(0, currentStock));
@@ -612,7 +615,7 @@ const Production = () => {
                         alert(`¡Stock Cargado! ${movedCount} pedido(s) han pasado automáticamente a Logística por cumplimiento de inventario al 100%.`);
                     }
                 } else {
-                    alert(`Ingresado a Inventario: ${odp.finalQty} unidades de ${odp.sku}. El pedido sigue en producción esperando componentes adicionales.`);
+                    alert(`Ingresado a Inventario: ${netQty} unidades de ${odp.sku}. El pedido sigue en producción esperando componentes adicionales.`);
                 }
             }
             setConfModal({ show: false, odp: null, endTime: null });
@@ -965,10 +968,11 @@ const Production = () => {
                         </div>
                         <h3 style={{ fontWeight: '900', color: deepTeal, marginBottom: '1.5rem', fontSize: '1.5rem' }}>Finalizar Producción</h3>
                         <p style={{ fontWeight: '700', color: '#64748b', marginBottom: '2.5rem', lineHeight: '1.6' }}>
-                            ¿Autorizas el cargue de <span style={{ color: deepTeal }}>{confModal.odp?.finalQty} unidades</span> de {confModal.odp?.sku}?
+                            ¿Autorizas el cargue de <span style={{ color: deepTeal }}>{Math.max(0, Number(confModal.odp?.finalQty || 0) - Number(confModal.odp?.waste || 0))} unidades</span> de {confModal.odp?.sku}?
                             <br />
                             <span style={{ fontSize: '0.9rem', color: institutionOcre }}>
-                                Se sumarán a las {confModal.odp?.inventoryPT} unidades del inventario inicial para un total de <b>{Number(confModal.odp?.finalQty || 0) + Number(confModal.odp?.inventoryPT || 0)} unidades</b>.
+                                Se sumarán a las {confModal.odp?.inventoryPT} unidades del inventario inicial para un total de <b>{Math.max(0, Number(confModal.odp?.finalQty || 0) - Number(confModal.odp?.waste || 0)) + Number(confModal.odp?.inventoryPT || 0)} unidades</b>.
+                                {Number(confModal.odp?.waste || 0) > 0 && <span style={{ color: '#ef4444', display: 'block', fontSize: '0.75rem', marginTop: '0.5rem' }}>* {confModal.odp?.waste} unidades descontadas automáticamente por desperdicio/daño.</span>}
                             </span>
                         </p>
                         <div style={{ display: 'flex', gap: '1.5rem' }}>
