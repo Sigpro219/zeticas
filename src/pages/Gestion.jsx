@@ -77,7 +77,7 @@ const Gestion = () => {
         banks, setBanks,
         taxSettings, setTaxSettings,
         recipes, providers,
-        lastUpdate, lastPublish
+        lastPublish
     } = useBusiness();
 
     const isMobile = useMediaQuery('(max-width: 1024px)');
@@ -318,7 +318,7 @@ const Gestion = () => {
                     </button>
 
                     {/* Primary Workflow Flows */}
-                    {['orders', 'purchases', 'production', 'shipping'].map(tabId => {
+                    {['orders', 'purchases', 'inventory', 'production', 'shipping'].map(tabId => {
                         const tab = [...valueStreamTabs, ...operationalHubTabs].find(t => t.id === tabId);
                         const themeColor = deepTeal;
 
@@ -349,7 +349,7 @@ const Gestion = () => {
                         );
                     })}
 
-                    {[...operationalHubTabs.filter(t => t.id !== 'production'), ...valueStreamTabs.filter(t => !['kanban', 'orders', 'purchases', 'shipping'].includes(t.id))].map(tab => (
+                    {[...operationalHubTabs.filter(t => !['production', 'inventory'].includes(t.id)), ...valueStreamTabs.filter(t => !['kanban', 'orders', 'purchases', 'shipping'].includes(t.id))].map(tab => (
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}

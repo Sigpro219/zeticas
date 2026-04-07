@@ -8,8 +8,8 @@ import { db } from '../lib/firebase';
 import { collection, addDoc } from 'firebase/firestore';
 import { colombia_cities } from '../data/colombia_cities';
 
-const PROCESSED_STATUSES = ['Finalizado', 'Entregado', 'Cobrado', 'Cancelado', 'FINALIZADO', 'ENTREGADO', 'COBRADO', 'CANCELADO'];
-const PENDING_DISPLAY_STATUSES = ['Pendiente', 'Pagado', 'En Producción', 'En Despacho', 'En Compras', 'PENDIENTE', 'PAGADO'];
+const PENDING_STATUSES = ['Pendiente', 'PENDIENTE'];
+const PROCESSED_AND_ROUTED_STATUSES = ['Facturado', 'En Producción', 'En Despacho', 'En Compras', 'Finalizado', 'Entregado', 'Cobrado', 'Cancelado'];
 
 const Orders = ({ orders }) => {
     useEffect(() => {
@@ -208,7 +208,8 @@ const Orders = ({ orders }) => {
                 status: 'Pendiente', // Estatus base para flujo
                 payment_status: newOrder.payment_status || 'Pendiente',
                 date: new Date().toISOString().split('T')[0],
-                created_at: new Date().toISOString()
+                created_at: new Date().toISOString(),
+                purchase_order: newOrder.purchase_order || null
             });
 
             if (res.id) {
@@ -284,10 +285,12 @@ const Orders = ({ orders }) => {
         }
 
         // Tab Filtering (Final Separation)
+        // Tab Filtering (Final Separation) - STRICT PENDING LOGIC
         if (viewMode === 'Pending') {
-            return baseFiltered.filter(o => !PROCESSED_STATUSES.includes(o.status || 'Pendiente'));
+            return baseFiltered.filter(o => (o.status || 'Pendiente').toLowerCase() === 'pendiente');
         } else {
-            return baseFiltered.filter(o => PROCESSED_STATUSES.includes(o.status || 'Pendiente'));
+            // EVERYTHING ELSE is considered Processed or Routed to other modules
+            return baseFiltered.filter(o => (o.status || 'Pendiente').toLowerCase() !== 'pendiente');
         }
     }, [orders, viewMode, searchTerm, timeRange]);
 
@@ -1229,7 +1232,7 @@ const Orders = ({ orders }) => {
                         borderRadius: '20px', 
                         fontSize: '0.7rem' 
                     }}>
-                        {orders.filter(o => !PROCESSED_STATUSES.includes(o.status || 'Pendiente')).length}
+                        {orders.filter(o => (o.status || 'Pendiente').toLowerCase() === 'pendiente').length}
                     </span>
                 </button>
                 <button
@@ -1458,13 +1461,15 @@ const Orders = ({ orders }) => {
                                     <td style={{ padding: '1.2rem 1.5rem', textAlign: 'center' }}>
                                         <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', alignItems: 'center' }}>
                                             <button onClick={(e) => { e.stopPropagation(); handleDownloadPDF(order); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#cbd5e1' }} title="Descargar"><Download size={20} /></button>
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); handleDeleteOrder(order.id); }}
-                                                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'rgba(212, 120, 90, 0.3)' }}
-                                                title="Eliminar"
-                                            >
-                                                <Trash2 size={20} />
-                                            </button>
+                                            {viewMode === 'Pending' && (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleDeleteOrder(order.id); }}
+                                                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'rgba(212, 120, 90, 0.3)' }}
+                                                    title="Eliminar"
+                                                >
+                                                    <Trash2 size={20} />
+                                                </button>
+                                            )}
                                         </div>
                                     </td>
                                 </tr>
@@ -2051,117 +2056,71 @@ const Orders = ({ orders }) => {
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '2rem' }}>
                     <div style={{ background: '#fff', width: '100%', maxWidth: '800px', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
                         <div style={{ padding: '1.5rem 2rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                <FileText size={24} color={deepTeal} />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                                <FileText size={28} color={deepTeal} />
                                 <div>
+                                    <h3 style={{ margin: 0, color: '#0f172a', fontSize: '1.25rem', fontWeight: '950' }}>#{viewingOrder.order_number || viewingOrder.id} - {viewingOrder.client}</h3>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.85rem', color: '#64748b', fontWeight: '700', marginTop: '0.4rem' }}>
+                                        <span>🗓️ {viewingOrder.date}</span>
+                                        <span>|</span>
+                                        <span>🏢 {viewingOrder.source}</span>
+                                        <span>|</span>
+                                        {(() => {
+                                            const clean = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+                                            const target = clean(viewingOrder.client);
+                                            const match = (clients || []).find(c => clean(c.name) === target);
+                                            return (
+                                                <span style={{ color: match ? '#10b981' : '#94a3b8', fontSize: '0.7rem', fontWeight: '900', textTransform: 'uppercase' }}>
+                                                    {match ? '● CRM Vinculado' : '● Sin Perfil'}
+                                                </span>
+                                            );
+                                        })()}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div style={{ marginBottom: '2rem', padding: '1.2rem', background: '#f8fafc', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                                <div style={{ background: '#fff', padding: '0.6rem', borderRadius: '10px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                                    <Tags size={20} color={deepTeal} />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                    <label style={{ display: 'block', fontSize: '0.65rem', fontWeight: '900', color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>Orden de Compra / Referencia Cliente</label>
+                                    <input 
+                                        type="text" 
+                                        value={viewingOrder.purchase_order || ''} 
+                                        onChange={(e) => setViewingOrder({ ...viewingOrder, purchase_order: e.target.value.toUpperCase() })}
+                                        placeholder="Ingrese el número de OC del cliente..."
+                                        style={{ width: '100%', background: 'transparent', border: 'none', padding: '4px 0', fontSize: '1rem', fontWeight: '900', color: deepTeal, outline: 'none' }}
+                                    />
+                                </div>
+                                {viewingOrder.purchase_order && (
+                                    <div style={{ fontSize: '0.7rem', fontWeight: '900', color: '#10b981', background: '#f0fdf4', padding: '4px 8px', borderRadius: '6px' }}>VINCULADA</div>
+                                )}
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem' }}>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div style={{ fontSize: '0.6rem', fontWeight: '900', color: '#64748b', marginBottom: '4px', textTransform: 'uppercase' }}>Estado Pedido</div>
+                                    <span style={{ padding: '0.4rem 0.8rem', borderRadius: '8px', background: `${deepTeal}15`, color: deepTeal, fontSize: '0.75rem', fontWeight: '950' }}>{(viewingOrder.status || 'Pendiente').toUpperCase()}</span>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div style={{ fontSize: '0.6rem', fontWeight: '900', color: '#64748b', marginBottom: '4px', textTransform: 'uppercase' }}>Estado Pago</div>
                                     {(() => {
-                                        const clean = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-                                        const target = clean(viewingOrder.client);
-                                        const match = (clients || []).find(c => {
-                                            const n = clean(c.name);
-                                            return n === target || n.includes(target) || target.includes(n);
-                                        });
-
-                                        const city = viewingOrder.shipping_city || viewingOrder.city || match?.city || 'Ciudad por confirmar';
-                                        const addr = viewingOrder.shipping_address || viewingOrder.address || match?.address || 'Dirección por confirmar';
-                                        const phone = viewingOrder.shipping_phone || viewingOrder.phone || match?.phone || 'Teléfono no registrado';
-                                        const email = viewingOrder.customer_email || viewingOrder.email || match?.email || 'Email no registrado';
-
+                                        const isPaid = viewingOrder.payment_status === 'Pagado' || viewingOrder.paymentStatus === 'Pagado' || viewingOrder.source === 'Pagina WEB';
                                         return (
-                                            <>
-                                                <h3 style={{ margin: 0, color: '#0f172a', fontSize: '1.25rem', fontWeight: '950' }}>#{viewingOrder.order_number || viewingOrder.id} - {viewingOrder.client}</h3>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '0.6rem' }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', fontSize: '0.82rem', color: '#64748b', fontWeight: '700' }}>
-                                                        <span>🗓️ {viewingOrder.date}</span>
-                                                        <span>|</span>
-                                                        <span>🏢 {viewingOrder.source}</span>
-                                                        <span>|</span>
-                                                        <span style={{ color: deepTeal }}>📍 {city}</span>
-                                                    </div>
-                                                    <div style={{ 
-                                                        display: 'flex', 
-                                                        alignItems: 'center', 
-                                                        gap: '1.2rem', 
-                                                        flexWrap: 'wrap', 
-                                                        fontSize: '0.78rem', 
-                                                        color: '#475569', 
-                                                        background: '#f8fafc', 
-                                                        padding: '6px 12px', 
-                                                        borderRadius: '10px', 
-                                                        border: '1px solid #f1f5f9',
-                                                        width: 'fit-content'
-                                                    }}>
-                                                        <span>🏠 {addr}</span>
-                                                        <span>📞 {phone}</span>
-                                                        <span>✉️ {email}</span>
-                                                        <span style={{ 
-                                                            marginLeft: '8px', 
-                                                            fontSize: '0.65rem', 
-                                                            fontWeight: '900',
-                                                            color: match ? '#10b981' : '#94a3b8',
-                                                            textTransform: 'uppercase'
-                                                        }}>
-                                                            {match ? '● CRM Vinculado' : '● Sin Perfil'}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </>
+                                            <span style={{ 
+                                                padding: '0.4rem 0.8rem', 
+                                                borderRadius: '8px', 
+                                                background: isPaid ? '#f0fdf4' : '#fffbeb', 
+                                                color: isPaid ? '#166534' : '#92400e', 
+                                                fontSize: '0.75rem', 
+                                                fontWeight: '950'
+                                            }}>
+                                                {isPaid ? 'PAGADO' : 'PENDIENTE'}
+                                            </span>
                                         );
                                     })()}
                                 </div>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                    <label style={{ fontSize: '0.6rem', fontWeight: '900', color: '#64748b' }}>PEDIDO</label>
-                                    <select
-                                        value={viewingOrder.status || 'Pendiente'}
-                                        onChange={(e) => setViewingOrder({ ...viewingOrder, status: e.target.value })}
-                                        style={{
-                                            padding: '0.5rem 0.8rem',
-                                            borderRadius: '10px',
-                                            border: '1px solid #cbd5e1',
-                                            fontSize: '0.75rem',
-                                            fontWeight: '950',
-                                            background: '#fff',
-                                            color: deepTeal,
-                                            cursor: 'pointer',
-                                            outline: 'none'
-                                        }}
-                                    >
-                                        {['Pendiente', 'En Compras', 'En Producción', 'Listo para Despacho', 'Despachado', 'Entregado', 'Cancelado'].map(s => (
-                                            <option key={s} value={s}>{s}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                    <label style={{ fontSize: '0.6rem', fontWeight: '900', color: '#64748b' }}>PAGO</label>
-                                    <select
-                                        value={viewingOrder.payment_status || viewingOrder.paymentStatus || 'Pendiente'}
-                                        onChange={(e) => setViewingOrder({ ...viewingOrder, payment_status: e.target.value })}
-                                        style={{
-                                            padding: '0.5rem 0.8rem',
-                                            borderRadius: '10px',
-                                            border: `1px solid ${(viewingOrder.payment_status === 'Pagado' || viewingOrder.paymentStatus === 'Pagado' || (viewingOrder.source === 'Pagina WEB' && !viewingOrder.payment_status)) ? '#10b981' : '#f59e0b'}`,
-                                            fontSize: '0.75rem',
-                                            fontWeight: '950',
-                                            background: (viewingOrder.payment_status === 'Pagado' || viewingOrder.paymentStatus === 'Pagado' || (viewingOrder.source === 'Pagina WEB' && !viewingOrder.payment_status)) ? '#f0fdf4' : '#fffbeb',
-                                            color: (viewingOrder.payment_status === 'Pagado' || viewingOrder.paymentStatus === 'Pagado' || (viewingOrder.source === 'Pagina WEB' && !viewingOrder.payment_status)) ? '#166534' : '#92400e',
-                                            cursor: 'pointer',
-                                            outline: 'none'
-                                        }}
-                                    >
-                                        <option value="Pendiente">Pendiente</option>
-                                        <option value="Pagado">Pagado</option>
-                                    </select>
-                                </div>
-                                <button
-                                    onClick={handleDeleteViewedOrder}
-                                    style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', padding: '0.6rem', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', marginTop: '14px' }}
-                                    title="Eliminar Pedido"
-                                >
-                                    <Trash2 size={18} />
-                                </button>
-                                <button onClick={() => setViewingOrder(null)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', padding: '0.6rem', cursor: 'pointer', color: '#64748b', display: 'flex', marginTop: '14px' }}><X size={20} /></button>
+                                <button onClick={() => setViewingOrder(null)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', padding: '0.6rem', cursor: 'pointer', color: '#64748b', display: 'flex', marginLeft: '0.5rem' }}><X size={20} /></button>
                             </div>
                         </div>
 

@@ -6,7 +6,7 @@ import {
 import { useBusiness } from '../context/BusinessContext';
 
 const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
-    const { items: contextItems, clients, leads, productionOrders } = useBusiness();
+    const { items: contextItems, productionOrders } = useBusiness();
     const [selectedOrder, setSelectedOrder] = useState(null);
 
     if (!isOpen) return null;
@@ -14,6 +14,7 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
     const currentItems = items.length > 0 ? items : contextItems;
     const deepTeal = "#025357";
     const institutionOcre = "#D6BD98";
+    const premiumSalmon = "#D4785A";
 
     // Helper for stock fulfillment
     const getStockFulfillment = (orderItems) => {
@@ -84,15 +85,14 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
                             <div style={{ flex: 1, padding: '0.8rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                 {(() => {
                                     if (col.id === 'produccion') {
-                                        return (productionOrders || []).filter(po => {
+                                        const plans = (productionOrders || []).filter(po => {
                                             const status = (po.status?.text || '').toLowerCase().trim();
-                                            // Solo mostrar lo que NO esté finalizado y no tenga fecha de completado
                                             return status !== 'finalizada' && !po.completed_at;
                                         }).map(odp => {
                                             const isStarted = !!odp.started_at;
                                             return (
-                                                <div key={odp.dbId || odp.id} style={{ background: '#fff', padding: '1.2rem', borderRadius: '16px', borderLeft: `6px solid ${isStarted ? '#10b981' : '#ef4444'}`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
-                                                    <div style={{ fontSize: '0.6rem', fontWeight: '950', color: '#94a3b8' }}>ODP TAREA</div>
+                                                <div key={`odp-${odp.dbId || odp.id}`} style={{ background: '#fff', padding: '1.2rem', borderRadius: '16px', borderLeft: `6px solid ${isStarted ? '#10b981' : '#ef4444'}`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                                                    <div style={{ fontSize: '0.6rem', fontWeight: '950', color: '#94a3b8' }}>PLAN DE PRODUCCIÓN</div>
                                                     <div style={{ fontSize: '0.95rem', fontWeight: '900', color: deepTeal }}>{odp.sku}</div>
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
                                                         <span style={{ fontSize: '0.75rem', fontWeight: '900', color: institutionOcre }}>{odp.qty || odp.finalQty} UND</span>
@@ -104,6 +104,22 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
                                                 </div>
                                             );
                                         });
+
+                                        const ordersInProd = orders.filter(o => {
+                                            const status = (o.status || '').toLowerCase().trim();
+                                            return status === 'en producción' && getStockFulfillment(o.items || []) < 100;
+                                        }).map(order => (
+                                            <div key={`order-${order.dbId || order.id}`} onClick={() => setSelectedOrder({ ...order, stageName: col.label })} style={{ background: 'rgba(214, 120, 90, 0.03)', padding: '1.2rem', borderRadius: '16px', borderLeft: `6px solid ${premiumSalmon}`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)', cursor: 'pointer' }}>
+                                                <div style={{ fontSize: '0.6rem', fontWeight: '950', color: premiumSalmon }}>PEDIDO VINCULADO</div>
+                                                <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#1e293b' }}>{order.client}</div>
+                                                <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
+                                                    <span style={{ fontSize: '0.6rem', fontWeight: '900', background: 'rgba(2, 83, 87, 0.05)', color: deepTeal, padding: '2px 8px', borderRadius: '4px' }}>{order.items?.length || 0} SKU</span>
+                                                    <span style={{ fontSize: '0.6rem', fontWeight: '900', color: '#64748b' }}>FALTA STOCK</span>
+                                                </div>
+                                            </div>
+                                        ));
+
+                                        return [...plans, ...ordersInProd];
                                     }
 
                                     return orders.filter(o => {
@@ -113,12 +129,15 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
                                         if (col.id === 'despachos' && statusLower === 'en producción') {
                                             if (getStockFulfillment(o.items || []) >= 100) isIncluded = true;
                                         }
+                                        // Orders in Prod Ready for Dispatch are in Despachos. Those NOT ready are in Produccion (handled above).
+                                        if (col.id === 'despachos' && statusLower === 'en producción' && getStockFulfillment(o.items || []) < 100) isIncluded = false;
+                                        
                                         return isIncluded;
                                     }).map(order => {
                                         const fulfillment = getStockFulfillment(order.items || []);
                                         const isReady = fulfillment >= 100;
-                                        const isProd = order.status?.toLowerCase().includes('producción');
-                                        const cardColor = col.id === 'despachos' ? (isReady ? '#ef4444' : (isProd ? '#f59e0b' : '#10b981')) : (col.id === 'pedido' ? '#94a3b8' : (col.id === 'compras' ? '#D4785A' : '#10b981'));
+                                        const isProd = (order.status || '').toLowerCase().includes('producción');
+                                        const cardColor = col.id === 'despachos' ? (isReady ? '#10b981' : '#f59e0b') : (col.id === 'pedido' ? '#94a3b8' : (col.id === 'compras' ? '#D4785A' : '#10b981'));
 
                                         return (
                                             <div key={order.dbId || order.id} onClick={() => setSelectedOrder({ ...order, stageName: col.label })} style={{ background: '#fff', padding: '1.2rem', borderRadius: '16px', borderLeft: `6px solid ${cardColor}`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)', cursor: 'pointer' }}>
@@ -129,7 +148,7 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
                                                 <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#1e293b' }}>{order.client}</div>
                                                 <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
                                                     <span style={{ fontSize: '0.6rem', fontWeight: '900', background: 'rgba(2, 83, 87, 0.05)', color: deepTeal, padding: '2px 8px', borderRadius: '4px' }}>{order.items?.length || 0} SKU</span>
-                                                    {isReady && col.id === 'despachos' && <span style={{ fontSize: '0.6rem', fontWeight: '900', background: '#ef444415', color: '#ef4444', padding: '2px 8px', borderRadius: '4px' }}>LISTO</span>}
+                                                    {isReady && col.id === 'despachos' && <span style={{ fontSize: '0.6rem', fontWeight: '900', background: '#10b98115', color: '#10b981', padding: '2px 8px', borderRadius: '4px' }}>LISTO</span>}
                                                 </div>
                                             </div>
                                         );

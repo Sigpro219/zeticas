@@ -15,7 +15,9 @@ import {
     Calendar,
     TrendingUp,
     Activity,
-    Clock
+    Clock,
+    X,
+    Save
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -27,10 +29,30 @@ const Shipping = () => {
     useEffect(() => {
         window.scrollTo(0, 0);
     }, []);
-    const { orders, items, refreshData, updateOrder, ownCompany } = useBusiness();
+    const { orders, items, refreshData, updateOrder, ownCompany, clients } = useBusiness();
+    const [downloadedDocs, setDownloadedDocs] = useState({}); // { [orderId]: { invoice: boolean, labels: boolean } }
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState('month');
+    const [viewMode, setViewMode] = useState('active'); // 'active' or 'history'
     const [customRange, setCustomRange] = useState({ from: '', to: '' });
+    const [viewingOrder, setViewingOrder] = useState(null);
+    const [confirmModal, setConfirmModal] = useState({
+        show: false,
+        step: 1,
+        type: 'item',
+        target: null,
+        title: '',
+        message: ''
+    });
+    const [labelModal, setLabelModal] = useState({ show: false, order: null, jarsPerBox: 12 });
+    const [dispatchModal, setDispatchModal] = useState({ 
+        show: false, 
+        order: null, 
+        trackingNumber: '', 
+        date: new Date().toLocaleDateString('en-CA'), // Correct YYYY-MM-DD local format
+        time: new Date().toLocaleTimeString('es-CO', { hour12: false, hour: '2-digit', minute: '2-digit' }) 
+    });
+
 
     // Calculate stock fulfillment percentage
     const getStockFulfillment = React.useCallback((orderItems) => {
@@ -46,12 +68,16 @@ const Shipping = () => {
         return (totalReady / totalNeeded) * 100;
     }, [items]);
 
-    // Calculate days since order
-    const getDaysSince = (orderDate) => {
+    // Calculate Lead Time (Dynamic from DB or Real-time)
+    const getLeadTime = (order) => {
+        if (order.delivered_at || order.lead_time_days !== undefined) {
+            return order.lead_time_days || 0;
+        }
         const today = new Date();
-        const created = new Date(orderDate);
+        const created = new Date(order.realDate || order.created_at || order.date);
         const diffTime = Math.abs(today - created);
-        return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        const days = diffTime / (1000 * 60 * 60 * 24);
+        return parseFloat(days.toFixed(2));
     };
 
     const generateInvoiceNumber = () => {
@@ -121,12 +147,21 @@ const Shipping = () => {
         doc.setTextColor(30, 41, 59);
         doc.text(order.client?.toUpperCase() || 'CLIENTE', 18, 64);
         
+        // CRM Lookup for accurate Invoice Data
+        const cleanName = (name) => (name || '').toLowerCase().trim();
+        const targetName = cleanName(order.client);
+        const recipient = (clients || []).find(c => cleanName(c.name) === targetName);
+
         doc.setFontSize(8.5);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(100, 116, 139);
-        doc.text(`Dirección: ${order.shipping_address || order.address || 'N/A'}`, 18, 70);
-        doc.text(`Ciudad: ${order.shipping_city || order.city || 'Bogotá, Col'}`, 18, 75);
-        doc.text(`Teléfono: ${order.shipping_phone || order.phone || 'N/A'}`, 18, 80);
+        doc.text(`Dirección: ${order.shipping_address || recipient?.address || order.address || 'N/A'}`, 18, 70);
+        doc.text(`Ciudad: ${order.shipping_city || recipient?.city || order.city || 'Bogotá, Col'}`, 18, 75);
+        doc.text(`Teléfono: ${order.shipping_phone || recipient?.phone || order.phone || 'N/A'}`, 18, 80);
+        
+        if (recipient?.nit) {
+            doc.text(`NIT/CC: ${recipient.nit}`, 18, 85);
+        }
         
         // Right side info (Order reference)
         doc.setFont('helvetica', 'bold');
@@ -135,6 +170,16 @@ const Shipping = () => {
         doc.setFontSize(12);
         doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
         doc.text(order.id || 'N/A', 140, 65);
+
+        if (order.purchase_order) {
+            doc.setFontSize(7);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(148, 163, 184);
+            doc.text('ORDEN DE COMPRA:', 140, 72);
+            doc.setFontSize(10);
+            doc.setTextColor(30, 41, 59);
+            doc.text(order.purchase_order.toUpperCase(), 140, 79);
+        }
 
         // 5. Items Table (No SKU, centered/right aligned columns)
         const tableColumn = ["DESCRIPCIÓN", "CANTIDAD", "VALOR UNIT.", "TOTAL"];
@@ -178,13 +223,11 @@ const Shipping = () => {
         doc.setTextColor(51, 65, 85);
         doc.text(`$${subtotal.toLocaleString()}`, valueX, finalY, { align: 'right' });
 
-        if (shippingCost > 0) {
-            finalY += 7;
-            doc.setTextColor(100, 116, 139);
-            doc.text(`Envío:`, labelX, finalY, { align: 'right' });
-            doc.setTextColor(51, 65, 85);
-            doc.text(`$${shippingCost.toLocaleString()}`, valueX, finalY, { align: 'right' });
-        }
+        finalY += 7;
+        doc.setTextColor(100, 116, 139);
+        doc.text(`Envío:`, labelX, finalY, { align: 'right' });
+        doc.setTextColor(51, 65, 85);
+        doc.text(`$${(shippingCost || 0).toLocaleString()}`, valueX, finalY, { align: 'right' });
 
         finalY += 7;
         doc.setTextColor(100, 116, 139);
@@ -208,6 +251,12 @@ const Shipping = () => {
 
         doc.save(`Factura_${invNum}_${order.client}.pdf`);
 
+        // Update locally for UI guardrails
+        setDownloadedDocs(prev => ({
+            ...prev,
+            [order.dbId]: { ...prev[order.dbId], invoice: true }
+        }));
+
         // Update in Firestore with link table logic (Metadata on order)
         await updateOrder(order.dbId, {
             invoice_number: invNum,
@@ -218,70 +267,238 @@ const Shipping = () => {
         await refreshData();
     };
 
-    const handleGenerateLabel = async (order) => {
+    const handleDownloadLabels = (order, jarsPerBox = 12) => {
         const doc = new jsPDF({
-            orientation: 'landscape',
+            orientation: 'portrait',
             unit: 'mm',
-            format: [100, 150]
+            format: 'letter'
         });
 
-        const invoiceNum = order.invoiceNum;
+        const totalJars = (order.items || []).reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+        const numLabels = Math.ceil(totalJars / jarsPerBox);
+        const primaryColor = [2, 83, 87]; // Deep Teal Zeticas
 
-        doc.setLineWidth(1);
-        doc.rect(5, 5, 140, 90);
+        // Lookup Sender (Zeticas) in clients or use ownCompany fallback
+        const zeticas = (clients || []).find(c => (c.name || '').toLowerCase().includes('zetica'));
+        const senderInfo = {
+            name: 'ZETICAS SAS BIC',
+            nit: '901.531.875-4',
+            address: zeticas?.address || ownCompany?.address || 'Guasca, Cundinamarca',
+            city: zeticas?.city || ownCompany?.city || 'Guasca',
+            phone: zeticas?.phone || ownCompany?.phone || '3001234567',
+            email: zeticas?.email || ownCompany?.email || 'admin@zeticas.com'
+        };
 
-        doc.setFontSize(16);
-        doc.setFont('helvetica', 'bold');
-        doc.text('ZETICAS SAS - DESPACHOS', 10, 15);
+        // Lookup Recipient in CRM
+        const cleanName = (name) => (name || '').toLowerCase().trim();
+        const targetName = cleanName(order.client);
+        const recipient = (clients || []).find(c => cleanName(c.name) === targetName);
+        const destInfo = {
+            name: order.client || recipient?.name || 'Cliente por confirmar',
+            address: order.shipping_address || recipient?.address || order.address || 'Dirección por confirmar',
+            city: order.shipping_city || recipient?.city || order.city || 'Ciudad por confirmar',
+            phone: order.shipping_phone || recipient?.phone || order.phone || 'Teléfono no registrado',
+            nit: recipient?.nit || recipient?.id_number || ''
+        };
 
-        doc.setFontSize(10);
-        doc.text('REMITENTE:', 10, 25);
-        doc.setFont('helvetica', 'normal');
-        doc.text(ownCompany?.address || 'Guasca', 10, 30);
+        // Dimensions for 6 labels per Letter page (2 cols x 3 rows)
+        const pageWidth = 215.9; // mm
+        const pageHeight = 279.4; // mm
+        const labelWidth = (pageWidth - 20) / 2; // ~98mm
+        const labelHeight = (pageHeight - 30) / 3; // ~83mm
+        const marginX = 10;
+        const marginY = 10;
 
-        doc.line(10, 35, 140, 35);
+        for (let i = 0; i < numLabels; i++) {
+            if (i > 0 && i % 6 === 0) doc.addPage();
+            
+            const col = i % 2;
+            const row = Math.floor((i % 6) / 2);
+            const x = marginX + col * labelWidth;
+            const y = marginY + row * labelHeight;
 
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.text('DESTINATARIO:', 10, 45);
-        doc.setFontSize(14);
-        doc.text(order.client.toUpperCase(), 10, 52);
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        doc.text('Dirección: Carrera 7 # 12-45 (Distribuidor)', 10, 58);
-        doc.text('Ciudad: Bogotá D.C.', 10, 63);
-        doc.text(`Tel: 300 123 4567`, 10, 68);
+            // Label border
+            doc.setDrawColor(203, 213, 225);
+            doc.setLineWidth(0.3);
+            doc.rect(x + 2, y + 2, labelWidth - 4, labelHeight - 4);
 
-        doc.rect(80, 70, 60, 20);
-        doc.setFontSize(8);
-        doc.text('No. PEDIDO:', 82, 75);
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.text(order.id, 82, 85);
-
-        if (invoiceNum) {
+            // Header - SENDER
             doc.setFontSize(8);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+            doc.text('REMITENTE:', x + 8, y + 10);
+            
+            doc.setFontSize(9);
+            doc.text(senderInfo.name, x + 8, y + 14);
+            doc.setFontSize(6.5);
             doc.setFont('helvetica', 'normal');
-            doc.text('No. FACTURA:', 110, 75);
-            doc.text(invoiceNum, 110, 85);
+            doc.setTextColor(71, 85, 105);
+            doc.text(`NIT: ${senderInfo.nit} | Tel: ${senderInfo.phone}`, x + 8, y + 18);
+            doc.text(`${senderInfo.address} - ${senderInfo.city}`, x + 8, y + 21);
+
+            // Caja indicator
+            doc.setFontSize(7);
+            doc.setTextColor(148, 163, 184);
+            doc.text(`Caja ${i + 1} de ${numLabels}`, x + labelWidth - 8, y + 10, { align: 'right' });
+
+            // Line
+            doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+            doc.setLineWidth(0.5);
+            doc.line(x + 8, y + 22.5, x + labelWidth - 8, y + 22.5);
+
+            // Branding Section (NEW)
+            doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+            doc.rect(x + 2, y + 24, labelWidth - 4, 5, 'F');
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(255, 255, 255);
+            doc.text('CONSERVAS ARTESANALES - PRODUCTO FRÁGIL', x + labelWidth / 2, y + 27.5, { align: 'center' });
+
+            // DESTINATARIO
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(15, 23, 42);
+            doc.text('DESTINATARIO:', x + 10, y + 34);
+            
+            doc.setFontSize(12);
+            doc.text(destInfo.name.toUpperCase(), x + 10, y + 40);
+            
+            doc.setFontSize(8.5);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(71, 85, 105);
+            
+            const addrLines = doc.splitTextToSize(destInfo.address, labelWidth - 25);
+            doc.text(addrLines, x + 10, y + 45);
+            
+            const nextY = y + 45 + (addrLines.length * 4.5);
+            doc.setFontSize(9.5);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(15, 23, 42);
+            doc.text(destInfo.city.toUpperCase(), x + 10, nextY);
+            
+            doc.setFontSize(8.5);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(71, 85, 105);
+            const contactText = `Tel: ${destInfo.phone}${destInfo.nit ? ` | NIT: ${destInfo.nit}` : ''}`;
+            doc.text(contactText, x + 10, nextY + 4);
+
+            // LOGISTICS WARNINGS (NEW)
+            const warningY = y + labelHeight - 20;
+            doc.setDrawColor(226, 232, 240);
+            doc.setLineWidth(0.2);
+            doc.line(x + 10, warningY, x + labelWidth - 10, warningY);
+            
+            doc.setFontSize(6.5);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+            
+            // Fragile Icons Logic (Step-by-step to avoid ghosting/overlaps)
+            doc.text('[!!] FRÁGIL', x + 12, warningY + 3.5);
+            doc.text('[^] ESTE LADO ARRIBA', x + labelWidth / 2, warningY + 3.5, { align: 'center' });
+            doc.text('[*] AMBIENTE FRESCO', x + labelWidth - 12, warningY + 3.5, { align: 'right' });
+
+            // Footer / Order Info
+            doc.setFillColor(248, 250, 252);
+            doc.rect(x + 5, y + labelHeight - 12, labelWidth - 10, 8, 'F');
+            doc.setFontSize(5.5);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(148, 163, 184);
+            doc.text('PEDIDO:', x + 10, y + labelHeight - 7);
+            doc.setFontSize(9.5);
+            doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+            doc.text(`#${order.id}`, x + 23, y + labelHeight - 6.5);
+
+            // Purchase Order (NEW)
+            if (order.purchase_order) {
+                doc.setFontSize(5.5);
+                doc.setTextColor(148, 163, 184);
+                doc.text('OC:', x + labelWidth / 2 - 10, y + labelHeight - 7);
+                doc.setFontSize(8.5);
+                doc.setTextColor(15, 23, 42);
+                doc.text(order.purchase_order.toUpperCase(), x + labelWidth / 2 - 2, y + labelHeight - 6.5);
+            }
+            
+            if (order.invoice_number) {
+                doc.setFontSize(5.5);
+                doc.setTextColor(148, 163, 184);
+                doc.text('FACTURA:', x + labelWidth - 45, y + labelHeight - 7);
+                doc.setFontSize(8.5);
+                doc.setTextColor(15, 23, 42);
+                doc.text(order.invoice_number, x + labelWidth - 10, y + labelHeight - 6.5, { align: 'right' });
+            }
         }
 
-        doc.save(`Etiqueta_${order.id}.pdf`);
+        doc.save(`Etiquetas_${order.id}_${numLabels}_bultos.pdf`);
+        
+        // Update local state for UI guardrails
+        setDownloadedDocs(prev => ({
+            ...prev,
+            [order.dbId]: { ...prev[order.dbId], labels: true }
+        }));
 
-        // Update in Firestore
-        await updateOrder(order.dbId, {
-            dispatched_at: new Date().toISOString(),
-            status: 'Despachado'
-        });
+        setLabelModal({ show: false, order: null, jarsPerBox: 12 });
+    };
 
-        await refreshData();
+    const handleConfirmDispatch = async () => {
+        if (!dispatchModal.trackingNumber) {
+            alert("Por favor ingrese el número de guía.");
+            return;
+        }
+
+        try {
+            await updateOrder(dispatchModal.order.dbId, {
+                status: 'Despachado',
+                tracking_number: dispatchModal.trackingNumber,
+                dispatched_at: `${dispatchModal.date}T${dispatchModal.time}:00Z`,
+                dispatch_metadata: {
+                    guide: dispatchModal.trackingNumber,
+                    date: dispatchModal.date,
+                    time: dispatchModal.time,
+                    registered_at: new Date().toISOString()
+                }
+            });
+
+            await refreshData();
+            setDispatchModal({ ...dispatchModal, show: false, order: null, trackingNumber: '' });
+            alert("¡Pedido despachado exitosamente!");
+        } catch (error) {
+            console.error("Error confirmando despacho:", error);
+            alert("No se pudo registrar el despacho.");
+        }
+    };
+
+
+
+    const handleUpdateViewedOrder = async () => {
+        if (!viewingOrder) return;
+        const total = (viewingOrder.items || []).reduce((sum, i) => sum + ((i.price || 0) * (i.quantity || 0)), 0);
+        const updated = { ...viewingOrder, amount: total };
+
+        try {
+            const res = await updateOrder(updated.dbId, {
+                amount: updated.amount,
+                status: updated.status,
+                items: updated.items
+            });
+            if (!res.success) throw new Error(res.error);
+            await refreshData();
+        } catch (e) {
+            console.error("Error updating order in Firestore:", e);
+        }
+
+        setViewingOrder(null);
     };
 
     // Filter Logic
     const filteredOrders = useMemo(() => {
-        let result = orders;
+        // 1. First Priority: View Mode Separation (Active vs History)
+        const historyStatuses = ['entregado', 'finalizado', 'cobrado'];
+        let result = orders.filter(o => {
+            const isHistorical = historyStatuses.includes((o.status || '').toLowerCase().trim());
+            return viewMode === 'history' ? isHistorical : !isHistorical;
+        });
 
-        // Date selection
+        // 2. Date Selection (On top of current view)
         if (filterType === 'week') {
             const lastWeek = new Date();
             lastWeek.setDate(lastWeek.getDate() - 7);
@@ -294,7 +511,7 @@ const Shipping = () => {
             result = result.filter(o => o.date >= customRange.from && o.date <= customRange.to);
         }
 
-        // Search multitem
+        // 3. Search multitem
         if (searchTerm) {
             const q = searchTerm.toLowerCase();
             result = result.filter(o => {
@@ -307,13 +524,9 @@ const Shipping = () => {
         }
 
         return result.sort((a, b) => {
-            const aFinalized = a.status === 'Despachado' || a.status === 'Entregado';
-            const bFinalized = b.status === 'Despachado' || b.status === 'Entregado';
-            if (aFinalized && !bFinalized) return 1;
-            if (!aFinalized && bFinalized) return -1;
-            return new Date(b.date) - new Date(a.date);
+            return new Date(b.date || b.created_at) - new Date(a.date || a.created_at);
         });
-    }, [orders, searchTerm, filterType, customRange]);
+    }, [orders, searchTerm, filterType, customRange, viewMode]);
 
     // KPI Calculations
     const kpis = useMemo(() => {
@@ -333,14 +546,14 @@ const Shipping = () => {
             if (isAvail) stats.disponibles++;
             else stats.noDisponibles++;
 
-            // Calculate Lead Time for all active orders in this module
-            const days = Math.ceil(Math.abs(new Date() - new Date(o.date)) / (1000 * 60 * 60 * 24));
+            // Calculate Lead Time (Dynamic from DB or Real-time)
+            const days = getLeadTime(o);
             stats.times.push(days);
         });
 
-        const avg = stats.times.length > 0 ? (stats.times.reduce((a, b) => a + b, 0) / stats.times.length).toFixed(1) : 0;
-        const max = stats.times.length > 0 ? Math.max(...stats.times) : 0;
-        const min = stats.times.length > 0 ? Math.min(...stats.times) : 0;
+        const avg = stats.times.length > 0 ? (stats.times.reduce((a, b) => a + b, 0) / stats.times.length).toFixed(2) : 0;
+        const max = stats.times.length > 0 ? Math.max(...stats.times).toFixed(1) : 0;
+        const min = stats.times.length > 0 ? Math.min(...stats.times).toFixed(1) : 0;
 
         return { ...stats, avg, max, min };
     }, [filteredOrders, getStockFulfillment]);
@@ -395,6 +608,36 @@ const Shipping = () => {
                                 letterSpacing: '0.5px'
                             }}>
                             {t === 'week' ? 'Semana' : t === 'month' ? 'Mes' : 'Personalizado'}
+                        </button>
+                    ))}
+                </div>
+
+                {/* New Active/History Filter */}
+                <div style={{ display: 'flex', background: 'rgba(214, 120, 90, 0.05)', padding: '6px', borderRadius: '22px', border: '1px solid rgba(214, 120, 90, 0.1)' }}>
+                    {[
+                        { id: 'active', label: 'Activos', icon: <Activity size={14} /> },
+                        { id: 'history', label: 'Historial', icon: <Clock size={14} /> }
+                    ].map(v => (
+                        <button
+                            key={v.id}
+                            onClick={() => setViewMode(v.id)}
+                            style={{ 
+                                padding: '0.6rem 1.5rem', 
+                                border: 'none', 
+                                borderRadius: '12px', 
+                                fontSize: '0.75rem', 
+                                fontWeight: '900', 
+                                cursor: 'pointer', 
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                background: viewMode === v.id ? premiumSalmon : 'transparent', 
+                                color: viewMode === v.id ? '#fff' : premiumSalmon, 
+                                transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.5px'
+                            }}>
+                            {v.icon} {v.label}
                         </button>
                     ))}
                 </div>
@@ -553,8 +796,7 @@ const Shipping = () => {
                             <th style={{ padding: '1.2rem 1.5rem', textAlign: 'left', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid rgba(2, 83, 87, 0.05)' }}>Consignatario</th>
                             <th style={{ padding: '1.2rem 1rem', textAlign: 'center', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid rgba(2, 83, 87, 0.05)' }}>L. Time</th>
                             <th style={{ padding: '1.2rem 1rem', textAlign: 'center', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid rgba(2, 83, 87, 0.05)' }}>Stock</th>
-                            <th style={{ padding: '1.2rem 1rem', textAlign: 'center', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid rgba(2, 83, 87, 0.05)' }}>Facturación</th>
-                            <th style={{ padding: '1.2rem 1.5rem', textAlign: 'center', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid rgba(2, 83, 87, 0.05)' }}>Acción</th>
+                            <th style={{ padding: '1.2rem 1.5rem', textAlign: 'center', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid rgba(2, 83, 87, 0.05)' }}>Gestión Logística</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -569,7 +811,6 @@ const Shipping = () => {
                             </tr>
                         ) : filteredOrders.map(order => {
                             const isAvailable = getStockFulfillment(order.items || []) >= 100;
-                            const days = getDaysSince(order.date);
 
                             return (
                                 <tr key={order.id} style={{ 
@@ -577,47 +818,69 @@ const Shipping = () => {
                                     animation: 'fadeUp 0.5s ease-out',
                                     cursor: 'default'
                                 }} className="ship-row-premium">
-                                    <td style={{ padding: '1.2rem 1.5rem' }}>
-                                        <div style={{ fontWeight: '900', color: deepTeal, fontSize: '0.95rem', letterSpacing: '-0.3px' }}>#{order.id}</div>
-                                        <div style={{ fontSize: '0.6rem', color: '#94a3b8', marginTop: '0.2rem', fontWeight: '900', textTransform: 'uppercase' }}>LOG-{order.id.slice(-4)}</div>
+                                    <td 
+                                        onClick={() => setViewingOrder(order)}
+                                        style={{ padding: '1.2rem 1.5rem', cursor: 'pointer' }}
+                                    >
+                                        <div style={{ fontWeight: '900', color: deepTeal, fontSize: '1.1rem', letterSpacing: '-0.3px' }}>#{order.id}</div>
                                     </td>
-                                    <td style={{ padding: '1.2rem 1.5rem' }}>
-                                        <div style={{ fontSize: '1rem', color: '#1e293b', fontWeight: '900', letterSpacing: '-0.2px' }}>{order.client}</div>
+                                    <td 
+                                        onClick={() => setViewingOrder(order)}
+                                        style={{ padding: '1.2rem 1.5rem', cursor: 'pointer' }}
+                                    >
+                                        <div style={{ fontSize: '1.2rem', color: '#1e293b', fontWeight: '900', letterSpacing: '-0.2px' }}>{order.client}</div>
                                         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '0.3rem' }}>
-                                            <span style={{ fontSize: '0.65rem', color: institutionOcre, fontWeight: '900', background: `${institutionOcre}10`, padding: '2px 8px', borderRadius: '6px' }}>
+                                            <span style={{ fontSize: '0.85rem', color: institutionOcre, fontWeight: '900', background: `${institutionOcre}10`, padding: '4px 10px', borderRadius: '8px' }}>
                                                 {order.items?.length || 0} SKUs
                                             </span>
-                                            <span style={{ fontSize: '0.65rem', color: deepTeal, fontWeight: '900', background: 'rgba(2, 100, 110, 0.08)', padding: '2px 8px', borderRadius: '6px' }}>
+                                            <span style={{ fontSize: '0.85rem', color: deepTeal, fontWeight: '900', background: 'rgba(2, 100, 110, 0.08)', padding: '4px 10px', borderRadius: '8px' }}>
                                                 {(order.items || []).reduce((acc, i) => acc + (Number(i.quantity) || 0), 0)} Unidades
                                             </span>
-                                            <span style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: '900', background: 'rgba(2, 83, 87, 0.04)', padding: '2px 8px', borderRadius: '6px' }}>
+                                            <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '900', background: 'rgba(2, 83, 87, 0.04)', padding: '4px 10px', borderRadius: '8px' }}>
                                                 {order.id?.toString().startsWith('WEB-') ? 'WEB' : 'MANUAL'}
                                             </span>
+                                            {order.purchase_order && (
+                                                <span style={{ fontSize: '0.85rem', color: '#10b981', fontWeight: '900', background: 'rgba(16, 185, 129, 0.08)', padding: '4px 10px', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.1)' }}>
+                                                    OC: {order.purchase_order}
+                                                </span>
+                                            )}
                                         </div>
                                     </td>
-                                    <td style={{ padding: '1.2rem 1rem', textAlign: 'center' }}>
-                                        <div style={{ 
-                                            display: 'inline-flex', 
-                                            flexDirection: 'column',
-                                            alignItems: 'center',
-                                            padding: '0.5rem 0.8rem', 
-                                            borderRadius: '12px', 
-                                            background: days > 5 ? `${premiumSalmon}10` : 'rgba(16, 185, 129, 0.05)', 
-                                            color: days > 5 ? premiumSalmon : '#10b981',
-                                            border: days > 5 ? `1px solid ${premiumSalmon}20` : '1px solid rgba(16, 185, 129, 0.1)',
-                                            minWidth: '50px'
-                                        }}>
-                                            <div style={{ fontSize: '1rem', fontWeight: '900', lineHeight: 1 }}>{days}</div>
-                                            <div style={{ fontSize: '0.55rem', fontWeight: '900', textTransform: 'uppercase' }}>Días</div>
-                                        </div>
+                                    <td 
+                                        onClick={() => setViewingOrder(order)}
+                                        style={{ padding: '1.2rem 1rem', textAlign: 'center', cursor: 'pointer' }}
+                                    >
+                                        {(() => {
+                                            const days = getLeadTime(order);
+                                            const isDone = order.status === 'Entregado' || order.status === 'Finalizado';
+                                            return (
+                                                <div style={{ 
+                                                    display: 'inline-flex', 
+                                                    flexDirection: 'column',
+                                                    alignItems: 'center',
+                                                    padding: '0.5rem 0.8rem', 
+                                                    borderRadius: '12px', 
+                                                    background: isDone ? 'rgba(16, 185, 129, 0.05)' : (days > 5 ? `${premiumSalmon}10` : 'rgba(2, 83, 87, 0.03)'), 
+                                                    color: isDone ? '#10b981' : (days > 5 ? premiumSalmon : deepTeal),
+                                                    border: isDone ? '1px solid rgba(16, 185, 129, 0.1)' : (days > 5 ? `1px solid ${premiumSalmon}20` : '1px solid rgba(2, 83, 87, 0.05)'),
+                                                    minWidth: '50px'
+                                                }}>
+                                                    <div style={{ fontSize: '1.2rem', fontWeight: '900', lineHeight: 1 }}>{Math.floor(days)}</div>
+                                                    <div style={{ fontSize: '0.7rem', fontWeight: '900', textTransform: 'uppercase' }}>{isDone ? 'L. Time' : 'Días'}</div>
+                                                </div>
+                                            );
+                                        })()}
                                     </td>
-                                    <td style={{ padding: '1.2rem 1rem', textAlign: 'center', minWidth: '160px' }}>
+                                    <td 
+                                        onClick={() => setViewingOrder(order)}
+                                        style={{ padding: '1.2rem 1rem', textAlign: 'center', minWidth: '160px', cursor: 'pointer' }}
+                                    >
                                         {(() => {
                                             const fulfillment = getStockFulfillment(order.items || []);
                                             const isDone = fulfillment >= 100;
                                             return (
                                                 <div style={{ padding: '0 1rem' }}>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.6rem', fontWeight: '900', color: isDone ? '#10b981' : (fulfillment > 0 ? institutionOcre : premiumSalmon) }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '900', color: isDone ? '#10b981' : (fulfillment > 0 ? institutionOcre : premiumSalmon) }}>
                                                         <span>{isDone ? 'LISTO' : (fulfillment > 0 ? 'PARCIAL' : 'SIN STOCK')}</span>
                                                         <span>{Math.round(fulfillment)}%</span>
                                                     </div>
@@ -634,91 +897,124 @@ const Shipping = () => {
                                             );
                                         })()}
                                     </td>
-                                    <td style={{ padding: '1.2rem 1rem', textAlign: 'center' }}>
-                                        {order.invoiceNum ? (
-                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                                                <div style={{ 
-                                                    background: '#fcfcfc', 
-                                                    padding: '0.5rem 0.8rem', 
-                                                    borderRadius: '10px', 
-                                                    fontWeight: '900', 
-                                                    fontSize: '0.8rem',
-                                                    color: deepTeal,
-                                                    border: '1px solid #f1f5f9'
-                                                }}>
-                                                    {order.invoiceNum}
-                                                </div>
+                                     <td style={{ padding: '1.2rem 1.5rem', textAlign: 'center' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.8rem' }}>
+                                            {/* Documentation Block */}
+                                            <div style={{ display: 'flex', gap: '4px', background: '#f8fafc', padding: '4px', borderRadius: '16px', border: '1px solid #f1f5f9' }}>
+                                                {/* Invoice Button */}
                                                 <button 
                                                     onClick={() => handleCreateInvoice(order)} 
                                                     style={{ 
-                                                        width: '36px',
-                                                        height: '36px',
-                                                        borderRadius: '10px',
-                                                        background: '#fff',
-                                                        border: '1px solid #f1f5f9',
-                                                        display: 'flex',
+                                                        background: order.invoiceNum || downloadedDocs[order.dbId]?.invoice ? 'rgba(16, 185, 129, 0.1)' : '#fff', 
+                                                        border: `1px solid ${order.invoiceNum || downloadedDocs[order.dbId]?.invoice ? '#10b981' : '#e2e8f0'}`, 
+                                                        padding: '0.6rem 1rem', 
+                                                        borderRadius: '12px', 
+                                                        cursor: isAvailable ? 'pointer' : 'not-allowed', 
+                                                        color: order.invoiceNum || downloadedDocs[order.dbId]?.invoice ? '#10b981' : institutionOcre,
+                                                        display: 'inline-flex',
                                                         alignItems: 'center',
-                                                        justifyContent: 'center',
+                                                        gap: '0.5rem',
+                                                        fontSize: '0.7rem',
+                                                        fontWeight: '950',
+                                                        transition: 'all 0.3s',
+                                                        opacity: !isAvailable ? 0.5 : 1
+                                                    }}
+                                                    disabled={!isAvailable}
+                                                >
+                                                    <Printer size={14} /> 
+                                                    {order.invoiceNum || downloadedDocs[order.dbId]?.invoice ? (order.invoiceNum || 'FE') : 'FACTURA'}
+                                                </button>
+                                                
+                                                {/* Labels Button */}
+                                                <button 
+                                                    onClick={() => setLabelModal({ show: true, order, jarsPerBox: 12 })} 
+                                                    style={{ 
+                                                        background: downloadedDocs[order.dbId]?.labels ? 'rgba(2, 54, 54, 0.1)' : '#fff', 
+                                                        border: `1px solid ${downloadedDocs[order.dbId]?.labels ? deepTeal : '#e2e8f0'}`, 
+                                                        padding: '0.6rem 1rem', 
+                                                        borderRadius: '12px', 
                                                         cursor: 'pointer', 
-                                                        color: institutionOcre,
-                                                        transition: 'all 0.3s' 
+                                                        color: downloadedDocs[order.dbId]?.labels ? deepTeal : '#64748b',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '0.5rem',
+                                                        fontSize: '0.7rem',
+                                                        fontWeight: '950',
+                                                        transition: 'all 0.3s'
                                                     }}
                                                 >
-                                                    <Download size={16} />
+                                                    <Tags size={14} /> ETIQUETAS
                                                 </button>
                                             </div>
-                                        ) : (
-                                            <button 
-                                                disabled={!isAvailable} 
-                                                onClick={() => handleCreateInvoice(order)} 
-                                                style={{ 
-                                                    background: isAvailable ? '#fff' : 'rgba(241, 245, 249, 0.5)', 
-                                                    border: `2px solid ${isAvailable ? institutionOcre : '#f1f5f9'}`, 
-                                                    padding: '0.6rem 1.2rem', 
-                                                    borderRadius: '14px', 
-                                                    cursor: isAvailable ? 'pointer' : 'not-allowed', 
-                                                    color: isAvailable ? institutionOcre : '#cbd5e1',
-                                                    display: 'inline-flex',
-                                                    alignItems: 'center',
-                                                    gap: '0.7rem',
-                                                    fontSize: '0.75rem',
-                                                    fontWeight: '900',
-                                                    transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-                                                    textTransform: 'uppercase'
-                                                }}
-                                            >
-                                                <Printer size={16} /> Factura
-                                            </button>
-                                        )}
-                                    </td>
-                                    <td style={{ padding: '1.2rem 1.5rem', textAlign: 'center' }}>
-                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-                                            <button 
-                                                onClick={() => handleGenerateLabel(order)} 
-                                                style={{ 
-                                                    background: `linear-gradient(135deg, ${deepTeal} 0%, #037075 100%)`, 
-                                                    color: '#fff', 
-                                                    border: 'none', 
-                                                    padding: '0.6rem 1.5rem', 
-                                                    borderRadius: '14px', 
-                                                    cursor: 'pointer', 
-                                                    fontSize: '0.75rem', 
-                                                    fontWeight: '900',
-                                                    display: 'inline-flex',
-                                                    alignItems: 'center',
-                                                    gap: '0.6rem',
-                                                    boxShadow: `0 8px 15px ${deepTeal}20`,
-                                                    transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-                                                    textTransform: 'uppercase'
-                                                }}
-                                            >
-                                                <Tags size={16} /> Despachar
-                                            </button>
-                                            {order.dispatchedAt && (
-                                                <div style={{ color: '#10b981', fontWeight: '900', fontSize: '0.6rem', display: 'flex', alignItems: 'center', gap: '4px', textTransform: 'uppercase' }}>
-                                                    <CheckCircle2 size={12} /> OK
+
+                                            {/* Separator / Arrow */}
+                                            <ArrowRight size={16} color="#cbd5e1" />
+
+                                            {/* Dispatch Block */}
+                                            {order.status === 'Despachado' ? (
+                                                <button 
+                                                    onClick={() => updateOrder(order.dbId, { status: 'Entregado' })} 
+                                                    style={{ 
+                                                        background: deepTeal, 
+                                                        color: '#fff', 
+                                                        border: 'none', 
+                                                        padding: '0.6rem 1.5rem', 
+                                                        borderRadius: '14px', 
+                                                        cursor: 'pointer', 
+                                                        fontSize: '0.75rem', 
+                                                        fontWeight: '900',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '0.6rem',
+                                                        boxShadow: `0 8px 15px ${deepTeal}20`,
+                                                        transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+                                                        textTransform: 'uppercase'
+                                                    }}
+                                                >
+                                                    <CheckCircle2 size={16} /> Confirmar Entrega
+                                                </button>
+                                            ) : (order.status === 'Entregado' || order.status === 'Finalizado' ) ? (
+                                                <div style={{ color: '#10b981', fontWeight: '900', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '6px', textTransform: 'uppercase', background: 'rgba(16, 185, 129, 0.08)', padding: '6px 12px', borderRadius: '10px' }}>
+                                                    <CheckCircle2 size={14} /> Entregado
                                                 </div>
-                                            )}
+                                            ) : (() => {
+                                                const hasInvoice = order.invoiceNum || downloadedDocs[order.dbId]?.invoice;
+                                                const hasLabels = downloadedDocs[order.dbId]?.labels;
+                                                const canDispatch = hasInvoice && hasLabels;
+
+                                                return (
+                                                    <div title={!canDispatch ? "Genera Factura y Etiquetas para habilitar el despacho" : ""}>
+                                                        <button 
+                                                            disabled={!canDispatch}
+                                                            onClick={() => setDispatchModal({ 
+                                                                ...dispatchModal, 
+                                                                show: true, 
+                                                                order,
+                                                                date: new Date().toLocaleDateString('en-CA'),
+                                                                time: new Date().toLocaleTimeString('es-CO', { hour12: false, hour: '2-digit', minute: '2-digit' })
+                                                            })} 
+                                                            style={{ 
+                                                                background: canDispatch ? `linear-gradient(135deg, ${deepTeal} 0%, #037075 100%)` : '#f1f5f9', 
+                                                                color: canDispatch ? '#fff' : '#cbd5e1', 
+                                                                border: 'none', 
+                                                                padding: '0.8rem 1.8rem', 
+                                                                borderRadius: '16px', 
+                                                                cursor: canDispatch ? 'pointer' : 'not-allowed', 
+                                                                fontSize: '0.75rem', 
+                                                                fontWeight: '950',
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                gap: '0.6rem',
+                                                                boxShadow: canDispatch ? `0 8px 20px ${deepTeal}30` : 'none',
+                                                                transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+                                                                textTransform: 'uppercase'
+                                                            }}
+                                                        >
+                                                            <Truck size={16} /> Despachar
+                                                        </button>
+                                                    </div>
+                                                );
+                                            })()}
                                         </div>
                                     </td>
                                 </tr>
@@ -728,6 +1024,332 @@ const Shipping = () => {
                 </table>
                 </div>
             </div>
+
+            {/* Refined Order Detail Modal — Consistent with Sales.jsx */}
+            {viewingOrder && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '2rem' }}>
+                    <div style={{ background: '#fff', width: '100%', maxWidth: '800px', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+                        <div style={{ padding: '1.5rem 2rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                                <FileText size={28} color={deepTeal} />
+                                <div>
+                                    <h3 style={{ margin: 0, color: '#0f172a', fontSize: '1.25rem', fontWeight: '950' }}>#{viewingOrder.id} - {viewingOrder.client}</h3>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.85rem', color: '#64748b', fontWeight: '700', marginTop: '0.4rem' }}>
+                                        <span>🗓️ {viewingOrder.date}</span>
+                                        <span>|</span>
+                                        <span>🏢 {viewingOrder.source}</span>
+                                        <span>|</span>
+                                        {(() => {
+                                            const clean = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+                                            const target = clean(viewingOrder.client);
+                                            const match = (clients || []).find(c => clean(c.name) === target);
+                                            return (
+                                                <span style={{ color: match ? '#10b981' : '#94a3b8', fontSize: '0.7rem', fontWeight: '900', textTransform: 'uppercase' }}>
+                                                    {match ? '● CRM Vinculado' : '● Sin Perfil'}
+                                                </span>
+                                            );
+                                        })()}
+                                    </div>
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem' }}>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div style={{ fontSize: '0.6rem', fontWeight: '900', color: '#64748b', marginBottom: '4px', textTransform: 'uppercase' }}>Estado Pedido</div>
+                                    <span style={{ padding: '0.4rem 0.8rem', borderRadius: '8px', background: `${deepTeal}15`, color: deepTeal, fontSize: '0.75rem', fontWeight: '950' }}>{(viewingOrder.status || 'Pendiente').toUpperCase()}</span>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div style={{ fontSize: '0.6rem', fontWeight: '900', color: '#64748b', marginBottom: '4px', textTransform: 'uppercase' }}>Estado Pago</div>
+                                    {(() => {
+                                        const isPaid = viewingOrder.payment_status === 'Pagado' || viewingOrder.paymentStatus === 'Pagado' || viewingOrder.source === 'Pagina WEB';
+                                        return (
+                                            <span style={{ 
+                                                padding: '0.4rem 0.8rem', 
+                                                borderRadius: '8px', 
+                                                background: isPaid ? '#f0fdf4' : '#fffbeb', 
+                                                color: isPaid ? '#166534' : '#92400e', 
+                                                fontSize: '0.75rem', 
+                                                fontWeight: '950'
+                                            }}>
+                                                {isPaid ? 'PAGADO' : 'PENDIENTE'}
+                                            </span>
+                                        );
+                                    })()}
+                                </div>
+                                <button onClick={() => setViewingOrder(null)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', padding: '0.6rem', cursor: 'pointer', color: '#64748b', display: 'flex', marginLeft: '0.5rem' }}><X size={20} /></button>
+                            </div>
+                        </div>
+
+                        <div style={{ padding: '2rem', overflowY: 'auto', flex: 1 }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem', paddingBottom: '2rem', borderBottom: '2px dashed #e2e8f0' }}>
+                                <div>
+                                    <h4 style={{ margin: '0 0 1rem 0', color: '#334155', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Datos Vendedor</h4>
+                                    <div style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '0.2rem' }}>{ownCompany?.name}</div>
+                                    <div style={{ color: '#64748b', fontSize: '0.9rem' }}>NIT: {ownCompany?.nit}</div>
+                                    <div style={{ color: '#64748b', fontSize: '0.9rem' }}>{ownCompany?.city || 'Bogotá'}, Colombia</div>
+                                </div>
+                                <div>
+                                    <h4 style={{ margin: '0 0 1rem 0', color: '#334155', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Datos Cliente</h4>
+                                    <div style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '0.4rem' }}>{viewingOrder.client}</div>
+                                    <div style={{ color: '#64748b', fontSize: '0.9rem' }}>{viewingOrder.shipping_address || viewingOrder.address}</div>
+                                    <div style={{ color: '#64748b', fontSize: '0.9rem' }}>{viewingOrder.shipping_city || viewingOrder.city}</div>
+                                    <div style={{ color: '#64748b', fontSize: '0.9rem', marginTop: '0.2rem' }}>Tel: {viewingOrder.shipping_phone || viewingOrder.phone}</div>
+                                </div>
+                            </div>
+
+                            <h4 style={{ margin: '0 0 1rem 0', color: '#334155', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Detalle de Productos</h4>
+                            <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                    <thead style={{ background: '#f8fafc' }}>
+                                        <tr>
+                                            <th style={{ padding: '1rem', textAlign: 'left', borderBottom: '1px solid #e2e8f0', color: '#64748b', fontSize: '0.85rem' }}>Producto</th>
+                                            <th style={{ padding: '1rem', textAlign: 'center', borderBottom: '1px solid #e2e8f0', color: '#64748b', fontSize: '0.85rem' }}>Cant.</th>
+                                            <th style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid #e2e8f0', color: '#64748b', fontSize: '0.85rem' }}>Unitario</th>
+                                            <th style={{ padding: '1rem', textAlign: 'right', borderBottom: '1px solid #e2e8f0', color: '#64748b', fontSize: '0.85rem' }}>Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {viewingOrder.items?.map((item, index) => (
+                                            <tr key={index}>
+                                                <td style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9', fontWeight: '600', color: '#0f172a' }}>{item.name}</td>
+                                                <td style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9', textAlign: 'center' }}>
+                                                    <input
+                                                        type="number"
+                                                        value={item.quantity}
+                                                        onChange={(e) => {
+                                                            const newQ = parseInt(e.target.value) || 1;
+                                                            const newItems = [...viewingOrder.items];
+                                                            newItems[index].quantity = newQ < 1 ? 1 : newQ;
+                                                            setViewingOrder({ ...viewingOrder, items: newItems });
+                                                        }}
+                                                        style={{ width: '60px', padding: '0.4rem', textAlign: 'center', border: '1px solid #cbd5e1', borderRadius: '6px' }}
+                                                        min="1"
+                                                    />
+                                                </td>
+                                                <td style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9', textAlign: 'right', color: '#64748b' }}>${(item.price || 0).toLocaleString()}</td>
+                                                <td style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9', textAlign: 'right', fontWeight: 'bold' }}>${((item.price * item.quantity) || 0).toLocaleString()}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.5rem', padding: '1.5rem', background: '#f8fafc', borderRadius: '12px' }}>
+                                <div style={{ fontSize: '0.85rem', color: '#64748b' }}>* Puedes editar las cantidades de los productos solicitados. Los totales se recalcularán al guardar.</div>
+                                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                    <div style={{ color: '#475569', fontSize: '0.9rem', fontWeight: 'bold' }}>TOTAL A PAGAR:</div>
+                                    <div style={{ color: deepTeal, fontSize: '1.5rem', fontWeight: '800' }}>
+                                        ${(viewingOrder.items?.reduce((sum, i) => sum + (i.price * i.quantity), 0) || 0).toLocaleString()}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style={{ padding: '1.5rem 2rem', borderTop: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                            <button
+                                onClick={() => setViewingOrder(null)}
+                                style={{ padding: '0.8rem 2rem', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '10px', color: '#475569', fontWeight: 'bold', cursor: 'pointer' }}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleUpdateViewedOrder}
+                                style={{ padding: '0.8rem 2.5rem', background: deepTeal, color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: `0 4px 12px ${deepTeal}30` }}
+                            >
+                                <Save size={18} /> Guardar Cambios
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+
+
+            {/* Label Configuration Modal */}
+            {labelModal.show && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '2rem' }}>
+                    <div style={{ background: '#fff', width: '100%', maxWidth: '400px', borderRadius: '20px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', overflow: 'hidden' }}>
+                        <div style={{ padding: '2rem', textAlign: 'center' }}>
+                            <div style={{ background: `${deepTeal}10`, width: '60px', height: '60px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
+                                <Tags size={30} color={deepTeal} />
+                            </div>
+                            <h3 style={{ fontSize: '1.25rem', fontWeight: '950', color: '#0f172a', marginBottom: '0.5rem' }}>Configuración de Etiquetas</h3>
+                            <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1.5rem' }}>¿Cuántos frascos vas a empacar por caja?</p>
+                            
+                            <input 
+                                type="number" 
+                                value={labelModal.jarsPerBox} 
+                                onChange={(e) => setLabelModal({ ...labelModal, jarsPerBox: parseInt(e.target.value) || 1 })}
+                                style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: '2px solid #e2e8f0', textAlign: 'center', fontSize: '1.2rem', fontWeight: '900', color: deepTeal, outline: 'none', marginBottom: '2rem' }}
+                                min="1"
+                            />
+
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <button onClick={() => setLabelModal({ show: false, order: null, jarsPerBox: 12 })} style={{ flex: 1, padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', fontWeight: '700', cursor: 'pointer' }}>Cancelar</button>
+                                <button onClick={() => handleDownloadLabels(labelModal.order, labelModal.jarsPerBox)} style={{ flex: 1, padding: '1rem', borderRadius: '12px', border: 'none', background: deepTeal, color: '#fff', fontWeight: '900', cursor: 'pointer' }}>Generar PDF</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Tracking / Dispatch Modal */}
+            {dispatchModal.show && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '2rem' }}>
+                    <div style={{ background: '#fff', width: '100%', maxWidth: '450px', borderRadius: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', overflow: 'hidden' }}>
+                        <div style={{ padding: '2rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                                    <div style={{ background: '#f0fdf4', padding: '0.6rem', borderRadius: '10px' }}>
+                                        <Truck size={24} color="#166534" />
+                                    </div>
+                                    <h3 style={{ fontSize: '1.2rem', fontWeight: '950', color: '#0f172a', margin: 0 }}>Registrar Despacho</h3>
+                                </div>
+                                <button onClick={() => setDispatchModal({ ...dispatchModal, show: false, order: null, trackingNumber: '' })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.2rem', padding: '1rem', background: '#f8fafc', borderRadius: '16px', border: '1px solid #f1f5f9' }}>
+                                <div>
+                                    <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>Ref. Pedido</label>
+                                    <div style={{ fontSize: '1rem', fontWeight: '900', color: deepTeal }}>#{dispatchModal.order?.id}</div>
+                                </div>
+                                {dispatchModal.order?.purchase_order && (
+                                    <div>
+                                        <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>Orden de Compra</label>
+                                        <div style={{ fontSize: '1rem', fontWeight: '900', color: '#0f172a' }}>{dispatchModal.order.purchase_order}</div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Informative Client Data */}
+                            {dispatchModal.order && (() => {
+                                const clean = (name) => (name || '').toLowerCase().trim();
+                                const target = clean(dispatchModal.order.client);
+                                const recipient = (clients || []).find(c => clean(c.name) === target);
+                                
+                                return (
+                                    <div style={{ marginBottom: '1.5rem', padding: '1.2rem', background: 'rgba(2, 83, 87, 0.03)', borderRadius: '18px', border: `1px dashed ${deepTeal}30` }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem', color: deepTeal }}>
+                                            <Package size={18} />
+                                            <span style={{ fontSize: '0.75rem', fontWeight: '950', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Datos de Entrega</span>
+                                        </div>
+                                        
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.8rem' }}>
+                                            <div>
+                                                <div style={{ fontSize: '0.6rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '2px' }}>Cliente</div>
+                                                <div style={{ fontSize: '0.9rem', fontWeight: '800', color: '#0f172a' }}>{dispatchModal.order.client}</div>
+                                            </div>
+                                            
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                                <div>
+                                                    <div style={{ fontSize: '0.6rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '2px' }}>Dirección</div>
+                                                    <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#334155' }}>
+                                                        {dispatchModal.order.shipping_address || recipient?.address || dispatchModal.order.address || 'N/A'}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize: '0.6rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '2px' }}>Ciudad</div>
+                                                    <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#334155' }}>
+                                                        {dispatchModal.order.shipping_city || recipient?.city || dispatchModal.order.city || 'N/A'}
+                                                    </div>
+                                                </div>
+                                            </div>
+    
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                                <div>
+                                                    <div style={{ fontSize: '0.6rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '2px' }}>Teléfono</div>
+                                                    <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#334155' }}>
+                                                        {dispatchModal.order.shipping_phone || recipient?.phone || dispatchModal.order.phone || 'N/A'}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize: '0.6rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '2px' }}>Email</div>
+                                                    <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                        {dispatchModal.order.email || recipient?.email || 'N/A'}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <label style={{ fontSize: '0.7rem', fontWeight: '900', color: '#64748b', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>Número de Guía (Interapidísimo)</label>
+                                <input 
+                                    type="text" 
+                                    value={dispatchModal.trackingNumber}
+                                    onChange={(e) => setDispatchModal({ ...dispatchModal, trackingNumber: e.target.value.toUpperCase() })}
+                                    placeholder="EJ: 70001234567"
+                                    style={{ width: '100%', padding: '0.8rem 1rem', borderRadius: '12px', border: '2px solid #e2e8f0', fontSize: '1.1rem', fontWeight: '900', outline: 'none', transition: 'all 0.3s' }}
+                                />
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem' }}>
+                                <div>
+                                    <label style={{ fontSize: '0.7rem', fontWeight: '900', color: '#64748b', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>Fecha</label>
+                                    <input 
+                                        type="date" 
+                                        value={dispatchModal.date}
+                                        onChange={(e) => setDispatchModal({ ...dispatchModal, date: e.target.value })}
+                                        style={{ width: '100%', padding: '0.8rem', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '0.7rem', fontWeight: '900', color: '#64748b', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>Hora</label>
+                                    <input 
+                                        type="time" 
+                                        value={dispatchModal.time}
+                                        onChange={(e) => setDispatchModal({ ...dispatchModal, time: e.target.value })}
+                                        style={{ width: '100%', padding: '0.8rem', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                                    />
+                                </div>
+                            </div>
+
+                            <button 
+                                onClick={handleConfirmDispatch}
+                                style={{ width: '100%', padding: '1.2rem', borderRadius: '16px', border: 'none', background: `linear-gradient(135deg, ${deepTeal} 0%, #037075 100%)`, color: '#fff', fontWeight: '950', fontSize: '1rem', cursor: 'pointer', boxShadow: '0 10px 20px rgba(2, 83, 87, 0.2)' }}
+                            >
+                                CONFIRMAR ENVÍO
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {confirmModal.show && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001, padding: '2rem' }}>
+                    <div style={{ background: '#fff', width: '100%', maxWidth: '400px', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', overflow: 'hidden' }}>
+                        <div style={{ padding: '2rem', textAlign: 'center' }}>
+                            <div style={{ background: '#fef2f2', width: '60px', height: '60px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
+                                <AlertTriangle size={30} color="#ef4444" />
+                            </div>
+                            <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1A3636', marginBottom: '0.8rem' }}>{confirmModal.title}</h3>
+                            <p style={{ fontSize: '0.95rem', color: '#64748b', lineHeight: '1.6', marginBottom: '2rem' }}>{confirmModal.message}</p>
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <button
+                                    onClick={() => setConfirmModal({ ...confirmModal, show: false })}
+                                    style={{ flex: 1, padding: '0.9rem', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontWeight: '700', cursor: 'pointer' }}
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        if (confirmModal.type === 'item' && confirmModal.target) {
+                                            const newItems = [...viewingOrder.items];
+                                            newItems.splice(confirmModal.target.index, 1);
+                                            setViewingOrder({ ...viewingOrder, items: newItems });
+                                        }
+                                        setConfirmModal({ ...confirmModal, show: false });
+                                    }}
+                                    style={{ flex: 1, padding: '0.9rem', borderRadius: '12px', border: 'none', background: '#ea580c', color: '#fff', fontWeight: '700', cursor: 'pointer' }}
+                                >
+                                    Confirmar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <style>{`
                 @keyframes fadeUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
@@ -749,3 +1371,4 @@ const Shipping = () => {
 };
 
 export default Shipping;
+

@@ -608,33 +608,56 @@ export const BusinessProvider = ({ children }) => {
             const snap = await getDoc(orderRef);
             const oldData = snap.exists() ? snap.data() : {};
 
-            // Auto-Tracking of Time in Stage
+            // 1. Audit & Status History (Enhanced Traceability)
             if (data.status && data.status !== oldData.status) {
                 const now = new Date().toISOString();
                 data.last_status_at = now;
                 const history = oldData.status_history || [];
                 data.status_history = [...history, { status: data.status, at: now }];
+
+                // LEAD TIME CALCULATION: Capture "Effective Delivery"
+                const isDelivered = ['entregado', 'finalizado', 'cobrado'].includes(data.status.toLowerCase());
+                const wasNotDelivered = !['entregado', 'finalizado', 'cobrado'].includes((oldData.status || '').toLowerCase());
+
+                if (isDelivered && wasNotDelivered) {
+                    const deliveredAt = now;
+                    data.delivered_at = deliveredAt;
+                    const createdAt = oldData.created_at;
+                    if (createdAt) {
+                        const start = new Date(createdAt);
+                        const end = new Date(deliveredAt);
+                        const diffMs = end - start;
+                        data.lead_time_days = parseFloat((diffMs / (1000 * 60 * 60 * 24)).toFixed(2));
+                    }
+                }
             }
 
-            // physical stock deduction (sales) logic...
-            if (data.status === 'Finalizado' || data.status === 'Entregado' || data.status === 'Cobrado') {
-                if (snap.exists() && snap.data().status !== 'Finalizado' && snap.data().status !== 'Entregado' && snap.data().status !== 'Cobrado') {
-                    const orderData = snap.data();
-                    if (orderData.items) {
-                        for (const item of orderData.items) {
-                            if (item.id) {
+            // 2. Physical Stock Deduction (Safe Execution)
+            const finalStatuses = ['finalizado', 'entregado', 'cobrado'];
+            if (data.status && finalStatuses.includes(data.status.toLowerCase())) {
+                const wasFinal = oldData.status && finalStatuses.includes(oldData.status.toLowerCase());
+                if (!wasFinal && oldData.items) {
+                    for (const item of oldData.items) {
+                        if (item.id) {
+                            try {
                                 await updateDoc(doc(db, 'products', item.id), {
                                     sales: increment(Number(item.quantity) || 0)
                                 });
+                            } catch (e) {
+                                console.warn(`Stock update failed for item ${item.id}:`, e);
                             }
                         }
                     }
                 }
             }
 
+            // 3. Final Firestore Update
             await updateDoc(orderRef, data);
             return { success: true };
-        } catch (err) { return { success: false, error: err.message }; }
+        } catch (err) {
+            console.error("Critical error in updateOrder:", err);
+            return { success: false, error: err.message };
+        }
     }, []);
 
     const addPurchase = useCallback(async (data) => {
@@ -778,7 +801,7 @@ export const BusinessProvider = ({ children }) => {
             try {
                 const poSnap = await getDoc(poDocRef);
                 poSnapExists = poSnap.exists();
-            } catch (err) { poSnapExists = false; }
+            } catch { poSnapExists = false; }
 
             if (!poSnapExists) {
                 // If ID doesn't match a doc ID, search by custom 'id' field
