@@ -11,32 +11,21 @@ const formatNum = (num) => {
 };
 
 const Inventory = () => {
-    const { items, updateItem, recipes, createInternalOrder } = useBusiness();
+    const { 
+        items, updateItem, recipes, createInternalOrder, orders,
+        siteContent, updateInventoryConfig
+    } = useBusiness();
     const [searchMP, setSearchMP] = useState('');
     const [searchPT, setSearchPT] = useState('');
     const [activeTab, setActiveTab] = useState('MP');
     const [selectedPulls, setSelectedPulls] = useState(new Set());
     const [isGenerating, setIsGenerating] = useState(false);
+    const redThreshold = siteContent?.inventory?.config?.redThreshold || 0.5;
+    const [isSimulated, setIsSimulated] = useState(false);
+    const [neededMPForSelection, setNeededMPForSelection] = useState({});
+
     const [showQuickIntake, setShowQuickIntake] = useState(false);
     const [quickIntakeData, setQuickIntakeData] = useState({ itemId: '', itemName: '', quantity: '', search: '', ocNumber: '' });
-
-    const [dismissedPulls, setDismissedPulls] = useState(() => {
-        const saved = localStorage.getItem('zeticas_dismissed_pulls');
-        return saved ? JSON.parse(saved) : [];
-    });
-
-    const handleDismissPull = (id) => {
-        const newDismissed = [...dismissedPulls, id];
-        setDismissedPulls(newDismissed);
-        localStorage.setItem('zeticas_dismissed_pulls', JSON.stringify(newDismissed));
-    };
-
-    const handleDismissAllPulls = () => {
-        const idsToDismiss = pullSignals.map(sig => sig.id);
-        const newDismissed = [...new Set([...dismissedPulls, ...idsToDismiss])];
-        setDismissedPulls(newDismissed);
-        localStorage.setItem('zeticas_dismissed_pulls', JSON.stringify(newDismissed));
-    };
 
     const handleQuickIntakeConfirm = async () => {
         if (!quickIntakeData.itemId || !quickIntakeData.quantity || !quickIntakeData.ocNumber) return;
@@ -50,13 +39,13 @@ const Inventory = () => {
     const getFinalStock = (item) => Math.round(((item.initial || 0) + (item.purchases || 0) - (item.sales || 0)) * 10) / 10;
 
     const pullSignals = (items || []).filter(item =>
-        getFinalStock(item) <= (item.safety || 0) && !dismissedPulls.includes(item.id)
+        getFinalStock(item) < (item.safety || 0)
     );
 
     const getStatus = (item) => {
         const stock = getFinalStock(item);
         const safety = Number(item.safety) || Number(item.min_stock_level) || 0;
-        if (stock < safety * 0.5) return 'CRITICAL';
+        if (stock < safety * redThreshold) return 'CRITICAL';
         if (stock < safety) return 'LOW';
         return 'OPTIMAL';
     };
@@ -79,7 +68,6 @@ const Inventory = () => {
 
     const deepTeal = "#023636";
     const institutionOcre = "#D4785A";
-    const premiumSalmon = "#E29783";
 
     const [localInitialsMP, setLocalInitialsMP] = useState({});
     const [localInitialsPT, setLocalInitialsPT] = useState({});
@@ -155,139 +143,232 @@ const Inventory = () => {
                 </div>
             </div>
 
-            {/* PROTOCOLO DE REABASTECIMIENTO ASISTIDO (PT Priority) */}
-            {pullSignals.length > 0 && (
-                <div style={{ padding: '2rem', background: '#fff', borderRadius: '32px', boxShadow: '0 10px 40px rgba(0,0,0,0.05)', marginBottom: '2.5rem', border: '1px solid rgba(0,0,0,0.05)', animation: 'fadeUp 0.6s ease-out' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem', marginBottom: '2rem' }}>
-                        <div style={{ width: '56px', height: '56px', borderRadius: '18px', background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ea580c', border: '1px solid #fed7aa' }}>
-                            <RefreshCw className={isGenerating ? 'animate-spin' : ''} size={28} />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: '1.2rem', fontWeight: '950', color: '#1e293b', letterSpacing: '-0.3px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                PROTOCOLO DE REABASTECIMIENTO ASISTIDO
-                                <span style={{ fontSize: '0.75rem', background: '#ea580c', color: '#fff', padding: '3px 10px', borderRadius: '20px', fontWeight: '900' }}>{pullSignals.length} ALERTAS</span>
+            {/* LOGICA DE REABASTECIMIENTO ASISTIDO */}
+            {(() => {
+                const ptPulls = pullSignals.filter(s => s.type === 'product');
+                const mpPulls = pullSignals.filter(s => s.type === 'material');
+                
+                // Helper to check for active internal orders
+                const hasActiveInternalOrder = (itemName) => {
+                    return orders.some(o => 
+                        (o.client === 'Stock Interno' || o.client_id === 'INTERNAL_STOCK') && 
+                        o.status !== 'delivered' && 
+                        (o.items || []).some(oi => oi.name?.toLowerCase().trim() === itemName.toLowerCase().trim())
+                    );
+                };
+
+                const simulateRequirements = () => {
+                    const requirements = {};
+                    const selectedPTItems = ptPulls.filter(p => selectedPulls.has(p.name));
+                    
+                    selectedPTItems.forEach(pt => {
+                        const recipe = recipes[pt.id] || recipes[pt.name?.toLowerCase().trim()] || [];
+                        recipe.forEach(ingredient => {
+                            const ingName = ingredient.name?.toLowerCase().trim();
+                            const qtyNeeded = Number(ingredient.qty);
+                            if (ingName) {
+                                requirements[ingName] = (requirements[ingName] || 0) + qtyNeeded;
+                            }
+                        });
+                    });
+                    
+                    setNeededMPForSelection(requirements);
+                    setIsSimulated(true);
+                    
+                    const newSelection = new Set(selectedPulls);
+                    Object.keys(requirements).forEach(reqName => {
+                        const material = items.find(i => i.name?.toLowerCase().trim() === reqName);
+                        if (material) newSelection.add(material.name);
+                    });
+                    setSelectedPulls(newSelection);
+                };
+
+                const handleGenerateOrders = async () => {
+                    const selectedArr = Array.from(selectedPulls);
+                    if (selectedArr.length === 0) return;
+                    
+                    setIsGenerating(true);
+                    try {
+                        // All selected items go to the order. 
+                        // The backend will distinguish between PT and MP.
+                        const res = await createInternalOrder(selectedArr);
+                        if (res.success) {
+                            setSelectedPulls(new Set());
+                            setIsSimulated(false);
+                            setNeededMPForSelection({});
+                            alert(`🚀 Éxito: Se ha generado el Lote de Reabastecimiento para ${selectedArr.length} ítems.`);
+                        }
+                    } catch (err) {
+                        alert("Error al generar: " + err.message);
+                    } finally {
+                        setIsGenerating(false);
+                    }
+                };
+
+                const toggleSelect = (name) => {
+                    const next = new Set(selectedPulls);
+                    if (next.has(name)) next.delete(name);
+                    else next.add(name);
+                    setSelectedPulls(next);
+                };
+
+                return pullSignals.length > 0 && (
+                    <div style={{ padding: '2rem', background: '#fff', borderRadius: '32px', boxShadow: '0 10px 40px rgba(0,0,0,0.05)', marginBottom: '2.5rem', border: '1px solid rgba(0,0,0,0.05)', animation: 'fadeUp 0.6s ease-out' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem', marginBottom: '2rem' }}>
+                            <div style={{ width: '56px', height: '56px', borderRadius: '18px', background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ea580c', border: '1px solid #fed7aa' }}>
+                                <RefreshCw className={isGenerating ? 'animate-spin' : ''} size={28} />
                             </div>
-                            <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Gestión inteligente de demanda interna. Selecciona y consolida tus requerimientos abajo.</div>
-                        </div>
-                        <button onClick={() => setSelectedPulls(new Set())} style={{ padding: '0.6rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: '0.75rem', fontWeight: '900', cursor: 'pointer' }}>
-                            LIMPIAR SELECCIÓN
-                        </button>
-                    </div>
-
-                    {/* GRUPO PRODUCTO TERMINADO (PT) - PRIORIDAD 1 */}
-                    <div style={{ marginBottom: '2.5rem' }}>
-                        <div style={{ fontSize: '0.75rem', fontWeight: '950', color: '#94a3b8', letterSpacing: '1.5px', marginBottom: '1.2rem', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }}></div>
-                            1. PRODUCTO TERMINADO (DEMANDA DE VENTA)
-                            <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }}></div>
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1.2rem' }}>
-                            {pullSignals.filter(s => s.type === 'product').map(sig => {
-                                const status = getStatus(sig);
-                                const color = getStatusColor(status);
-                                const needsRecipe = !recipes[sig.id] && !recipes[sig.name?.toLowerCase().trim()];
-                                const isSelected = selectedPulls.has(sig.name);
-
-                                return (
-                                    <div key={sig.id} 
-                                        onClick={() => !needsRecipe && setSelectedPulls(prev => {
-                                            const next = new Set(prev);
-                                            if (next.has(sig.name)) next.delete(sig.name);
-                                            else next.add(sig.name);
-                                            return next;
-                                        })}
-                                        style={{ 
-                                            padding: '1.2rem', borderRadius: '20px', background: isSelected ? '#fff7ed' : '#f8fafc', border: `2px solid ${isSelected ? '#ea580c' : 'rgba(0,0,0,0.02)'}`,
-                                            cursor: needsRecipe ? 'default' : 'pointer', transition: 'all 0.2s', position: 'relative', opacity: needsRecipe ? 0.7 : 1
+                            <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: '1.2rem', fontWeight: '950', color: '#1e293b', letterSpacing: '-0.3px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    PROTOCOLO DE REABASTECIMIENTO ASISTIDO
+                                    <span style={{ fontSize: '0.75rem', background: '#ea580c', color: '#fff', padding: '3px 10px', borderRadius: '20px', fontWeight: '900' }}>{pullSignals.length} ALERTAS</span>
+                                </div>
+                                <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Gestión inteligente de demanda interna. Define el umbral de prioridad roja abajo.</div>
+                            </div>
+                            
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                <div title="Define bajo qué % de la meta el producto se torna Rojo (Urgente)" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#64748b', textAlign: 'right' }}>UMBRAL CRÍTICO (ROJO)</label>
+                                    <select 
+                                        value={redThreshold}
+                                        onChange={async (e) => {
+                                            const val = parseFloat(e.target.value);
+                                            if (window.confirm(`⚠️ ¿Deseas establecer el UMBRAL INSTITUCIONAL de alerta roja al ${val * 100}%?\n\nEsto afectará la visibilidad del tablero para todos los usuarios.`)) {
+                                                await updateInventoryConfig(val);
+                                            }
                                         }}
+                                        style={{ padding: '0.5rem', borderRadius: '10px', border: '2px solid #e2e8f0', background: '#fff', fontSize: '0.75rem', fontWeight: '800', outline: 'none', cursor: 'pointer', color: '#ea580c' }}
                                     >
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.8rem' }}>
-                                            {!needsRecipe && (
-                                                <div style={{ width: '22px', height: '22px', border: `2px solid ${isSelected ? '#ea580c' : '#cbd5e1'}`, borderRadius: '6px', background: isSelected ? '#ea580c' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                    {isSelected && <Package size={14} color="#fff" />}
+                                        <option value={0.1}>10% (Muy Arriesgado)</option>
+                                        <option value={0.2}>20% (Agresivo)</option>
+                                        <option value={0.3}>30% (Moderado-Agresivo)</option>
+                                        <option value={0.5}>50% (Equilibrado)</option>
+                                        <option value={0.7}>70% (Conservador)</option>
+                                    </select>
+                                </div>
+                                <button onClick={() => { setSelectedPulls(new Set()); setIsSimulated(false); setNeededMPForSelection({}); }} style={{ padding: '0.8rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: '0.75rem', fontWeight: '900', cursor: 'pointer', marginTop: '14px' }}>
+                                    LIMPIAR SELECCIÓN
+                                </button>
+                            </div>
+                        </div>
+
+                        <div style={{ marginBottom: '2.5rem' }}>
+                            <div style={{ fontSize: '0.75rem', fontWeight: '950', color: '#94a3b8', letterSpacing: '1.5px', marginBottom: '1.2rem', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }}></div>
+                                1. PRODUCTO TERMINADO (DEMANDA DE VENTA)
+                                <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }}></div>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1.2rem' }}>
+                                {ptPulls.map(sig => {
+                                    const status = getStatus(sig);
+                                    const color = getStatusColor(status);
+                                    const needsRecipe = !recipes[sig.id] && !recipes[sig.name?.toLowerCase().trim()];
+                                    const isSelected = selectedPulls.has(sig.name);
+                                    const inFlight = hasActiveInternalOrder(sig.name);
+
+                                    return (
+                                        <div key={sig.id} 
+                                            onClick={() => (!needsRecipe && !inFlight) && toggleSelect(sig.name)}
+                                            style={{ 
+                                                padding: '1.2rem', borderRadius: '20px', 
+                                                background: inFlight ? '#f1f5f9' : (isSelected ? '#fff7ed' : '#f8fafc'), 
+                                                border: `2px solid ${inFlight ? '#cbd5e1' : (isSelected ? '#ea580c' : 'rgba(0,0,0,0.02)')}`,
+                                                cursor: (needsRecipe || inFlight) ? 'default' : 'pointer', 
+                                                transition: 'all 0.2s', position: 'relative', 
+                                                opacity: (needsRecipe || (inFlight && !isSelected)) ? 0.6 : 1
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.8rem' }}>
+                                                {!needsRecipe && !inFlight && (
+                                                    <div style={{ width: '22px', height: '22px', border: `2px solid ${isSelected ? '#ea580c' : '#cbd5e1'}`, borderRadius: '6px', background: isSelected ? '#ea580c' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                        {isSelected && <Package size={14} color="#fff" />}
+                                                    </div>
+                                                )}
+                                                {inFlight && <div style={{ fontSize: '0.65rem', fontWeight: '950', background: '#cbd5e1', color: '#64748b', padding: '3px 8px', borderRadius: '6px' }}>⚙️ EN PROCESO</div>}
+                                                <div style={{ padding: '3px 8px', borderRadius: '6px', background: color, color: '#fff', fontSize: '0.6rem', fontWeight: '950' }}>{status}</div>
+                                            </div>
+                                            <div style={{ fontWeight: '900', color: '#1e293b', fontSize: '0.9rem', marginBottom: '4px' }}>{sig.name.toUpperCase()}</div>
+                                            <div style={{ fontSize: '1rem', fontWeight: '950', color: inFlight ? '#64748b' : color }}>
+                                                {getFinalStock(sig)} <span style={{ opacity: 0.4, fontSize: '0.75rem' }}>/ {sig.safety} {sig.unit}</span>
+                                            </div>
+                                            {needsRecipe && (
+                                                <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px', color: '#ea580c', background: '#fff', padding: '4px 8px', borderRadius: '8px', border: '1px solid #fed7aa' }}>
+                                                    <AlertTriangle size={14} />
+                                                    <span style={{ fontSize: '0.65rem', fontWeight: '950' }}>SIN RECETA</span>
                                                 </div>
                                             )}
-                                            <div style={{ padding: '3px 8px', borderRadius: '6px', background: color, color: '#fff', fontSize: '0.6rem', fontWeight: '950' }}>{status}</div>
                                         </div>
-                                        <div style={{ fontWeight: '900', color: '#1e293b', fontSize: '0.9rem', marginBottom: '4px' }}>{sig.name.toUpperCase()}</div>
-                                        <div style={{ fontSize: '1rem', fontWeight: '950', color: color }}>
-                                            {getFinalStock(sig)} <span style={{ opacity: 0.4, fontSize: '0.75rem' }}>/ {sig.safety} {sig.unit}</span>
-                                        </div>
-                                        {needsRecipe && (
-                                            <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px', color: '#ea580c', background: '#fff', padding: '4px 8px', borderRadius: '8px', border: '1px solid #fed7aa' }}>
-                                                <AlertTriangle size={14} />
-                                                <span style={{ fontSize: '0.65rem', fontWeight: '950' }}>SIN RECETA</span>
+                                    );
+                                })}
+                            </div>
+                            {selectedPulls.size > 0 && Array.from(selectedPulls).some(n => ptPulls.some(p => p.name === n)) && !isSimulated && (
+                                <button 
+                                    onClick={simulateRequirements}
+                                    disabled={isGenerating}
+                                    style={{ width: '100%', marginTop: '1.5rem', padding: '1rem', borderRadius: '16px', background: '#334155', color: '#fff', border: 'none', fontWeight: '950', fontSize: '0.9rem', cursor: 'pointer', boxShadow: '0 8px 25px rgba(51, 65, 85, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                                >
+                                    <Search size={18} /> 🔍 SIMULAR REQUERIMIENTO (EXPLOSIÓN DE MATERIALES)
+                                </button>
+                            )}
+                        </div>
+
+                        <div style={{ marginTop: '2.5rem' }}>
+                            <div style={{ fontSize: '0.75rem', fontWeight: '950', color: '#94a3b8', letterSpacing: '1.5px', marginBottom: '1.2rem', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }}></div>
+                                2. MATERIA PRIMA (SUMINISTROS)
+                                <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }}></div>
+                            </div>
+                            
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1rem' }}>
+                                {mpPulls.map(sig => {
+                                    const status = getStatus(sig);
+                                    const color = getStatusColor(status);
+                                    const isSelected = selectedPulls.has(sig.name);
+                                    const isLinked = isSimulated && neededMPForSelection[sig.name?.toLowerCase().trim()];
+                                    const inFlight = hasActiveInternalOrder(sig.name);
+
+                                    return (
+                                        <div key={sig.id} 
+                                            onClick={() => !inFlight && toggleSelect(sig.name)}
+                                            style={{ 
+                                                padding: '1rem', borderRadius: '16px', 
+                                                background: inFlight ? '#f1f5f9' : (isLinked ? '#fff7ed' : (isSelected ? '#f0f9ff' : '#f8fafc')), 
+                                                border: `2px solid ${inFlight ? '#cbd5e1' : (isLinked ? '#ea580c' : (isSelected ? '#0ea5e9' : 'rgba(0,0,0,0.02)'))}`,
+                                                cursor: inFlight ? 'default' : 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '12px',
+                                                boxShadow: isLinked ? '0 4px 15px rgba(234, 88, 12, 0.15)' : 'none',
+                                                opacity: inFlight ? 0.6 : 1
+                                            }}
+                                        >
+                                            <div style={{ width: '18px', height: '18px', border: `2px solid ${isLinked ? '#ea580c' : (isSelected ? '#0ea5e9' : '#cbd5e1')}`, borderRadius: '6px', background: isLinked ? '#ea580c' : (isSelected ? '#0ea5e9' : '#fff'), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                {(isSelected || isLinked) && <Package size={12} color="#fff" />}
                                             </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                        {selectedPulls.size > 0 && Array.from(selectedPulls).some(n => items.find(i => i.name === n)?.type === 'product') && (
-                            <button 
-                                onClick={async () => {
-                                    setIsGenerating(true);
-                                    const ptItems = Array.from(selectedPulls).filter(n => items.find(i => i.name === n)?.type === 'product');
-                                    await createInternalOrder(ptItems);
-                                    setSelectedPulls(new Set());
-                                    setIsGenerating(false);
-                                    alert("✅ Lote de producción creado y guardado en la lista de Pedidos.");
-                                }}
-                                style={{ width: '100%', marginTop: '1.5rem', padding: '1rem', borderRadius: '16px', background: '#ea580c', color: '#fff', border: 'none', fontWeight: '950', fontSize: '0.9rem', cursor: 'pointer', boxShadow: '0 8px 25px rgba(234, 88, 12, 0.3)' }}
-                            >
-                                🏭 LANZAR PRODUCCIÓN SELECCIONADA ({Array.from(selectedPulls).filter(n => items.find(i => i.name === n)?.type === 'product').length} BATCHES)
-                            </button>
-                        )}
-                    </div>
-
-                    {/* GRUPO MATERIA PRIMA (MP) - ABASTECIMIENTO */}
-                    <div>
-                        <div style={{ fontSize: '0.75rem', fontWeight: '950', color: '#94a3b8', letterSpacing: '1.5px', marginBottom: '1.2rem', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }}></div>
-                            2. MATERIA PRIMA (SUMINISTROS)
-                            <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }}></div>
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1rem' }}>
-                            {pullSignals.filter(s => s.type === 'material').map(sig => {
-                                const status = getStatus(sig);
-                                const color = getStatusColor(status);
-                                const isSelected = selectedPulls.has(sig.name);
-
-                                return (
-                                    <div key={sig.id} 
-                                        onClick={() => setSelectedPulls(prev => {
-                                            const next = new Set(prev);
-                                            if (next.has(sig.name)) next.delete(sig.name);
-                                            else next.add(sig.name);
-                                            return next;
-                                        })}
-                                        style={{ 
-                                            padding: '1rem', borderRadius: '16px', background: isSelected ? '#f0f9ff' : '#f8fafc', border: `2px solid ${isSelected ? '#0ea5e9' : 'rgba(0,0,0,0.02)'}`,
-                                            cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '12px'
-                                        }}
-                                    >
-                                        <div style={{ width: '18px', height: '18px', border: `2px solid ${isSelected ? '#0ea5e9' : '#cbd5e1'}`, borderRadius: '6px', background: isSelected ? '#0ea5e9' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                            {isSelected && <Package size={12} color="#fff" />}
+                                            <div style={{ flex: 1 }}>
+                                                <div style={{ fontWeight: '800', color: '#1e293b', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>
+                                                    {sig.name.toUpperCase()}
+                                                    {inFlight && <span style={{ fontSize: '0.6rem', color: '#64748b' }}>⚙️ EN COLA</span>}
+                                                </div>
+                                                <div style={{ fontSize: '0.9rem', fontWeight: '950', color: isLinked ? '#ea580c' : color }}>
+                                                    {getFinalStock(sig)} <span style={{ opacity: 0.4, fontSize: '0.75rem' }}>/ {sig.safety}</span>
+                                                    {isLinked && <span style={{ marginLeft: '10px', fontSize: '0.65rem', color: '#ea580c', background: '#fff', padding: '2px 6px', borderRadius: '4px' }}>NECESARIO: {neededMPForSelection[sig.name?.toLowerCase().trim()]}</span>}
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div style={{ flex: 1 }}>
-                                            <div style={{ fontWeight: '800', color: '#1e293b', fontSize: '0.8rem' }}>{sig.name.toUpperCase()}</div>
-                                            <div style={{ fontSize: '0.9rem', fontWeight: '950', color: color }}>{getFinalStock(sig)} <span style={{ opacity: 0.4, fontSize: '0.7rem' }}>/ {sig.safety}</span></div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                                    );
+                                })}
+                            </div>
+                            {selectedPulls.size > 0 && (
+                                <button 
+                                    onClick={handleGenerateOrders}
+                                    disabled={isGenerating}
+                                    style={{ width: '100%', marginTop: '2rem', padding: '1.2rem', borderRadius: '20px', background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)', color: '#fff', border: 'none', fontWeight: '950', fontSize: '1rem', cursor: 'pointer', boxShadow: '0 12px 30px rgba(30, 41, 59, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', animation: isSimulated ? 'pulse 2s infinite' : 'none' }}
+                                >
+                                    🚀 GENERAR ÓRDENES CONSOLIDADAS (REABASTECIMIENTO INVENTARIO)
+                                </button>
+                            )}
                         </div>
-                        {selectedPulls.size > 0 && Array.from(selectedPulls).some(n => items.find(i => i.name === n)?.type !== 'product') && (
-                            <button 
-                                onClick={() => alert("Módulo de Compra Consolidada en Construcción...")}
-                                style={{ width: '100%', marginTop: '1.5rem', padding: '1rem', borderRadius: '16px', background: '#0ea5e9', color: '#fff', border: 'none', fontWeight: '950', fontSize: '0.9rem', cursor: 'pointer', boxShadow: '0 8px 25px rgba(14, 165, 233, 0.3)' }}
-                            >
-                                🛒 ABASTECER MP SELECCIONADA ({Array.from(selectedPulls).filter(n => items.find(i => i.name === n)?.type !== 'product').length} ITEMS)
-                            </button>
-                        )}
                     </div>
-                </div>
-            )}
+                );
+            })()}
 
             {/* Navigation Tabs for Management Gallery */}
             <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>

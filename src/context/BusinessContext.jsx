@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '../lib/firebase';
 import { collection, query, orderBy, onSnapshot, doc, getDocs, getDoc, updateDoc, deleteDoc, addDoc, where, increment, setDoc } from 'firebase/firestore';
 import { products as masterProducts } from '../data/products';
@@ -53,7 +53,6 @@ export const BusinessProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
     const [items, setItems] = useState([]);
     const [recipes, setRecipes] = useState({});
-    const triggeredSKUs = useRef(new Set()); // Para evitar duplicados en la misma sesión
     const [providers, setProviders] = useState([]);
     const [orders, setOrders] = useState([]);
     const [expenses, setExpenses] = useState([]);
@@ -424,42 +423,6 @@ export const BusinessProvider = ({ children }) => {
         return () => clearInterval(interval);
     }, [items, productionOrders, recipes]);
 
-    const createInternalOrder = useCallback(async (selectedSKUs) => {
-        try {
-            for (const skuName of selectedSKUs) {
-                const product = items.find(i => i.name === skuName);
-                if (!product) continue;
-
-                const batchSize = Number(product.batch_size) || 1;
-                const timestamp = new Date().getTime().toString().slice(-6);
-                const orderId = `INT-${timestamp}-${skuName.substring(0,3).toUpperCase()}`;
-
-                await addDoc(collection(db, 'orders'), {
-                    order_number: orderId,
-                    customer_name: 'Stock Interno',
-                    client: 'Stock Interno', // Para compatibilidad
-                    status: 'Pendiente',
-                    type: 'REPLENISHMENT', // Nuevo flag para filtrado
-                    created_at: new Date().toISOString(),
-                    items: [{
-                        id: product.id,
-                        name: product.name,
-                        product_name: product.name,
-                        quantity: batchSize,
-                        price: product.price || 0,
-                        total: (product.price || 0) * batchSize
-                    }],
-                    total_amount: (product.price || 0) * batchSize,
-                    is_auto: true
-                });
-                console.log(`✅ Pedido interno creado para ${skuName}`);
-            }
-            return { success: true };
-        } catch (err) {
-            console.error("Error creating internal order:", err);
-            return { success: false, error: err.message };
-        }
-    }, [items]);
 
     const addClient = useCallback(async (clientData) => {
         try {
@@ -545,6 +508,58 @@ export const BusinessProvider = ({ children }) => {
             return { success: false, error: err.message };
         }
     }, []);
+
+    const createInternalOrder = useCallback(async (selectedNames = []) => {
+        try {
+            const batchNum = `INT-${Date.now().toString().slice(-6)}`;
+            
+            const allItems = selectedNames.map(name => {
+                const item = items.find(i => i.name === name);
+                const isPT = item?.type === 'product' || item?.category === 'Producto Terminado';
+                const batchSize = isPT ? Number(item?.batch_size || 1) : 1;
+                
+                return {
+                    name,
+                    id: item?.id || null,
+                    quantity: batchSize,
+                    unit: item?.unit || (item?.unit_measure || 'und'),
+                    type: isPT ? 'product' : 'material'
+                };
+            });
+
+            if (allItems.length === 0) return { success: false, error: "No hay ítems seleccionados" };
+
+            const orderData = {
+                order_number: batchNum,
+                client: 'Stock Interno',
+                client_id: 'INTERNAL_STOCK',
+                items: allItems,
+                status: 'pending',
+                payment_status: 'paid',
+                created_at: new Date().toISOString(),
+                total_amount: 0,
+                is_internal: true,
+                production_status: 'scheduled'
+            };
+
+            const docRef = await addDoc(collection(db, 'orders'), orderData);
+            setOrders(prev => [{ id: docRef.id, ...orderData }, ...prev]);
+            return { success: true, id: docRef.id };
+        } catch (err) {
+            console.error("Error creating internal order:", err);
+            return { success: false, error: err.message };
+        }
+    }, [items, setOrders]);
+
+    const updateInventoryConfig = useCallback(async (threshold) => {
+        try {
+            const currentConfig = siteContent.inventory || {};
+            await updateSiteContent('inventory', 'config', { ...currentConfig, redThreshold: Number(threshold) });
+            return { success: true };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
+    }, [siteContent, updateSiteContent]);
 
     const recalculatePTCosts = useCallback(async () => {
         if (!items || items.length === 0) return;
@@ -1182,13 +1197,13 @@ export const BusinessProvider = ({ children }) => {
         setItems, setOrders, setExpenses, setPurchaseOrders, setBanks, setBankTransactions, setClients, setSiteContent, setProductionOrders, setLeads, setUsers, setUnits, setUnitConversions, setTaxSettings,
         refreshData, addClient, addOrder, deleteOrders, updateSiteContent, recalculatePTCosts, updateBankBalance, updateClient, deleteClient,
         addItem, updateItem, deleteItem, addSupplier, updateSupplier, deleteSupplier, updateOrder, addPurchase, addRecipe, deleteRecipeByProduct, saveOdp, deleteOdp, addExpense, updateExpense, deleteExpense, addBank, updateBank, deleteBank, receivePurchase, payPurchase, updateLead, addLead, deleteLead, addQuotation, deleteQuotation,
-        addUser, updateUser, deleteUser, consumeMaterials, loadFinishedGoods, saveConversion, convertUnit, saveWebCheckout, getWebCheckout, updateWebCheckoutStatus, addRejectedProduct
+        addUser, updateUser, deleteUser, consumeMaterials, loadFinishedGoods, saveConversion, convertUnit, saveWebCheckout, getWebCheckout, updateWebCheckoutStatus, addRejectedProduct, createInternalOrder, updateInventoryConfig
     }), [
         loading, items, recipes, providers, enrichedOrders, expenses, purchaseOrders, banks, bankTransactions, taxSettings, clients, siteContent, lastUpdate, productionOrders, leads, quotations, users, units, unitConversions, ownCompany,
         setItems, setOrders, setExpenses, setPurchaseOrders, setBanks, setBankTransactions, setClients, setSiteContent, setProductionOrders, setLeads, setUsers, setUnits, setUnitConversions, setTaxSettings,
         refreshData, addClient, addOrder, deleteOrders, updateSiteContent, recalculatePTCosts, updateBankBalance, updateClient, deleteClient,
         addItem, updateItem, deleteItem, addSupplier, updateSupplier, deleteSupplier, updateOrder, addPurchase, addRecipe, deleteRecipeByProduct, saveOdp, deleteOdp, addExpense, updateExpense, deleteExpense, addBank, updateBank, deleteBank, receivePurchase, payPurchase, updateLead, addLead, deleteLead, addQuotation, deleteQuotation,
-        addUser, updateUser, deleteUser, consumeMaterials, loadFinishedGoods, saveConversion, convertUnit, saveWebCheckout, getWebCheckout, updateWebCheckoutStatus, addRejectedProduct
+        addUser, updateUser, deleteUser, consumeMaterials, loadFinishedGoods, saveConversion, convertUnit, saveWebCheckout, getWebCheckout, updateWebCheckoutStatus, addRejectedProduct, createInternalOrder, updateInventoryConfig
     ]);
 
     return (

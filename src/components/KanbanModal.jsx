@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { 
     X, FileText, ShoppingCart, ChefHat, Truck, 
-    DollarSign, Info, Package, Calendar, LayoutGrid, CheckCircle 
+    DollarSign, Info, Package, Calendar, LayoutGrid, CheckCircle, Clock
 } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
 
 const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
-    const { items: contextItems, productionOrders } = useBusiness();
+    const { items: contextItems, productionOrders, recipes } = useBusiness();
     const [selectedOrder, setSelectedOrder] = useState(null);
 
     if (!isOpen) return null;
@@ -87,7 +87,26 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
                                     if (col.id === 'produccion') {
                                         const plans = (productionOrders || []).filter(po => {
                                             const status = (po.status?.text || '').toLowerCase().trim();
-                                            return status !== 'finalizada' && !po.completed_at;
+                                            const isDone = status === 'finalizada' || !!po.completed_at;
+                                            if (isDone) return false;
+
+                                            // ── NUEVA GUARDIA DE MATERIALES ──
+                                            // Solo permitimos que el Plan de Producción aparezca en la columna si hay MP para ejecutarlo
+                                            const productRec = recipes[po.sku] || [];
+                                            if (productRec.length === 0) return true; // Si no hay receta, asumimos auto-compra o proceso simple
+
+                                            const requestedQty = Number(po.qty || po.finalQty || 0);
+                                            // Asumimos rendimiento de la primera entrada si no hay otro dato
+                                            const yieldQty = Number(productRec[0]?.yield_quantity) || 1; 
+
+                                            const allMaterialsReady = productRec.every(ri => {
+                                                const mpItem = currentItems.find(i => i.id === ri.rm_id || (i.name && i.name.toLowerCase().trim() === (ri.name || '').toLowerCase().trim()));
+                                                const currentStock = mpItem ? ((mpItem.initial || 0) + (mpItem.purchases || 0) - (mpItem.sales || 0)) : 0;
+                                                const needed = (Number(ri.qty) / yieldQty) * requestedQty;
+                                                return currentStock >= needed;
+                                            });
+
+                                            return allMaterialsReady;
                                         }).map(odp => {
                                             const isStarted = !!odp.started_at;
                                             return (
@@ -123,6 +142,56 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
                                         ));
 
                                         return [...plans, ...ordersInProd];
+                                    }
+
+                                    if (col.id === 'compras') {
+                                        const pendingInCompras = (productionOrders || []).filter(po => {
+                                            const status = (po.status?.text || '').toLowerCase().trim();
+                                            if (status === 'finalizada' || !!po.completed_at) return false;
+                                            
+                                            const productRec = recipes[po.sku] || [];
+                                            if (productRec.length === 0) return false; 
+                                            
+                                            const requestedQty = Number(po.qty || po.finalQty || 0);
+                                            const yieldQty = Number(productRec[0]?.yield_quantity) || 1; 
+
+                                            const allMaterialsReady = productRec.every(ri => {
+                                                const mpItem = currentItems.find(i => i.id === ri.rm_id || (i.name && i.name.toLowerCase().trim() === (ri.name || '').toLowerCase().trim()));
+                                                const currentStock = mpItem ? ((mpItem.initial || 0) + (mpItem.purchases || 0) - (mpItem.sales || 0)) : 0;
+                                                const needed = (Number(ri.qty) / yieldQty) * requestedQty;
+                                                return currentStock >= needed;
+                                            });
+                                            return !allMaterialsReady;
+                                        }).map(odp => (
+                                            <div key={`odp-blocked-${odp.dbId || odp.id}`} style={{ background: 'rgba(239, 68, 68, 0.03)', padding: '1.2rem', borderRadius: '16px', borderLeft: `6px solid #ef4444`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <div style={{ fontSize: '0.6rem', fontWeight: '950', color: '#ef4444' }}>ESPERANDO MATERIALES</div>
+                                                    <div style={{ fontSize: '0.85rem', fontWeight: '950', color: '#1e293b' }}>#{odp.odp_number || odp.id?.slice(-8)}</div>
+                                                </div>
+                                                <div style={{ fontSize: '0.95rem', fontWeight: '900', color: deepTeal, marginTop: '4px' }}>{odp.sku}</div>
+                                                <div style={{ marginTop: '8px', fontSize: '0.65rem', fontWeight: '900', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    <Clock size={12} /> BLOQUEADO POR INSUMOS
+                                                </div>
+                                            </div>
+                                        ));
+
+                                        const ordersInCompras = orders.filter(o => {
+                                            const statusLower = (o.status || '').toLowerCase();
+                                            return col.inProcessStatuses.map(s => s.toLowerCase()).includes(statusLower);
+                                        }).map(order => (
+                                            <div key={order.dbId || order.id} onClick={() => setSelectedOrder({ ...order, stageName: col.label })} style={{ background: '#fff', padding: '1.2rem', borderRadius: '16px', borderLeft: `6px solid #D4785A`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)', cursor: 'pointer' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', alignItems: 'center' }}>
+                                                    <span style={{ fontSize: '0.85rem', fontWeight: '950', color: '#1e293b' }}>#{order.id}</span>
+                                                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#D4785A' }} />
+                                                </div>
+                                                <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#1e293b' }}>{order.client}</div>
+                                                <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
+                                                    <span style={{ fontSize: '0.6rem', fontWeight: '900', background: 'rgba(2, 83, 87, 0.05)', color: deepTeal, padding: '2px 8px', borderRadius: '4px' }}>{order.items?.length || 0} SKU</span>
+                                                </div>
+                                            </div>
+                                        ));
+
+                                        return [...pendingInCompras, ...ordersInCompras];
                                     }
 
                                     return orders.filter(o => {

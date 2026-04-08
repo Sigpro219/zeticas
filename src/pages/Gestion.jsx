@@ -538,6 +538,7 @@ const Gestion = () => {
                             orders={orders} 
                             productionOrders={productionOrders}
                             items={items} 
+                            recipes={recipes}
                             onOpenModal={() => setIsKanbanModalOpen(true)} 
                         />
                     )}

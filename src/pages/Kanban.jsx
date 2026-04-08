@@ -5,7 +5,7 @@ import {
     ArrowRight, AlertCircle, Clock
 } from 'lucide-react';
 
-const KanbanSummary = ({ orders = [], productionOrders = [], items = [], onOpenModal }) => {
+const KanbanSummary = ({ orders = [], productionOrders = [], items = [], recipes = {}, onOpenModal }) => {
     const deepTeal = "#025357";
     const premiumSalmon = "#D4785A";
 
@@ -182,6 +182,24 @@ const KanbanSummary = ({ orders = [], productionOrders = [], items = [], onOpenM
                                             #{order.id} — <span style={{ color: '#64748b' }}>{order.client}</span>
                                         </span>
                                         {isReady && <span style={{ fontSize: '0.6rem', background: '#ef4444', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontWeight: '900' }}>LISTO PARA ENVÍO</span>}
+                                        {(() => {
+                                            const clientLower = (order.client || '').toLowerCase().trim();
+                                            const isInternalStock = clientLower === 'stock interno' || (order.id && order.id.startsWith('INT-')) || order.is_internal;
+                                            
+                                            if (isInternalStock && statusLower === 'pendiente') {
+                                                const hasRecipe = (order.items || []).some(item => {
+                                                    const name = (item.name || '').toLowerCase().trim();
+                                                    return recipes[item.id] || recipes[name]; // Check by ID or Name
+                                                });
+                                                
+                                                if (hasRecipe) {
+                                                    return <span style={{ fontSize: '0.6rem', background: premiumSalmon, color: '#fff', padding: '2px 8px', borderRadius: '4px', fontWeight: '900' }}>PENDIENTE INICIAR PEDIDO</span>;
+                                                } else {
+                                                    return <span style={{ fontSize: '0.6rem', background: '#f59e0b', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontWeight: '900' }}>PENDIENTE INICIAR COMPRA</span>;
+                                                }
+                                            }
+                                            return null;
+                                        })()}
                                     </div>
                                     <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                                         <span style={{ fontSize: '0.65rem', fontWeight: '800', color: '#94a3b8' }}>{order.items?.length || 0} SKU</span>
