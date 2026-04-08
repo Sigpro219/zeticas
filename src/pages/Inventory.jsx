@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AlertCircle, RefreshCw, Plus, Package, Save, X, ArrowUpRight, Search, Lightbulb, AlertTriangle } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
 
@@ -13,11 +13,13 @@ const formatNum = (num) => {
 const Inventory = () => {
     const { 
         items, updateItem, recipes, createInternalOrder, orders,
-        siteContent, updateInventoryConfig
+        siteContent, updateInventoryConfig, productionOrders, saveOdp
     } = useBusiness();
     const [searchMP, setSearchMP] = useState('');
     const [searchPT, setSearchPT] = useState('');
+
     const [activeTab, setActiveTab] = useState('MP');
+    const activeTabTitle = activeTab === 'MP' ? 'Gestión de Insumos (Materia Prima)' : 'Gestión de Producto Terminado (Planta)';
     const [selectedPulls, setSelectedPulls] = useState(new Set());
     const [isGenerating, setIsGenerating] = useState(false);
     const redThreshold = siteContent?.inventory?.config?.redThreshold || 0.5;

@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { 
     X, FileText, ShoppingCart, ChefHat, Truck, 
-    DollarSign, Info, Package, Calendar, LayoutGrid, CheckCircle, Clock
+    DollarSign, Info, Package, Calendar, LayoutGrid, CheckCircle, Clock, CheckCircle2 
 } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
 
 const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
-    const { items: contextItems, productionOrders, recipes } = useBusiness();
+    const { items: contextItems, productionOrders, recipes, updateOrder } = useBusiness();
     const [selectedOrder, setSelectedOrder] = useState(null);
+    const [showHidden, setShowHidden] = useState(false);
 
     if (!isOpen) return null;
 
@@ -44,7 +45,7 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
             return { inProcess: activeODPs, finished: 0 };
         }
         let inProcess = 0;
-        orders.forEach(o => {
+        orders.filter(o => showHidden || !o.kanban_hidden).forEach(o => {
             const statusLower = (o.status || '').toLowerCase();
             const inProcessLowers = column.inProcessStatuses.map(s => s.toLowerCase());
             let isIncluded = inProcessLowers.includes(statusLower);
@@ -77,8 +78,17 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: deepTeal }}>
                                     {col.icon}
                                     <span style={{ fontWeight: '950', fontSize: '1rem', textTransform: 'uppercase' }}>{col.label}</span>
-                                    <div style={{ marginLeft: 'auto', background: `${deepTeal}15`, color: deepTeal, padding: '2px 8px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: '900' }}>
-                                        {stats.inProcess}
+                                    <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <button 
+                                            onClick={() => setShowHidden(!showHidden)}
+                                            style={{ background: 'none', border: 'none', color: showHidden ? premiumSalmon : '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '2px' }}
+                                            title={showHidden ? "Ocultar archivados" : "Ver archivados"}
+                                        >
+                                            {showHidden ? <CheckCircle2 size={16} /> : <Clock size={16} />}
+                                        </button>
+                                        <div style={{ background: `${deepTeal}15`, color: deepTeal, padding: '2px 8px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: '900' }}>
+                                            {stats.inProcess}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -129,7 +139,7 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
 
                                         const ordersInProd = orders.filter(o => {
                                             const status = (o.status || '').toLowerCase().trim();
-                                            return status === 'en producción' && getStockFulfillment(o.items || []) < 100;
+                                            return status === 'en producción' && getStockFulfillment(o.items || []) < 100 && (showHidden || !o.kanban_hidden);
                                         }).map(order => (
                                             <div key={`order-${order.dbId || order.id}`} onClick={() => setSelectedOrder({ ...order, stageName: col.label })} style={{ background: 'rgba(214, 120, 90, 0.03)', padding: '1.2rem', borderRadius: '16px', borderLeft: `6px solid ${premiumSalmon}`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)', cursor: 'pointer' }}>
                                                 <div style={{ fontSize: '0.6rem', fontWeight: '950', color: premiumSalmon }}>PEDIDO VINCULADO</div>
@@ -177,7 +187,7 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
 
                                         const ordersInCompras = orders.filter(o => {
                                             const statusLower = (o.status || '').toLowerCase();
-                                            return col.inProcessStatuses.map(s => s.toLowerCase()).includes(statusLower);
+                                            return col.inProcessStatuses.map(s => s.toLowerCase()).includes(statusLower) && (showHidden || !o.kanban_hidden);
                                         }).map(order => (
                                             <div key={order.dbId || order.id} onClick={() => setSelectedOrder({ ...order, stageName: col.label })} style={{ background: '#fff', padding: '1.2rem', borderRadius: '16px', borderLeft: `6px solid #D4785A`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)', cursor: 'pointer' }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', alignItems: 'center' }}>
@@ -204,17 +214,44 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
                                         // Orders in Prod Ready for Dispatch are in Despachos. Those NOT ready are in Produccion (handled above).
                                         if (col.id === 'despachos' && statusLower === 'en producción' && getStockFulfillment(o.items || []) < 100) isIncluded = false;
                                         
-                                        return isIncluded;
+                                        return isIncluded && (showHidden || !o.kanban_hidden);
                                     }).map(order => {
                                         const fulfillment = getStockFulfillment(order.items || []);
                                         const isReady = fulfillment >= 100;
                                         const cardColor = col.id === 'despachos' ? (isReady ? '#10b981' : '#f59e0b') : (col.id === 'pedido' ? '#94a3b8' : (col.id === 'compras' ? '#D4785A' : '#10b981'));
 
                                         return (
-                                            <div key={order.dbId || order.id} onClick={() => setSelectedOrder({ ...order, stageName: col.label })} style={{ background: '#fff', padding: '1.2rem', borderRadius: '16px', borderLeft: `6px solid ${cardColor}`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)', cursor: 'pointer' }}>
+                                            <div key={order.dbId || order.id} onClick={() => setSelectedOrder({ ...order, stageName: col.label })} style={{ background: '#fff', padding: '1.2rem', borderRadius: '16px', borderLeft: `6px solid ${cardColor}`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)', cursor: 'pointer', position: 'relative' }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', alignItems: 'center' }}>
                                                     <span style={{ fontSize: '0.85rem', fontWeight: '950', color: '#1e293b' }}>#{order.id}</span>
-                                                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: cardColor }} />
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                        {order.kanban_hidden ? (
+                                                            <button 
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    updateOrder(order.dbId, { kanban_hidden: false });
+                                                                }}
+                                                                style={{ background: 'rgba(212, 120, 90, 0.1)', border: 'none', color: '#D4785A', padding: '4px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6rem', fontWeight: '900' }}
+                                                            >
+                                                                RESTAURAR
+                                                            </button>
+                                                        ) : (
+                                                            col.id === 'finalizado' && (
+                                                                <button 
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        if (confirm('¿Deseas archivar este pedido del Kanban?')) {
+                                                                            updateOrder(order.dbId, { kanban_hidden: true });
+                                                                        }
+                                                                    }}
+                                                                    style={{ background: '#10b98115', border: 'none', color: '#10b981', padding: '4px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                                >
+                                                                    <CheckCircle2 size={16} />
+                                                                </button>
+                                                            )
+                                                        )}
+                                                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: cardColor }} />
+                                                    </div>
                                                 </div>
                                                 <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#1e293b' }}>{order.client}</div>
                                                 <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
