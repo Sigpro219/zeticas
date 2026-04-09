@@ -1,0 +1,5 @@
+# Zeticas - Private Mode
+# Blocking all web crawlers while the site is under construction.
+
+User-agent: *
+Disallow: /

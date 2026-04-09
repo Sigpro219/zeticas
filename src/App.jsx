@@ -19,49 +19,62 @@ import RecurringCustomers from './pages/RecurringCustomers'
 import HomeCZ from './pages/HomeCZ'
 import { CartProvider } from './context/CartContext'
 import { AuthProvider } from './context/AuthContext'
-import { BusinessProvider } from './context/BusinessContext'
+import { BusinessProvider, useBusiness } from './context/BusinessContext'
 import Chatbot from './components/Chatbot'
 import ScrollToTop from './components/ScrollToTop'
 import ErrorBoundary from './components/ErrorBoundary'
 import ProtectedRoute from './components/ProtectedRoute'
-import './index.css'
+import SEOManager from './components/SEOManager'
+
+function AppContent() {
+  const { logVisit } = useBusiness();
+
+  React.useEffect(() => {
+    logVisit();
+  }, [logVisit]);
+
+  return (
+    <Layout>
+      <SEOManager />
+      <Routes>
+        <Route path="/" element={
+          <>
+            <Hero />
+            <PhilosophySection />
+            <CateringBanner />
+            <ConsultingSection />
+            <AlliesSection />
+          </>
+        } />
+        <Route path="/tienda" element={<Shop />} />
+        <Route path="/producto/:id" element={<ProductDetail />} />
+        <Route path="/catering" element={<Catering />} />
+        <Route path="/nosotros" element={<Nosotros />} />
+        <Route path="/consultoria" element={<HomeCZ />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/carrito" element={<Cart />} />
+        <Route path="/checkout" element={<Checkout />} />
+        <Route path="/gestion" element={<ProtectedRoute><Gestion /></ProtectedRoute>} />
+        <Route path="/gestion/:tab" element={<ProtectedRoute><Gestion /></ProtectedRoute>} />
+        <Route path="/recurrentes" element={<RecurringCustomers />} />
+      </Routes>
+      <Chatbot />
+    </Layout>
+  );
+}
 
 function App() {
   return (
     <Router>
       <ScrollToTop />
       <ErrorBoundary>
-      <BusinessProvider>
-        <CartProvider>
-          <AuthProvider>
-            <Layout>
-              <Routes>
-                <Route path="/" element={
-                  <>
-                    <Hero />
-                    <PhilosophySection />
-                    <CateringBanner />
-                    <ConsultingSection />
-                    <AlliesSection />
-                  </>
-                } />
-                <Route path="/tienda" element={<Shop />} />
-                <Route path="/producto/:id" element={<ProductDetail />} />
-                <Route path="/catering" element={<Catering />} />
-                <Route path="/nosotros" element={<Nosotros />} />
-                <Route path="/consultoria" element={<HomeCZ />} />
-                <Route path="/login" element={<Login />} />
-                <Route path="/carrito" element={<Cart />} />
-                <Route path="/checkout" element={<Checkout />} />
-                <Route path="/gestion" element={<ProtectedRoute><Gestion /></ProtectedRoute>} />
-                <Route path="/gestion/:tab" element={<ProtectedRoute><Gestion /></ProtectedRoute>} />
-                <Route path="/recurrentes" element={<RecurringCustomers />} />
-              </Routes>
-              <Chatbot />
-            </Layout>
-          </AuthProvider>
-        </CartProvider>
-      </BusinessProvider>
+        <BusinessProvider>
+          <CartProvider>
+            <AuthProvider>
+              <AppContent />
+            </AuthProvider>
+          </CartProvider>
+        </BusinessProvider>
       </ErrorBoundary>
     </Router>
   )

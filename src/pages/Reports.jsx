@@ -6,15 +6,16 @@ import {
 import {
     TrendingUp, Package, Users, DollarSign,
     ShoppingCart, Download, Calendar, Filter,
-    Clock, Zap, Target, Edit2, Check, Activity, ShieldCheck
+    Clock, Zap, Target, Edit2, Check, Activity, ShieldCheck, Globe
 } from 'lucide-react';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 
-const Reports = ({ orders = [], taxSettings = {}, setTaxSettings, expenses = [], purchaseOrders = [], items = [], recipes = {} }) => {
+const Reports = ({ orders = [], taxSettings = {}, setTaxSettings, expenses = [], purchaseOrders = [], items = [], recipes = {}, analytics = [] }) => {
     const isMobile = useMediaQuery('(max-width: 1024px)');
     const [selectedProductionSku, setSelectedProductionSku] = useState('Todos');
     const [selectedQualitySku, setSelectedQualitySku] = useState('Todos');
     const [selectedYear, setSelectedYear] = useState(2026);
+    const [analyticsFilter, setAnalyticsFilter] = useState('30d');
 
     const safeTax = taxSettings || { iva: 19, retefuente: 2.5, ica: 9.6, renta: 35 };
     const ivaValue = (Array.isArray(orders) ? orders : []).reduce((acc, o) => acc + (o?.amount || 0), 0) * ((safeTax?.iva || 0) / 100);
@@ -213,6 +214,127 @@ const Reports = ({ orders = [], taxSettings = {}, setTaxSettings, expenses = [],
                 </div>
             </header>
 
+            {/* FULL WIDTH ANALYTICS */}
+            <div style={{ marginBottom: '3rem' }}>
+                <div style={{ background: '#F1F5F9', borderRadius: '48px', padding: isMobile ? '1.5rem' : '3rem', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+                        <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                                <span style={{ background: '#E2E8F0', color: '#475569', padding: '4px 10px', borderRadius: '20px', fontSize: '0.65rem', fontWeight: '900', textTransform: 'uppercase' }}>VISIBILIDAD</span>
+                                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10B981', animation: 'pulse 2s infinite' }} />
+                            </div>
+                            <h3 style={{ margin: 0, fontSize: isMobile ? '1.6rem' : '2.2rem', color: '#1E293B', fontWeight: '900' }}>Tráfico Web (Visitas)</h3>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                            <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontSize: isMobile ? '1.8rem' : '2.5rem', fontWeight: '900', color: '#1E293B', lineHeight: 1 }}>
+                                    {(analytics || []).slice(-1)[0]?.count || 0}
+                                    <span style={{ fontSize: '0.8rem', color: '#64748B', marginLeft: '0.6rem', fontWeight: '700' }}>Hoy</span>
+                                </div>
+                            </div>
+                            
+                            <select
+                                value={analyticsFilter}
+                                onChange={(e) => setAnalyticsFilter(e.target.value)}
+                                style={{ 
+                                    padding: '0.8rem 1.2rem', 
+                                    borderRadius: '16px', 
+                                    border: '1px solid #CBD5E1', 
+                                    background: '#fff', 
+                                    fontSize: '0.85rem', 
+                                    outline: 'none', 
+                                    color: '#1E293B', 
+                                    fontWeight: '700',
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                                }}
+                            >
+                                <option value="7d">Últimos 7 días</option>
+                                <option value="30d">Últimos 30 días</option>
+                                <option value="all">Todo el historial</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style={{ height: isMobile ? '200px' : '350px', width: '100%', marginBottom: '2.5rem' }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={(analytics || [])
+                                .slice(analyticsFilter === '7d' ? -7 : analyticsFilter === '30d' ? -30 : 0)
+                                .map(a => ({ 
+                                    name: a.date.split('-').slice(1).reverse().join('/'), 
+                                    visits: a.count 
+                                }))}>
+                                <defs>
+                                    <linearGradient id="colorVisits" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#025357" stopOpacity={0.2}/>
+                                        <stop offset="95%" stopColor="#025357" stopOpacity={0}/>
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                                <XAxis 
+                                    dataKey="name" 
+                                    axisLine={false} 
+                                    tickLine={false} 
+                                    tick={{ fill: '#64748B', fontSize: isMobile ? 10 : 12 }} 
+                                    minTickGap={30}
+                                />
+                                <YAxis 
+                                    axisLine={false} 
+                                    tickLine={false} 
+                                    tick={{ fill: '#64748B', fontSize: 12 }}
+                                />
+                                <Tooltip 
+                                    contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', padding: '1rem' }}
+                                    itemStyle={{ fontWeight: '800', color: '#025357' }}
+                                    formatter={(val) => [`${val} visitas`, 'Tráfico']}
+                                />
+                                <Area 
+                                    type="monotone" 
+                                    dataKey="visits" 
+                                    stroke="#025357" 
+                                    strokeWidth={4} 
+                                    fillOpacity={1} 
+                                    fill="url(#colorVisits)" 
+                                    animationDuration={1500}
+                                />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
+
+                    <div style={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', 
+                        gap: '1.5rem' 
+                    }}>
+                        <div style={{ background: '#fff', borderRadius: '24px', padding: '1.5rem', border: '1px solid #E2E8F0' }}>
+                            <div style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px' }}>Total Periodo</div>
+                            <div style={{ fontSize: '1.8rem', fontWeight: '900', color: '#025357' }}>
+                                {(analytics || [])
+                                    .slice(analyticsFilter === '7d' ? -7 : analyticsFilter === '30d' ? -30 : 0)
+                                    .reduce((acc, a) => acc + (a.count || 0), 0)}
+                            </div>
+                        </div>
+                        
+                        <div style={{ background: '#fff', borderRadius: '24px', padding: '1.5rem', border: '1px solid #E2E8F0' }}>
+                            <div style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px' }}>Promedio Diario</div>
+                            <div style={{ fontSize: '1.8rem', fontWeight: '900', color: '#025357' }}>
+                                {Math.round((analytics || [])
+                                    .slice(analyticsFilter === '7d' ? -7 : analyticsFilter === '30d' ? -30 : 0)
+                                    .reduce((acc, a) => acc + (a.count || 0), 0) / ((analyticsFilter === '7d' ? 7 : analyticsFilter === '30d' ? 30 : analytics.length) || 1))}
+                            </div>
+                        </div>
+
+                        <div style={{ background: '#025357', borderRadius: '24px', padding: '1.5rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <Globe size={32} style={{ opacity: 0.5 }} />
+                            <div>
+                                <div style={{ fontSize: '0.75rem', opacity: 0.8, fontWeight: '800', textTransform: 'uppercase' }}>Estado Canal</div>
+                                <div style={{ fontSize: '1.4rem', fontWeight: '900' }}>Activo y Creciendo</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             {/* Main Dashboards Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 380px), 1fr))', gap: '2rem', marginBottom: '3rem' }}>
                 {/* Facturación */}
@@ -400,6 +522,7 @@ const Reports = ({ orders = [], taxSettings = {}, setTaxSettings, expenses = [],
                         </div>
                     </div>
                 </div>
+
             </div>
 
             {/* Operational Dashboard */}

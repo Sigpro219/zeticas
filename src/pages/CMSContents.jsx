@@ -144,17 +144,34 @@ const CMSField = ({ label, type, section, fieldKey, initialValue, onSave, option
 
 const CMSContents = () => {
     const { siteContent, updateSiteContent, items } = useBusiness();
-    const [activeTab, setActiveTab] = useState('hero');
+    const [activeTab, setActiveTab] = useState('campaign');
     const [lastStatus, setLastStatus] = useState('saved'); // 'saved', 'saving', 'error'
 
-    const sections = [
-        { id: 'hero', label: 'Hero / Inicio', icon: <Layout size={18} /> },
-        { id: 'philosophy', label: 'Filosofía', icon: <Type size={18} /> },
-        { id: 'support', label: 'Apoyo & Soporte', icon: <MessageSquare size={18} /> },
-        { id: 'campaign', label: 'Campaña de Temporada', icon: <Megaphone size={18} /> },
+    const navigationGroups = [
+        {
+            title: 'Estrategia y SEO',
+            items: [
+                { id: 'campaign', label: 'Campaña de Temporada', icon: <Megaphone size={18} /> },
+                { id: 'seo', label: 'SEO & Posicionamiento', icon: <Globe size={18} /> },
+            ]
+        },
+        {
+            title: 'Contenido del Sitio',
+            items: [
+                { id: 'hero', label: 'Hero / Inicio', icon: <Layout size={18} /> },
+                { id: 'philosophy', label: 'Filosofía', icon: <Type size={18} /> },
+                { id: 'support', label: 'Apoyo & Soporte', icon: <MessageSquare size={18} /> },
+            ]
+        }
     ];
 
     const handleSave = async (key, value) => {
+        if (!key || value === undefined) {
+            console.error(`[handleSave] Blocked undefined save attempt for key: ${key}`);
+            return;
+        }
+        
+        console.log(`[ContentSync] Synchronizing ${activeTab} -> ${key}:`, value);
         setLastStatus('saving');
         const result = await updateSiteContent(activeTab, key, value);
         
@@ -166,45 +183,7 @@ const CMSContents = () => {
         }
     };
 
-    const sectionFields = {
-        hero: [
-            { key: 'top_text', label: 'Texto Superior (Provincia)', type: 'text' },
-            { key: 'title', label: 'Título Principal Zeticas', type: 'text' },
-            { key: 'description', label: 'Descripción / Slogan', type: 'textarea' },
-            { key: 'cta_text', label: 'Texto Botón Acción', type: 'text' },
-        ],
-        philosophy: [
-            { key: 'title', label: 'Título Sección', type: 'text' },
-            { key: 'subtitle', label: 'Subtítulo Destacado', type: 'text' },
-        ],
-        support: [
-            { key: 'title', label: 'Título Sección', type: 'text' },
-            { key: 'subtitle', label: 'Sinergias de Vida', type: 'text' },
-            { key: 'description', label: 'Descripción Ecosistema', type: 'textarea' },
-        ],
-        campaign: [
-            { key: 'active', label: 'Campaña Activa (Switch)', type: 'toggle' },
-            { 
-                key: 'preset', 
-                label: 'Elegir Plantilla de Temporada', 
-                type: 'select', 
-                options: Object.values(CAMPAIGN_PRESETS).map(p => ({ value: p.id, label: p.name })).concat([{ value: 'custom', label: 'Personalizado' }])
-            },
-            { 
-                key: 'promo_sku_id', 
-                label: 'Producto Estrella (Ancheta/Kit)', 
-                type: 'select',
-                options: items.filter(i => i.category === 'Producto Terminado').map(i => ({ value: i.id, label: i.name }))
-            },
-            { key: 'modal_title', label: 'Título del Modal de Bienvenida', type: 'text' },
-            { key: 'modal_subtitle', label: 'Subtítulo del Modal', type: 'textarea' },
-            { key: 'modal_cta', label: 'Texto Botón (CTA)', type: 'text' },
-            { key: 'hero_image_override', label: 'Foto del Hero (Subida)', type: 'image' },
-            { key: 'hero_title', label: 'Título Hero (Campaña)', type: 'text' },
-            { key: 'hero_subtitle', label: 'Subtítulo Hero (Campaña)', type: 'textarea' },
-        ]
-    };
-
+    const allSections = navigationGroups.flatMap(g => g.items);
     const content = siteContent[activeTab] || {};
 
     return (
@@ -214,24 +193,69 @@ const CMSContents = () => {
                     <h2 style={{ fontSize: window.innerWidth < 768 ? '1.8rem' : '2.4rem', fontWeight: '900', color: '#004B50', margin: 0, letterSpacing: '-1px' }}>Editor Global de Textos</h2>
                     <p style={{ color: '#64748b', fontSize: window.innerWidth < 768 ? '0.85rem' : '1rem', fontWeight: '600', marginTop: '5px' }}>Modifica toda la narrativa de la landing page sin código.</p>
                 </div>
-                
-                <div style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '12px', 
-                    background: '#fff', 
-                    padding: '0.8rem 1.5rem', 
-                    borderRadius: '20px', 
-                    boxShadow: '0 4px 15px rgba(0,0,0,0.05)', 
-                    color: lastStatus === 'saving' ? '#fbbf24' : lastStatus === 'error' ? '#ef4444' : '#10b981', 
-                    fontWeight: '700', 
-                    fontSize: '0.9rem',
-                    transition: 'all 0.3s ease'
-                }}>
-                    {lastStatus === 'saving' && <div className="spinner-small" />}
-                    {lastStatus === 'saved' && <Save size={18} />}
-                    {lastStatus === 'error' && <Layout size={18} />} {/* Error icon equivalent */}
-                    {lastStatus === 'saving' ? 'Sincronizando...' : lastStatus === 'error' ? 'Error al Guardar' : 'Cambios Sincronizados'}
+                               <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                    {/* SEO ENGINE POWER SWITCH */}
+                    <div style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '12px', 
+                        background: '#fff', 
+                        padding: '0.6rem 1.2rem', 
+                        borderRadius: '20px', 
+                        boxShadow: '0 4px 15px rgba(0,0,0,0.05)',
+                        border: '1px solid #f1f5f9'
+                    }}>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', lineHeight: 1 }}>Motor SEO</span>
+                            <span style={{ fontSize: '0.85rem', fontWeight: '800', color: (siteContent.seo?.engine_active !== false) ? '#025357' : '#64748b' }}>
+                                {(siteContent.seo?.engine_active !== false) ? 'ENCENDIDO' : 'APAGADO'}
+                            </span>
+                        </div>
+                        <div 
+                            onClick={() => updateSiteContent('seo', 'engine_active', !(siteContent.seo?.engine_active !== false))}
+                            style={{ 
+                                width: '48px', 
+                                height: '26px', 
+                                borderRadius: '13px', 
+                                background: (siteContent.seo?.engine_active !== false) ? '#025357' : '#e2e8f0', 
+                                cursor: 'pointer', 
+                                position: 'relative', 
+                                transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+                                boxShadow: (siteContent.seo?.engine_active !== false) ? '0 4px 10px rgba(2,83,87,0.3)' : 'none'
+                             }}
+                        >
+                            <div style={{ 
+                                width: '20px', 
+                                height: '20px', 
+                                borderRadius: '50%', 
+                                background: '#fff', 
+                                position: 'absolute', 
+                                top: '3px', 
+                                left: (siteContent.seo?.engine_active !== false) ? '25px' : '3px', 
+                                transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                            }} />
+                        </div>
+                    </div>
+
+                    <div style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '12px', 
+                        background: '#fff', 
+                        padding: '0.8rem 1.5rem', 
+                        borderRadius: '20px', 
+                        boxShadow: '0 4px 15px rgba(0,0,0,0.05)', 
+                        color: lastStatus === 'saving' ? '#fbbf24' : lastStatus === 'error' ? '#ef4444' : '#10b981', 
+                        fontWeight: '700', 
+                        fontSize: '0.9rem',
+                        transition: 'all 0.3s ease'
+                    }}>
+                        {lastStatus === 'saving' && <div className="spinner-small" />}
+                        {lastStatus === 'saved' && <Save size={18} />}
+                        {lastStatus === 'error' && <Layout size={18} />}
+                        {lastStatus === 'saving' ? 'Sincronizando...' : lastStatus === 'error' ? 'Error al Guardar' : 'Cambios Sincronizados'}
+                    </div>
                 </div>
             </div>
 
@@ -243,23 +267,29 @@ const CMSContents = () => {
                 {/* Sidebar Navigation */}
                 <div style={{ height: 'fit-content', width: window.innerWidth < 1024 ? '100%' : '300px' }}>
                     <div style={{ background: '#fff', borderRadius: '32px', padding: '1.2rem', boxShadow: '0 15px 40px rgba(0,0,0,0.02)', border: '1px solid #f1f5f9' }}>
-                        <div style={{ padding: '1rem', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Zonas del Sitio</div>
-                        {sections.map(section => (
-                            <button
-                                key={section.id}
-                                onClick={() => setActiveTab(section.id)}
-                                style={{
-                                    display: 'flex', alignItems: 'center', gap: '1.2rem', width: '100%',
-                                    padding: '1.2rem 1.5rem', border: 'none', background: activeTab === section.id ? '#004B50' : 'transparent',
-                                    color: activeTab === section.id ? '#fff' : '#64748b', borderRadius: '22px', cursor: 'pointer',
-                                    fontSize: '0.95rem', fontWeight: '800', transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-                                    marginBottom: '0.5rem', textAlign: 'left', boxShadow: activeTab === section.id ? '0 10px 25px rgba(0,75,80,0.2)' : 'none',
-                                    transform: activeTab === section.id ? 'translateX(5px)' : 'none'
-                                }}
-                            >
-                                <span style={{ opacity: activeTab === section.id ? 1 : 0.5 }}>{section.icon}</span>
-                                {section.label}
-                            </button>
+                        {navigationGroups.map((group, idx) => (
+                            <div key={group.id} style={{ marginBottom: idx === 0 ? '1.5rem' : 0 }}>
+                                <div style={{ padding: '0.8rem 1rem', fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.5rem' }}>
+                                    {group.title}
+                                </div>
+                                {group.items.map(item => (
+                                    <button
+                                        key={item.id}
+                                        onClick={() => setActiveTab(item.id)}
+                                        style={{
+                                            display: 'flex', alignItems: 'center', gap: '1rem', width: '100%',
+                                            padding: '1rem 1.2rem', border: 'none', background: activeTab === item.id ? '#004B50' : 'transparent',
+                                            color: activeTab === item.id ? '#fff' : '#64748b', borderRadius: '18px', cursor: 'pointer',
+                                            fontSize: '0.85rem', fontWeight: '800', transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                                            marginBottom: '0.3rem', textAlign: 'left', boxShadow: activeTab === item.id ? '0 8px 20px rgba(0,75,80,0.15)' : 'none',
+                                            transform: activeTab === item.id ? 'translateX(5px)' : 'none'
+                                        }}
+                                    >
+                                        <span style={{ opacity: activeTab === item.id ? 1 : 0.5 }}>{item.icon}</span>
+                                        {item.label}
+                                    </button>
+                                ))}
+                            </div>
                         ))}
                     </div>
                 </div>
@@ -275,16 +305,63 @@ const CMSContents = () => {
                 }}>
                     <div style={{ marginBottom: '4rem', borderBottom: '1px solid #f8fafc', paddingBottom: '2.5rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', color: '#004B50', marginBottom: '0.5rem' }}>
-                            {sections.find(s => s.id === activeTab)?.icon}
+                            {allSections.find(s => s.id === activeTab)?.icon}
                             <span style={{ fontWeight: '900', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '2px' }}>Personalización en Vivo</span>
                         </div>
                         <h3 style={{ fontSize: '2rem', fontWeight: '900', color: '#1e293b', margin: 0, letterSpacing: '-0.5px' }}>
-                            {sections.find(s => s.id === activeTab)?.label}
+                            {allSections.find(s => s.id === activeTab)?.label}
                         </h3>
                     </div>
 
-                    <div style={{ maxWidth: '800px' }}>
-                        {sectionFields[activeTab]?.map(field => (
+                    <div style={{ display: 'grid', gap: '1.5rem' }}>
+                        {activeTab === 'seo' && (
+                             <div style={{ marginBottom: '2rem' }}>
+                             <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '24.5px', border: '1px solid #e2e8f0', marginBottom: '2rem' }}>
+                                 <h4 style={{ margin: '0 0 1rem', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1rem', color: '#004B50' }}>
+                                     <Globe size={20} /> Guía de Uso del Motor SEO
+                                 </h4>
+                                 <ul style={{ margin: 0, paddingLeft: '1.2rem', color: '#64748b', fontSize: '0.85rem', lineHeight: '1.6' }}>
+                                     <li><strong>Título:</strong> Menos de 60 caracteres. Incluye la palabra clave principal al inicio.</li>
+                                     <li><strong>Descripción:</strong> Entre 150-160 caracteres. Debe ser una invitación a entrar.</li>
+                                     <li><strong>Imágenes OG:</strong> Recomendado 1200x630px para que se vean bien en WhatsApp e Instagram.</li>
+                                 </ul>
+                             </div>
+                         </div>
+                        )}
+                        
+                        {(activeTab === 'hero' ? [
+                            { key: 'top_text', label: 'Texto Superior (Provincia)', type: 'text' },
+                            { key: 'title', label: 'Título Principal Zeticas', type: 'text' },
+                            { key: 'description', label: 'Descripción / Slogan', type: 'textarea' },
+                            { key: 'cta_text', label: 'Texto Botón Acción', type: 'text' },
+                        ] : activeTab === 'philosophy' ? [
+                            { key: 'title', label: 'Título Sección', type: 'text' },
+                            { key: 'subtitle', label: 'Subtítulo Destacado', type: 'text' },
+                        ] : activeTab === 'support' ? [
+                            { key: 'title', label: 'Título Sección', type: 'text' },
+                            { key: 'subtitle', label: 'Sinergias de Vida', type: 'text' },
+                            { key: 'description', label: 'Descripción Ecosistema', type: 'textarea' },
+                        ] : activeTab === 'campaign' ? [
+                            { key: 'active', label: 'Campaña Activa (Switch)', type: 'toggle' },
+                            { key: 'preset', label: 'Elegir Plantilla de Temporada', type: 'select', options: Object.values(CAMPAIGN_PRESETS).map(p => ({ value: p.id, label: p.name })).concat([{ value: 'custom', label: 'Personalizado' }]) },
+                            { key: 'promo_sku_id', label: 'Producto Estrella (Ancheta/Kit)', type: 'select', options: items.filter(i => i.category === 'Producto Terminado').map(i => ({ value: i.id, label: i.name })) },
+                            { key: 'modal_title', label: 'Título del Modal de Bienvenida', type: 'text' },
+                            { key: 'modal_subtitle', label: 'Subtítulo del Modal', type: 'textarea' },
+                            { key: 'modal_cta', label: 'Texto Botón (CTA)', type: 'text' },
+                            { key: 'hero_image_override', label: 'Foto del Hero (Subida)', type: 'image' },
+                            { key: 'hero_title', label: 'Título Hero (Campaña)', type: 'text' },
+                            { key: 'hero_subtitle', label: 'Subtítulo Hero (Campaña)', type: 'textarea' },
+                        ] : activeTab === 'seo' ? [
+                            { key: 'home_title', label: 'Título SEO (Home/Conservas)', type: 'text' },
+                            { key: 'home_description', label: 'Meta Descripción (Home)', type: 'textarea' },
+                            { key: 'og_image_home', label: 'Imagen de Compartir (Home)', type: 'image' },
+                            { key: 'consulting_title', label: 'Título SEO (Consultoría)', type: 'text' },
+                            { key: 'consulting_description', label: 'Meta Descripción (Consultoría)', type: 'textarea' },
+                            { key: 'og_image_consulting', label: 'Imagen de Compartir (Consultoría)', type: 'image' },
+                            { key: 'keywords', label: 'Palabras Clave (Keywords)', type: 'text' },
+                            { key: 'pos_artisan', label: 'Pilar 1: Conservas & Sentido Social', type: 'textarea' },
+                            { key: 'pos_sustainability', label: 'Pilar 2: Consultoría & Sostenibilidad', type: 'textarea' },
+                        ] : []).map(field => (
                             <CMSField
                                 key={`${activeTab}-${field.key}`}
                                 {...field}
@@ -294,6 +371,28 @@ const CMSContents = () => {
                                 fieldKey={field.key}
                             />
                         ))}
+                                    </div>
+                                    <div style={{ fontSize: '0.85rem' }}>
+                                        <strong style={{ color: '#0369a1' }}>📝 Descripciones:</strong><br/>
+                                        Usa entre <span style={{ fontWeight: 'bold' }}>120-160 caracteres</span>. Resume el valor principal (Artesanal o Sostenible).
+                                    </div>
+                                    <div style={{ fontSize: '0.85rem' }}>
+                                        <strong style={{ color: '#0369a1' }}>📸 Imágenes:</strong><br/>
+                                        Usa imágenes de <span style={{ fontWeight: 'bold' }}>1200x630px</span>. Esto garantiza que se vean perfectas en WhatsApp/LinkedIn.
+                                    </div>
+                                </div>
+                                <div style={{ 
+                                    marginTop: '1rem', 
+                                    paddingLeft: '1rem', 
+                                    borderLeft: '4px solid #0ea5e9', 
+                                    fontSize: '0.85rem', 
+                                    fontStyle: 'italic',
+                                    color: '#075985' 
+                                }}>
+                                    💡 Nota: Si la **Campaña de Temporada** está activa, el título y descripción del Home se actualizarán automáticamente con el mensaje de la campaña.
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

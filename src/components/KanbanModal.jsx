@@ -116,14 +116,26 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
                                                 return currentStock >= needed;
                                             });
 
-                                            return allMaterialsReady;
+                                            return allMaterialsReady && (showHidden || !po.kanban_hidden);
                                         }).map(odp => {
                                             const isStarted = !!odp.started_at;
                                             return (
-                                                <div key={`odp-${odp.dbId || odp.id}`} style={{ background: '#fff', padding: '1.2rem', borderRadius: '16px', borderLeft: `6px solid ${isStarted ? '#10b981' : '#ef4444'}`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                                                        <div style={{ fontSize: '0.6rem', fontWeight: '950', color: '#64748b' }}>PLAN DE PRODUCCIÓN</div>
-                                                        <div style={{ fontSize: '0.85rem', fontWeight: '950', color: '#1e293b' }}>#{odp.odp_number || odp.id?.slice(-8)}</div>
+                                                <div key={`odp-${odp.dbId || odp.id}`} style={{ background: '#fff', padding: '1.2rem', borderRadius: '16px', borderLeft: `6px solid ${isStarted ? '#10b981' : '#ef4444'}`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)', position: 'relative' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                        <div style={{ fontSize: '0.6rem', fontWeight: '950', color: isStarted ? '#10b981' : '#ef4444' }}>PLAN DE PRODUCCIÓN</div>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                            <button 
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    console.log(`📦 Archiving ODP: ${odp.odp_number}`);
+                                                                    saveOdp(odp.sku, { ...odp, kanban_hidden: true });
+                                                                }}
+                                                                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '2px' }}
+                                                            >
+                                                                <X size={14} />
+                                                            </button>
+                                                            <div style={{ fontSize: '0.85rem', fontWeight: '950', color: '#1e293b' }}>#{odp.odp_number || odp.id?.slice(-8)}</div>
+                                                        </div>
                                                     </div>
                                                     <div style={{ fontSize: '0.95rem', fontWeight: '900', color: deepTeal }}>{odp.sku}</div>
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>

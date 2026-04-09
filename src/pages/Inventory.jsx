@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { AlertCircle, RefreshCw, Plus, Package, Save, X, ArrowUpRight, Search, Lightbulb, AlertTriangle } from 'lucide-react';
+import React, { useState } from 'react';
+import { AlertCircle, RefreshCw, Package, Save, X, ArrowUpRight, Search, Lightbulb, AlertTriangle } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
 
 const formatNum = (num) => {
@@ -13,7 +13,7 @@ const formatNum = (num) => {
 const Inventory = () => {
     const { 
         items, updateItem, recipes, createInternalOrder, orders,
-        siteContent, updateInventoryConfig, productionOrders, saveOdp
+        siteContent, updateInventoryConfig
     } = useBusiness();
     const [searchMP, setSearchMP] = useState('');
     const [searchPT, setSearchPT] = useState('');
@@ -25,18 +25,6 @@ const Inventory = () => {
     const redThreshold = siteContent?.inventory?.config?.redThreshold || 0.5;
     const [isSimulated, setIsSimulated] = useState(false);
     const [neededMPForSelection, setNeededMPForSelection] = useState({});
-
-    const [showQuickIntake, setShowQuickIntake] = useState(false);
-    const [quickIntakeData, setQuickIntakeData] = useState({ itemId: '', itemName: '', quantity: '', search: '', ocNumber: '' });
-
-    const handleQuickIntakeConfirm = async () => {
-        if (!quickIntakeData.itemId || !quickIntakeData.quantity || !quickIntakeData.ocNumber) return;
-        const item = items.find(i => i.id === quickIntakeData.itemId);
-        const currentPurchases = Number(item.purchases || 0);
-        await updateItem(quickIntakeData.itemId, { purchases: currentPurchases + Number(quickIntakeData.quantity) });
-        setShowQuickIntake(false);
-        setQuickIntakeData({ itemId: '', itemName: '', quantity: '', search: '', ocNumber: '' });
-    };
 
     const getFinalStock = (item) => Math.round(((item.initial || 0) + (item.purchases || 0) - (item.sales || 0)) * 10) / 10;
 
@@ -81,26 +69,6 @@ const Inventory = () => {
                 <div>
                     <h1 style={{ margin: 0, fontSize: '1.75rem', fontWeight: '950', color: deepTeal, letterSpacing: '-1px' }}>DASHBOARD MAESTRO DE INVENTARIO</h1>
                     <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '600', marginTop: '4px' }}>Control centralizado de existencias, valorización y reabastecimiento crítico.</div>
-                </div>
-                <div style={{ display: 'flex', gap: '0.8rem' }}>
-                    <button 
-                        onClick={() => setShowQuickIntake(true)}
-                        style={{
-                            background: '#10b981', color: '#fff', border: 'none',
-                            padding: '1rem 2rem', borderRadius: '18px', fontSize: '0.85rem',
-                            fontWeight: '950', cursor: 'pointer', display: 'flex',
-                            alignItems: 'center', gap: '10px', boxShadow: '0 10px 25px rgba(16, 185, 129, 0.3)',
-                            transition: 'all 0.2s', textTransform: 'uppercase', letterSpacing: '0.5px'
-                        }}
-                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.03)'}
-                        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                    >
-                        <Plus size={20} /> ENTRADA DE MP
-                    </button>
-                    <div style={{ padding: '0.6rem 1.2rem', borderRadius: '14px', background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }}></div>
-                        <span style={{ fontSize: '0.75rem', fontWeight: '900', color: '#1e293b' }}>SISTEMA LIVE</span>
-                    </div>
                 </div>
             </div>
 
@@ -762,89 +730,6 @@ const Inventory = () => {
                     </div>
                 </div>
             </div>
-
-            {/* Quick Intake Modal */}
-            {showQuickIntake && (
-                <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '1rem' }}>
-                    <div style={{ background: '#fff', width: '450px', maxWidth: '95vw', borderRadius: '24px', padding: '2.5rem', position: 'relative', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
-                        <button onClick={() => setShowQuickIntake(false)} style={{ position: 'absolute', top: '1.5rem', right: '1.5rem', border: 'none', background: '#f1f5f9', padding: '0.5rem', borderRadius: '50%', cursor: 'pointer', transition: 'all 0.2s' }}>
-                            <X size={20} />
-                        </button>
-                        
-                        <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.4rem', fontWeight: '950', color: deepTeal, textAlign: 'center', textTransform: 'uppercase', letterSpacing: '1px' }}>Entrada de Materia Prima</h3>
-                        <p style={{ margin: '0 0 2rem 0', fontSize: '0.8rem', color: '#64748b', textAlign: 'center' }}>Vincule los insumos a una Orden de Compra.</p>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                            {/* Campo OC */}
-                            <div style={{ position: 'relative' }}>
-                                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '950', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '8px' }}># Orden de Compra (OC)</label>
-                                <input 
-                                    type="text"
-                                    placeholder="Ej: OC-2024-001"
-                                    style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '2px solid #f1f5f9', fontSize: '1rem', fontWeight: '700', outline: 'none' }}
-                                    value={quickIntakeData.ocNumber}
-                                    onChange={(e) => setQuickIntakeData({...quickIntakeData, ocNumber: e.target.value})}
-                                />
-                            </div>
-
-                            {/* Buscador Insumo */}
-                            <div style={{ position: 'relative' }}>
-                                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '950', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '8px' }}>Insumo / Fruta</label>
-                                <div style={{ position: 'relative' }}>
-                                    <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                                    <input 
-                                        type="text"
-                                        placeholder="Buscar insumo..."
-                                        style={{ width: '100%', padding: '12px 14px 12px 42px', borderRadius: '12px', border: '2px solid #f1f5f9', fontSize: '1rem', fontWeight: '600', outline: 'none' }}
-                                        value={quickIntakeData.search}
-                                        onChange={(e) => setQuickIntakeData({...quickIntakeData, itemId: '', search: e.target.value})}
-                                    />
-                                </div>
-                                {quickIntakeData.search.length > 1 && !quickIntakeData.itemId && (
-                                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', zIndex: 10, marginTop: '8px', maxHeight: '180px', overflowY: 'auto', border: '1px solid #f1f5f9' }}>
-                                        {items.filter(i => (i.name || '').toLowerCase().includes(quickIntakeData.search.toLowerCase())).map(item => (
-                                            <div 
-                                                key={item.id}
-                                                onClick={() => setQuickIntakeData({...quickIntakeData, itemId: item.id, itemName: item.name, search: item.name.toUpperCase()})}
-                                                style={{ padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid #f8fafc', fontSize: '0.9rem', fontWeight: '700', color: deepTeal }}
-                                                onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
-                                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                            >
-                                                {item.name.toUpperCase()}
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Cantidad */}
-                            <div>
-                                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '950', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '8px' }}>Cantidad a Ingresar</label>
-                                <input 
-                                    type="number"
-                                    placeholder="0"
-                                    style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '2px solid #f1f5f9', fontSize: '1.2rem', fontWeight: '900', textAlign: 'center', outline: 'none', color: '#10b981' }}
-                                    value={quickIntakeData.quantity}
-                                    onChange={(e) => setQuickIntakeData({...quickIntakeData, quantity: e.target.value})}
-                                />
-                            </div>
-
-                            <button 
-                                onClick={handleQuickIntakeConfirm}
-                                disabled={!quickIntakeData.itemId || !quickIntakeData.quantity || !quickIntakeData.ocNumber}
-                                style={{ 
-                                    marginTop: '0.5rem', padding: '1.25rem', borderRadius: '18px', border: 'none', 
-                                    background: !quickIntakeData.itemId || !quickIntakeData.quantity || !quickIntakeData.ocNumber ? '#e2e8f0' : '#10b981', 
-                                    color: '#fff', fontSize: '1rem', fontWeight: '950', cursor: 'pointer', transition: 'all 0.3s',
-                                    boxShadow: !quickIntakeData.itemId || !quickIntakeData.quantity || !quickIntakeData.ocNumber ? 'none' : '0 10px 25px rgba(16, 185, 129, 0.3)'
-                                }}
-                            >
-                                CONFIRMAR ENTRADA
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             <style>{`
                 @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }

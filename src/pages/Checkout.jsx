@@ -11,7 +11,6 @@ const Checkout = () => {
     const { addOrder, addClient, clients, siteContent, saveWebCheckout, getWebCheckout, updateWebCheckoutStatus } = useBusiness();
     const navigate = useNavigate();
     const [step, setStep] = useState(1); // 1: Info, 2: Payment, 3: Success
-    const [pendingWhatsAppUrl, setPendingWhatsAppUrl] = useState(null);
     const [formData, setFormData] = useState({
         nombreCompleto: '',
         direccion: '',
@@ -275,7 +274,6 @@ const Checkout = () => {
         const message = `${modeTitle}%0A%0A*Cliente:* ${dataToUse.nombreCompleto}%0A*Teléfono:* ${dataToUse.telefono}%0A*Ubicación:* ${dataToUse.ciudad}, ${dataToUse.direccion}%0A*Total:* $${finalTotalToUse.toLocaleString('es-CO')}%0A%0A*Detalle del Pedido:*%0A${itemsText}`;
         
         const whatsappUrl = `https://api.whatsapp.com/send?phone=${finalPhone}&text=${message}`;
-        setPendingWhatsAppUrl(whatsappUrl);
         window.open(whatsappUrl, '_blank');
 
         setStep(3);
@@ -317,29 +315,6 @@ const Checkout = () => {
                         Muchas gracias por tu compra. Hemos registrado tu pedido y estamos preparando lo mejor de la Sabana para ti.
                     </p>
                     
-                    {pendingWhatsAppUrl && (
-                        <div style={{ background: '#f0fdf4', padding: '1.5rem', borderRadius: '12px', border: '1px solid #dcfce7', marginBottom: '2.5rem' }}>
-                            <p style={{ fontSize: '0.9rem', color: '#166534', fontWeight: '700', marginBottom: '1rem' }}>
-                                ¡Reporta tu pago para agilizar el envío!
-                            </p>
-                            <button 
-                                onClick={() => window.open(pendingWhatsAppUrl, '_blank')}
-                                style={{ 
-                                    background: '#25D366', color: '#fff', border: 'none', padding: '0.8rem 1.5rem', 
-                                    borderRadius: '8px', fontWeight: '800', display: 'flex', alignItems: 'center', 
-                                    gap: '10px', margin: '0 auto', cursor: 'pointer', boxShadow: '0 4px 12px rgba(37, 211, 102, 0.2)'
-                                }}
-                            >
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766 0-3.18-2.587-5.771-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217s.231.006.332.013c.101.007.245-.044.383.288l.58 1.397c.066.158.118.317.022.508-.096.191-.144.31-.288.476-.144.166-.3.31-.432.446l-.317.317c.144.252.317.49.526.708.541.564 1.139.914 1.701 1.139.158.065.25.043.346-.058.096-.101.411-.486.526-.65.115-.164.238-.137.382-.086.144.051.914.432 1.072.508s.262.115.301.181c.039.066.039.384-.105.789z"/>
-                                </svg>
-                                Reportar por WhatsApp
-                            </button>
-                            <p style={{ fontSize: '0.7rem', color: '#475569', marginTop: '0.8rem' }}>
-                                (Si la ventana no se abrió automáticamente, usa el botón de arriba)
-                            </p>
-                        </div>
-                    )}
 
                     <button 
                         onClick={() => navigate('/')} 

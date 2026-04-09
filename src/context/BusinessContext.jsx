@@ -68,6 +68,7 @@ export const BusinessProvider = ({ children }) => {
     const [units, setUnits] = useState([]);
     const [unitConversions, setUnitConversions] = useState({});
     const [lastUpdate, setLastUpdate] = useState(null);
+    const [analytics, setAnalytics] = useState([]);
 
     const [taxSettings, setTaxSettings] = useState({
         iva: 19,
@@ -339,6 +340,13 @@ export const BusinessProvider = ({ children }) => {
             })));
         }, (error) => console.error("Snapshot Production Error:", error));
 
+        const unsubAnalytics = onSnapshot(query(collection(db, 'analytics'), orderBy('date', 'asc')), (snapshot) => {
+            setAnalytics(snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            })));
+        }, (error) => console.error("Snapshot Analytics Error:", error));
+
         const unsubLeads = onSnapshot(query(collection(db, 'leads'), orderBy('created_at', 'desc')), (snapshot) => {
             setLeads(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         }, (error) => console.error("Snapshot Leads Error:", error));
@@ -494,6 +502,10 @@ export const BusinessProvider = ({ children }) => {
     }, []);
 
     const updateSiteContent = useCallback(async (section, key, content) => {
+        if (!section || !key || content === undefined) {
+            console.warn(`[ContentSync] Ignored invalid update for ${section}/${key}: content is undefined`);
+            return { success: false, error: "Datos de contenido inválidos (undefined)" };
+        }
         try {
             const q = query(collection(db, 'site_content'), where('section', '==', section), where('key', '==', key));
             const snapshot = await getDocs(q);
@@ -1149,10 +1161,31 @@ export const BusinessProvider = ({ children }) => {
             const id = `${from}_${to}`;
             await setDoc(doc(db, 'unit_conversions', id), { from, to, factor: Number(factor) });
             return { success: true };
-        } catch (err) {
-            return { success: false, error: err.message };
-        }
+        } catch (err) { return { success: false, error: err.message }; }
     }, []);
+
+    /**
+     * LOG VISIT: Increments a daily counter in a new 'analytics' collection.
+     * Fires once per session to avoid inflated counts.
+     */
+    const logVisit = useCallback(async () => {
+        const sessionKey = 'zeticas_visit_logged';
+        if (sessionStorage.getItem(sessionKey)) return;
+
+        try {
+            const today = new Date().toISOString().split('T')[0];
+            const analyticsRef = doc(db, 'analytics', today);
+            
+            await setDoc(analyticsRef, {
+                date: today,
+                count: increment(1)
+            }, { merge: true });
+
+            sessionStorage.setItem(sessionKey, 'true');
+        } catch (err) {
+            console.error("Error logging visit:", err);
+        }
+    }, [db]);
 
 
     // ── Perfil de la empresa propia (Zeticas) ──────────────────────────────
@@ -1193,17 +1226,17 @@ export const BusinessProvider = ({ children }) => {
 
 
     const value = useMemo(() => ({
-        loading, items, recipes, providers, orders: enrichedOrders, expenses, purchaseOrders, banks, bankTransactions, taxSettings, clients, siteContent, lastUpdate, lastPublish: buildInfo.lastPublish, productionOrders, users, units, unitConversions, ownCompany, leads, quotations,
-        setItems, setOrders, setExpenses, setPurchaseOrders, setBanks, setBankTransactions, setClients, setSiteContent, setProductionOrders, setLeads, setUsers, setUnits, setUnitConversions, setTaxSettings,
+        loading, items, recipes, providers, orders: enrichedOrders, expenses, purchaseOrders, banks, bankTransactions, taxSettings, clients, siteContent, lastUpdate, lastPublish: buildInfo.lastPublish, productionOrders, users, units, unitConversions, ownCompany, leads, quotations, analytics,
+        setItems, setOrders, setExpenses, setPurchaseOrders, setBanks, setBankTransactions, setClients, setSiteContent, setProductionOrders, setLeads, setUsers, setUnits, setUnitConversions, setTaxSettings, setAnalytics,
         refreshData, addClient, addOrder, deleteOrders, updateSiteContent, recalculatePTCosts, updateBankBalance, updateClient, deleteClient,
         addItem, updateItem, deleteItem, addSupplier, updateSupplier, deleteSupplier, updateOrder, addPurchase, addRecipe, deleteRecipeByProduct, saveOdp, deleteOdp, addExpense, updateExpense, deleteExpense, addBank, updateBank, deleteBank, receivePurchase, payPurchase, updateLead, addLead, deleteLead, addQuotation, deleteQuotation,
-        addUser, updateUser, deleteUser, consumeMaterials, loadFinishedGoods, saveConversion, convertUnit, saveWebCheckout, getWebCheckout, updateWebCheckoutStatus, addRejectedProduct, createInternalOrder, updateInventoryConfig
+        addUser, updateUser, deleteUser, consumeMaterials, loadFinishedGoods, saveConversion, convertUnit, saveWebCheckout, getWebCheckout, updateWebCheckoutStatus, addRejectedProduct, createInternalOrder, updateInventoryConfig, logVisit
     }), [
-        loading, items, recipes, providers, enrichedOrders, expenses, purchaseOrders, banks, bankTransactions, taxSettings, clients, siteContent, lastUpdate, productionOrders, leads, quotations, users, units, unitConversions, ownCompany,
-        setItems, setOrders, setExpenses, setPurchaseOrders, setBanks, setBankTransactions, setClients, setSiteContent, setProductionOrders, setLeads, setUsers, setUnits, setUnitConversions, setTaxSettings,
+        loading, items, recipes, providers, enrichedOrders, expenses, purchaseOrders, banks, bankTransactions, taxSettings, clients, siteContent, lastUpdate, productionOrders, leads, quotations, users, units, unitConversions, ownCompany, analytics,
+        setItems, setOrders, setExpenses, setPurchaseOrders, setBanks, setBankTransactions, setClients, setSiteContent, setProductionOrders, setLeads, setUsers, setUnits, setUnitConversions, setTaxSettings, setAnalytics,
         refreshData, addClient, addOrder, deleteOrders, updateSiteContent, recalculatePTCosts, updateBankBalance, updateClient, deleteClient,
         addItem, updateItem, deleteItem, addSupplier, updateSupplier, deleteSupplier, updateOrder, addPurchase, addRecipe, deleteRecipeByProduct, saveOdp, deleteOdp, addExpense, updateExpense, deleteExpense, addBank, updateBank, deleteBank, receivePurchase, payPurchase, updateLead, addLead, deleteLead, addQuotation, deleteQuotation,
-        addUser, updateUser, deleteUser, consumeMaterials, loadFinishedGoods, saveConversion, convertUnit, saveWebCheckout, getWebCheckout, updateWebCheckoutStatus, addRejectedProduct, createInternalOrder, updateInventoryConfig
+        addUser, updateUser, deleteUser, consumeMaterials, loadFinishedGoods, saveConversion, convertUnit, saveWebCheckout, getWebCheckout, updateWebCheckoutStatus, addRejectedProduct, createInternalOrder, updateInventoryConfig, logVisit
     ]);
 
     return (
