@@ -657,7 +657,7 @@ const Orders = ({ orders }) => {
             byProvider[item.providerId].push(item);
         }
 
-        Object.entries(byProvider).forEach(([providerId, mats]) => {
+        Object.entries(byProvider).forEach(([providerId, mats], idx) => {
             const provider = providers.find(p => p.id === providerId) || { id: providerId, name: 'Proveedor Asignado' };
             const subtotal = mats.reduce((sum, m) => sum + (m.quantityToBuy * m.unitCost), 0);
             const iva = subtotal * 0.19; // IVA del 19%
