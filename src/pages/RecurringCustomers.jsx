@@ -47,7 +47,7 @@ const ProductCarousel = ({ products }) => {
 const RecurringCustomers = () => {
     const { 
         items, clients, siteContent, upsertMember, saveWebCheckout, 
-        getWebCheckout, addOrder, updateBankBalance, banks 
+        getWebCheckout, addOrder, updateBankBalance, banks, addBank 
     } = useBusiness();
     const { login, user, logout } = useAuth();
     const navigate = useNavigate();
@@ -207,8 +207,22 @@ const RecurringCustomers = () => {
                 };
                 await addOrder(newOrder);
 
-                // 3. BANK SYNCHRONIZATION
+                // 3. BANK SYNCHRONIZATION (DISTRIBUTION: BBVA, Bold, Interrapidisimo)
                 try {
+                    const BOLD_COMMISSION_PERCENT = 0.0299;
+                    const BOLD_COMMISSION_FIXED = 900;
+                    const IVA_SURCHARGE = 1.19;
+
+                    const totalPaid = draft.totals.total;
+                    const shippingPaid = Number(draft.totals.shipping) || 0;
+                    
+                    // Calculation of Bold's extraction
+                    const commissionFee = Math.round((totalPaid * BOLD_COMMISSION_PERCENT + BOLD_COMMISSION_FIXED) * IVA_SURCHARGE);
+                    
+                    // The main income for BBVA is the remainder (Products - Commission)
+                    // If there was shipping, that part goes to the new dedicated account
+                    const remainderForBBVA = totalPaid - shippingPaid - commissionFee;
+
                     const bbvaBank = (banks || []).find(b => {
                         const name = (b.name || '').toLowerCase();
                         return name.includes('bbva') || name.includes('principal');
@@ -217,27 +231,70 @@ const RecurringCustomers = () => {
                         const name = (b.name || '').toLowerCase();
                         return name.includes('bold') || name.includes('comision');
                     });
+                    let shippingBank = (banks || []).find(b => {
+                        const name = (b.name || '').toLowerCase();
+                        return name.includes('interrapidisimo') || name.includes('envio');
+                    });
 
-                    console.log("Auditoría Bancaria (Suscripción) - Iniciando registros:", { bbva: bbvaBank?.name, bold: commissionBank?.name });
+                    // Proactive Creation of Shipping Account if it doesn't exist
+                    if (shippingPaid > 0 && !shippingBank) {
+                        console.log("🛠️ Creando cuenta para Costo de Envío...");
+                        const newBankRes = await addBank({
+                            name: 'Interrapidisimo Costo de Envío',
+                            balance: 0,
+                            real_time: 0,
+                            type: 'Logística',
+                            status: 'Active'
+                        });
+                        if (newBankRes.success) {
+                            // Note: Since banks is a snapshot from context, it might not update 
+                            // immediately in this closure. We use the ID directly from the response.
+                            shippingBank = { id: newBankRes.id, name: 'Interrapidisimo Costo de Envío' };
+                        }
+                    }
 
-                    if (bbvaBank) {
+                    console.log("📊 Auditoría Bancaria (Suscripción):", { 
+                        total: totalPaid, 
+                        bbva: remainderForBBVA, 
+                        bold: commissionFee, 
+                        shipping: shippingPaid 
+                    });
+
+                    // A. Registrar en BBVA (Ingreso Neto de Productos)
+                    if (bbvaBank && remainderForBBVA > 0) {
                         await updateBankBalance(
                             bbvaBank.id, 
-                            draft.totals.total, 
+                            remainderForBBVA, 
                             'income', 
-                            `Suscripción - ${newOrder.order_number}`, 
+                            `Suscripción (Neto) - ${newOrder.order_number}`, 
                             'Ventas'
                         );
-                        console.log("✅ Suscripción registrada en BBVA");
                     }
 
-                    if (commissionBank) {
-                        // For subscriptions, we usually take the full amount to BBVA, 
-                        // but if you have a split commission logic like in standard checkout, we can add it here.
-                        // For now, mirroring the logic to ensure the 'Bold' account exists.
+                    // B. Registrar en Bold (Comisiones)
+                    if (commissionBank && commissionFee > 0) {
+                        await updateBankBalance(
+                            commissionBank.id, 
+                            commissionFee, 
+                            'income', 
+                            `Comisión Bold - ${newOrder.order_number}`, 
+                            'Comisiones'
+                        );
+                    }
+
+                    // C. Registrar en Interrapidisimo (Costo de Envío)
+                    if (shippingBank && shippingPaid > 0) {
+                        await updateBankBalance(
+                            shippingBank.id, 
+                            shippingPaid, 
+                            'income', 
+                            `Envío Suscripción - ${newOrder.order_number}`, 
+                            'Logística'
+                        );
+                        console.log("✅ Costo de envío registrado en cuenta Interrapidisimo");
                     }
                 } catch (bankErr) {
-                    console.error("Error logging subscription payment to bank:", bankErr);
+                    console.error("Error logging subscription distribution to bank:", bankErr);
                 }
 
                 alert("¡Pago exitoso! Tu suscripción ha sido actualizada y la orden ha sido registrada.");
