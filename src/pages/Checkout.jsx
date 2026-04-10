@@ -10,7 +10,8 @@ const Checkout = () => {
     const { cart, cartTotal, clearCart } = useCart();
     const { 
         addOrder, addClient, clients, siteContent, saveWebCheckout, 
-        getWebCheckout, updateWebCheckoutStatus, banks, updateBankBalance 
+        getWebCheckout, updateWebCheckoutStatus, banks, updateBankBalance,
+        addBank
     } = useBusiness();
     const navigate = useNavigate();
     const [step, setStep] = useState(1); // 1: Info, 2: Payment, 3: Success
@@ -265,15 +266,20 @@ const Checkout = () => {
 
         await addOrder(newOrder);
 
-        // ── BANK SYNCHRONIZATION (BBVA + BOLD COMMISSIONS) ──
+        // ── BANK SYNCHRONIZATION (TRIPLE DISTRIBUTION: BBVA + BOLD + INTERRAPIDISIMO) ──
         try {
             const BOLD_COMMISSION_PERCENT = 0.0299;
             const BOLD_COMMISSION_FIXED = 900;
-            const IVA = 1.19;
+            const IVA_SURCHARGE = 1.19;
 
-            const totalVenta = finalTotalToUse;
-            const commissionFee = Math.round((totalVenta * BOLD_COMMISSION_PERCENT + BOLD_COMMISSION_FIXED) * IVA);
-            const montoNeto = totalVenta - commissionFee;
+            const totalPaid = finalTotalToUse;
+            const shippingPaid = draft?.totals?.shipping || shippingCost || 0;
+            
+            // Bold extraction logic
+            const commissionFee = Math.round((totalPaid * BOLD_COMMISSION_PERCENT + BOLD_COMMISSION_FIXED) * IVA_SURCHARGE);
+            
+            // Remainder split
+            const remainderForBBVA = totalPaid - shippingPaid - commissionFee;
 
             const bbvaBank = (banks || []).find(b => {
                 const name = (b.name || '').toLowerCase();
@@ -283,21 +289,39 @@ const Checkout = () => {
                 const name = (b.name || '').toLowerCase();
                 return name.includes('bold') || name.includes('comision');
             });
+            let shippingBank = (banks || []).find(b => {
+                const name = (b.name || '').toLowerCase();
+                return name.includes('interrapidisimo') || name.includes('envio');
+            });
 
-            console.log("Auditoría Bancaria - Iniciando registros:", { bbva: bbvaBank?.name, bold: commissionBank?.name, montoNeto, commissionFee });
-
-            if (bbvaBank) {
-                await updateBankBalance(
-                    bbvaBank.id, 
-                    montoNeto, 
-                    'income', 
-                    `Venta Web - ${newOrder.order_number}`, 
-                    'Ventas'
-                );
-                console.log("✅ Registro exitoso en BBVA");
+            // Proactive Creation of Shipping Account
+            if (shippingPaid > 0 && !shippingBank) {
+                console.log("🛠️ Creando cuenta logística para Interrapidisimo...");
+                const newBankRes = await addBank({
+                    name: 'Interrapidisimo Costo de Envío',
+                    balance: 0,
+                    real_time: 0,
+                    type: 'Logística',
+                    status: 'Active'
+                });
+                if (newBankRes.success) {
+                    shippingBank = { id: newBankRes.id, name: 'Interrapidisimo Costo de Envío' };
+                }
             }
 
-            if (commissionBank) {
+            console.log("📊 Auditoría de Distribución Bancaria:", { total: totalPaid, bbva: remainderForBBVA, bold: commissionFee, shipping: shippingPaid });
+
+            if (bbvaBank && remainderForBBVA > 0) {
+                await updateBankBalance(
+                    bbvaBank.id, 
+                    remainderForBBVA, 
+                    'income', 
+                    `Venta Web (Neto) - ${newOrder.order_number}`, 
+                    'Ventas'
+                );
+            }
+
+            if (commissionBank && commissionFee > 0) {
                 await updateBankBalance(
                     commissionBank.id, 
                     commissionFee, 
@@ -305,10 +329,19 @@ const Checkout = () => {
                     `Comisión Bold - ${newOrder.order_number}`, 
                     'Comisiones'
                 );
-                console.log("✅ Registro exitoso en Comisiones Bold");
+            }
+
+            if (shippingBank && shippingPaid > 0) {
+                await updateBankBalance(
+                    shippingBank.id, 
+                    shippingPaid, 
+                    'income', 
+                    `Envío Pagado - ${newOrder.order_number}`, 
+                    'Logística'
+                );
             }
         } catch (bankErr) {
-            console.error("Bank sync error:", bankErr);
+            console.error("Bank sync distribution error:", bankErr);
         }
 
         localStorage.removeItem('zeticas_pending_checkout');
