@@ -2506,6 +2506,34 @@ const Orders = ({ orders }) => {
                                         <div style={{ fontSize: '0.9rem', fontWeight: '950', color: '#e11d48' }}>{explosionPreview.filter(i => i.quantityToBuy > 0).length}</div>
                                     </div>
                                 </div>
+
+                                {/* Provider Assignment Progress (Summary) */}
+                                {(() => {
+                                    const itemsToBuy = explosionPreview.filter(i => i.quantityToBuy > 0);
+                                    const totalToAssign = itemsToBuy.length;
+                                    const assigned = itemsToBuy.filter(i => i.providerId).length;
+                                    const progress = totalToAssign > 0 ? (assigned / totalToAssign) * 100 : 0;
+
+                                    if (totalToAssign === 0) return null;
+
+                                    return (
+                                        <div style={{ flex: 1, maxWidth: '280px', marginLeft: '2rem', animation: 'fadeIn 0.5s ease-out' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', alignItems: 'baseline' }}>
+                                                <span style={{ fontSize: '0.65rem', fontWeight: '950', color: '#9a3412', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Asignación de Proveedores</span>
+                                                <span style={{ fontSize: '0.75rem', fontWeight: '950', color: progress === 100 ? '#10b981' : '#b45309' }}>{assigned}/{totalToAssign}</span>
+                                            </div>
+                                            <div style={{ width: '100%', height: '8px', background: '#fff', borderRadius: '10px', border: '1px solid #fed7aa', overflow: 'hidden', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)' }}>
+                                                <div style={{ 
+                                                    width: `${progress}%`, 
+                                                    height: '100%', 
+                                                    background: progress === 100 ? 'linear-gradient(90deg, #10b981, #059669)' : 'linear-gradient(90deg, #D4785A, #b45309)',
+                                                    transition: 'width 1s cubic-bezier(0.16, 1, 0.3, 1)',
+                                                    boxShadow: '0 0 10px rgba(180, 83, 9, 0.2)'
+                                                }} />
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
                             </div>
                             <button onClick={() => setIsExplosionModalOpen(false)} style={{ background: '#fff', border: '1px solid #fed7aa', borderRadius: '50%', padding: '0.5rem', cursor: 'pointer', color: '#b45309' }}><X size={20} /></button>
                         </div>
