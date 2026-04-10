@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { 
     CheckCircle, 
+    ArrowLeft,
     ArrowRight, Star, RefreshCw, Truck,
     Lock, Sparkles,
     Minus, Plus, Search, User, Mail, UserPlus, LogIn,
@@ -385,6 +386,28 @@ const RecurringCustomers = () => {
 
                 {step === 2 && (
                     <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
+                        <div 
+                            onClick={() => navigate('/')} 
+                            style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '8px', 
+                                cursor: 'pointer', 
+                                color: deepTeal, 
+                                fontWeight: '800', 
+                                fontSize: '0.75rem', 
+                                marginBottom: '1.5rem',
+                                letterSpacing: '1px',
+                                opacity: 0.6,
+                                transition: 'all 0.3s ease',
+                                width: 'fit-content'
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.opacity = 1; e.currentTarget.style.transform = 'translateX(-5px)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.opacity = 0.6; e.currentTarget.style.transform = 'translateX(0)'; }}
+                        >
+                            <ArrowLeft size={16} />
+                            <span>VOLVER AL INICIO</span>
+                        </div>
                         <h2 className="font-serif" style={{ fontSize: '3rem', color: deepTeal, textAlign: 'center' }}>Escoge tu Plan</h2>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '2rem', marginTop: '3rem' }}>
                             {planDurations.map(d => {
@@ -457,7 +480,29 @@ const RecurringCustomers = () => {
                 )}
 
                 {step === 3 && (
-                    <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <div 
+                            onClick={() => navigate('/')} 
+                            style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '8px', 
+                                cursor: 'pointer', 
+                                color: deepTeal, 
+                                fontWeight: '800', 
+                                fontSize: '0.75rem', 
+                                marginBottom: '1.5rem',
+                                letterSpacing: '1px',
+                                opacity: 0.6,
+                                transition: 'all 0.3s ease',
+                                width: 'fit-content'
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.opacity = 1; e.currentTarget.style.transform = 'translateX(-5px)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.opacity = 0.6; e.currentTarget.style.transform = 'translateX(0)'; }}
+                        >
+                            <ArrowLeft size={16} />
+                            <span>VOLVER AL INICIO</span>
+                        </div>
                         <div style={{ background: '#fff', width: '100%', maxWidth: '500px', padding: '3rem', borderRadius: '40px', boxShadow: '0 20px 50px rgba(0,0,0,0.05)' }}>
                             <h2 style={{ textAlign: 'center', color: deepTeal, fontSize: '2.5rem', marginBottom: '1.5rem', fontFamily: 'serif' }}>{authMode === 'login' ? 'Bienvenido' : 'Crea tu Cuenta'}</h2>
                             {authMode === 'login' ? (
@@ -584,6 +629,28 @@ const RecurringCustomers = () => {
                 {step === 4 && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '2rem' }}>
                         <div>
+                            <div 
+                                onClick={() => navigate('/')} 
+                                style={{ 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    gap: '8px', 
+                                    cursor: 'pointer', 
+                                    color: deepTeal, 
+                                    fontWeight: '800', 
+                                    fontSize: '0.75rem', 
+                                    marginBottom: '1.5rem',
+                                    letterSpacing: '1px',
+                                    opacity: 0.6,
+                                    transition: 'all 0.3s ease',
+                                    width: 'fit-content'
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.opacity = 1; e.currentTarget.style.transform = 'translateX(-5px)'; }}
+                                onMouseLeave={e => { e.currentTarget.style.opacity = 0.6; e.currentTarget.style.transform = 'translateX(0)'; }}
+                            >
+                                <ArrowLeft size={16} />
+                                <span>VOLVER AL INICIO</span>
+                            </div>
                             <h2 style={{ color: deepTeal, fontFamily: 'serif', fontSize: '2.5rem' }}>
                                 {user?.role === 'member' ? `¡Bienvenido, ${user.name.split(' ')[0]}!` : 'Tu Despensa'}
                             </h2>
