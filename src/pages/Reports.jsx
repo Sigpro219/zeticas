@@ -719,7 +719,7 @@ const Reports = ({ orders = [], productionAnalytics = [], taxSettings = {}, setT
                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1.5rem', background: '#f8fafc', borderRadius: '24px' }}>
                             <div>
                                 <div style={{ fontSize: '1.1rem', fontWeight: '900', color: deepTeal }}>Lead Time Promedio</div>
-                                <div style={{ fontSize: '0.85rem', color: '#94a3b8', fontWeight: '600', marginTop: '4px' }}>Ciclo completo Pedido -> Entrega</div>
+                                <div style={{ fontSize: '0.85rem', color: '#94a3b8', fontWeight: '600', marginTop: '4px' }}>Ciclo completo Pedido → Entrega</div>
                             </div>
                             <div style={{ textAlign: 'right' }}>
                                 <span style={{ fontSize: '2.2rem', fontWeight: '950', color: deepTeal }}>{operationalKPIs.leadTime}</span>
