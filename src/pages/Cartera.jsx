@@ -46,7 +46,7 @@ const Cartera = () => {
             const diffTime = Math.abs(new Date() - invoiceDate);
             const dueDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-            const isOrderPaid = order.status === 'Pagado' || order.payment_status === 'Pagado';
+            const isOrderPaid = order.status === 'Pagado' || order.status === 'Conciliada' || order.payment_status === 'Pagado';
             let status = 'Por Facturar';
             if (isOrderPaid) status = 'Pagada';
             else if (order.invoiceNum) {
@@ -135,10 +135,14 @@ const Cartera = () => {
                 payment_bank_id: selectedBank.id 
             });
             await updateBankBalance(selectedBank.id, amount, 'income', `Pago Recibido - Factura ${selectedInvoice.id}`, selectedInvoice.orderId);
+            await refreshData();
             setIsPaymentModalOpen(false);
             setSelectedInvoice(null);
             alert("Pago aplicado exitosamente");
-        } catch (_err) { alert("Error al procesar el pago"); }
+        } catch (_err) { 
+            console.error("Error al procesar el pago", _err);
+            alert("Error al procesar el pago"); 
+        }
     };
 
     return (
