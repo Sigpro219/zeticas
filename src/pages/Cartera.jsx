@@ -11,7 +11,7 @@ const Cartera = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedInvoice, setSelectedInvoice] = useState(null);
     const [paymentData, setPaymentData] = useState({
-        paymentDate: new Date().toISOString().split('T')[0],
+        paymentDate: new Date().toLocaleDateString('en-CA'),
         bank: ''
     });
 

@@ -643,13 +643,18 @@ const Production = () => {
                         const qtyNeeded = Number(item.quantity) || 0;
                         totalNeeded += qtyNeeded;
                         
-                        // Find current stock in context
-                        const inventoryItem = items.find(i => i.name === item.name || i.id === item.id);
+                        // Find current stock in context - Normalizing search
+                        const searchItemName = String(item.name || '').toLowerCase().trim();
+                        const inventoryItem = items.find(i => 
+                            String(i.name || '').toLowerCase().trim() === searchItemName || 
+                            i.id === item.id
+                        );
+                        
                         let currentStock = inventoryItem ? ((inventoryItem.initial || 0) + (inventoryItem.purchases || 0) - (inventoryItem.sales || 0)) : 0;
                         
                         // If this is the SKU we just finished, it might not be in the context yet
-                        // so we add the NEW netQty to the count
-                        if (item.name === odp.sku) {
+                        // so we add the NEW netQty to the count - Normalizing search
+                        if (searchItemName === String(odp.sku || '').toLowerCase().trim()) {
                             currentStock += netQty;
                         }
 
@@ -678,10 +683,10 @@ const Production = () => {
                         }
                     }
                     if (movedCount > 0) {
-                        alert(`¡Stock Cargado! ${movedCount} pedido(s) han pasado automáticamente a Logística por cumplimiento de inventario al 100%.`);
+                        alert(`¡Correcto! Se han ingresado ${netQty} unidades netas a inventario. ${movedCount} pedido(s) han pasado automáticamente a Logística.`);
                     }
                 } else {
-                    alert(`Ingresado a Inventario: ${netQty} unidades de ${odp.sku}. El pedido sigue en producción esperando componentes adicionales.`);
+                    alert(`¡Stock Cargado! Se ingresaron ${netQty} unidades netas de ${odp.sku}. El pedido permanece en procesamiento en planta.`);
                 }
             }
             setConfModal({ show: false, odp: null, endTime: null });
@@ -1148,12 +1153,14 @@ const Production = () => {
                                         <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '24px', border: '1px solid #f1f5f9', gridColumn: 'span 2' }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                 <div>
-                                                    <div style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '4px' }}>Tiempo Total de Proceso</div>
-                                                    <div style={{ fontSize: '1.2rem', fontWeight: '950', color: deepTeal }}>{totalMin} Minutos</div>
+                                                    <div style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '4px' }}>Breakdown de Lote</div>
+                                                    <div style={{ fontSize: '1rem', fontWeight: '950', color: '#64748b' }}>
+                                                        {totalPlanned} (Total) - {waste} (Merma)
+                                                    </div>
                                                 </div>
                                                 <div style={{ textAlign: 'right' }}>
-                                                    <div style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '4px' }}>Impacto en Stock</div>
-                                                    <div style={{ fontSize: '1.2rem', fontWeight: '950', color: '#10b981' }}>+{netQty} UDS</div>
+                                                    <div style={{ fontSize: '0.65rem', fontWeight: '900', color: '#10b981', textTransform: 'uppercase', marginBottom: '4px' }}>Ingreso Neto a Almacén</div>
+                                                    <div style={{ fontSize: '1.4rem', fontWeight: '1000', color: '#10b981' }}>+{netQty} UDS</div>
                                                 </div>
                                             </div>
                                         </div>

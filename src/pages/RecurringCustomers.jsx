@@ -190,7 +190,7 @@ const RecurringCustomers = () => {
                     clientId: user?.id || draft.nit,
                     amount: draft.totals.total,
                     total_amount: draft.totals.total,
-                    date: new Date().toISOString().split('T')[0],
+                    date: new Date().toLocaleDateString('en-CA'),
                     status: 'Pendiente',
                     payment_status: 'Pagado',
                     source: 'Suscripción Web',

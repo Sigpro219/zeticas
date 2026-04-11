@@ -50,7 +50,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
     const [manualOCData, setManualOCData] = useState({
         providerId: '',
         items: [],
-        date: new Date().toISOString().split('T')[0]
+        date: new Date().toLocaleDateString('en-CA')
     });
     const [newItem, setNewItem] = useState({ id: '', quantity: 1, unitCost: 0 });
 
@@ -135,7 +135,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
         if (res.success) {
             alert("Orden de Compra manual creada con éxito.");
             setIsCreatingManualOC(false);
-            setManualOCData({ providerId: '', items: [], date: new Date().toISOString().split('T')[0] });
+            setManualOCData({ providerId: '', items: [], date: new Date().toLocaleDateString('en-CA') });
             refreshData();
         } else {
             alert("Error al guardar la orden de compra.");

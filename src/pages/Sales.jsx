@@ -220,7 +220,7 @@ const Orders = ({ orders }) => {
                 status: 'Pendiente', 
                 payment_status: newOrder.payment_status || 'Pendiente',
                 payment_bank_id: selectedBankId || null,
-                date: new Date().toISOString().split('T')[0],
+                date: new Date().toLocaleDateString('en-CA'),
                 purchase_order: newOrder.purchase_order || null
             };
 
@@ -678,7 +678,7 @@ const Orders = ({ orders }) => {
                 providerName: provider.name,
                 providerPhone: provider.phone || '3000000000',
                 providerEmail: provider.email || 'ventas@proveedor.com',
-                date: new Date().toISOString().split('T')[0],
+                date: new Date().toLocaleDateString('en-CA'),
                 items: mats.map(m => ({
                     id: m.id, // reference to material ID
                     name: m.name,
@@ -761,7 +761,7 @@ const Orders = ({ orders }) => {
                     status: 'Enviada',
                     payment_status: 'Pendiente',
                     total_amount: Number(po.total) || 0,
-                    order_date: po.date || new Date().toISOString().split('T')[0],
+                    order_date: po.date || new Date().toLocaleDateString('en-CA'),
                     related_orders: po.relatedOrders || [],
                     items: (po.items || []).map(i => ({
                         id: i.id || 'no-item-id',

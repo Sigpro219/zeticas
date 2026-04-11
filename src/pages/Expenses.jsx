@@ -39,7 +39,7 @@ const Expenses = () => {
     };
 
     const [formData, setFormData] = useState({
-        date: new Date().toISOString().split('T')[0],
+        date: new Date().toLocaleDateString('en-CA'),
         category: 'Administración',
         description: '',
         amount: '',
@@ -123,7 +123,7 @@ const Expenses = () => {
                 }
 
                 setShowModal(false);
-                setFormData({ date: new Date().toISOString().split('T')[0], category: 'Administración', description: '', amount: '', bankId: '', targetBankId: '' });
+                setFormData({ date: new Date().toLocaleDateString('en-CA'), category: 'Administración', description: '', amount: '', bankId: '', targetBankId: '' });
                 alert("Movimiento registrado y saldo bancario actualizado.");
             }
         } catch (err) { alert("Error: " + err.message); }

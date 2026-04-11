@@ -57,16 +57,30 @@ const Shipping = () => {
 
     // Calculate stock fulfillment percentage
     const getStockFulfillment = React.useCallback((orderItems) => {
-        if (!orderItems?.length) return 0;
+        if (!orderItems?.length) return { percentage: 0, ready: 0, needed: 0 };
         let totalNeeded = 0;
         let totalReady = 0;
         for (const item of orderItems) {
-            totalNeeded += (Number(item.quantity) || 0);
-            const inventoryItem = items.find(i => i.name === item.name || i.id === item.id);
+            const qtyNeeded = (Number(item.quantity) || 0);
+            totalNeeded += qtyNeeded;
+            
+            // Normalize search: Case-insensitive and trimmed
+            const searchName = String(item.name || '').toLowerCase().trim();
+            const inventoryItem = items.find(i => 
+                String(i.name || '').toLowerCase().trim() === searchName || 
+                i.id === item.id
+            );
+            
             const currentStock = inventoryItem ? ((inventoryItem.initial || 0) + (inventoryItem.purchases || 0) - (inventoryItem.sales || 0)) : 0;
-            totalReady += Math.min((Number(item.quantity) || 0), Math.max(0, currentStock));
+            totalReady += Math.min(qtyNeeded, Math.max(0, currentStock));
         }
-        return (totalReady / totalNeeded) * 100;
+        
+        const percentage = totalNeeded > 0 ? (totalReady / totalNeeded) * 100 : 0;
+        return { 
+            percentage: Math.min(100, Math.max(0, percentage)), 
+            ready: totalReady, 
+            needed: totalNeeded 
+        };
     }, [items]);
 
     // Calculate Lead Time (Dynamic from DB or Real-time)
@@ -940,19 +954,25 @@ const Shipping = () => {
                                         style={{ padding: '1.2rem 1rem', textAlign: 'center', minWidth: '160px', cursor: 'pointer' }}
                                     >
                                         {(() => {
-                                            const fulfillment = getStockFulfillment(order.items || []);
-                                            const isDone = fulfillment >= 100;
+                                            const { percentage, ready, needed } = getStockFulfillment(order.items || []);
+                                            const isDone = percentage >= 100;
                                             return (
                                                 <div style={{ padding: '0 1rem' }}>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '900', color: isDone ? '#10b981' : (fulfillment > 0 ? institutionOcre : premiumSalmon) }}>
-                                                        <span>{isDone ? 'LISTO' : (fulfillment > 0 ? 'PARCIAL' : 'SIN STOCK')}</span>
-                                                        <span>{Math.round(fulfillment)}%</span>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '0.85rem', fontWeight: '900', color: isDone ? '#10b981' : (percentage > 0 ? institutionOcre : premiumSalmon) }}>
+                                                        <span>{isDone ? 'LISTO' : (percentage > 0 ? 'PARCIAL' : 'SIN STOCK')}</span>
+                                                        <span>{Math.round(percentage)}%</span>
                                                     </div>
+                                                    
+                                                    {/* Added absolute unit indicator */}
+                                                    <div style={{ fontSize: '0.65rem', fontWeight: '900', color: '#64748b', marginBottom: '6px', textTransform: 'uppercase', textAlign: 'right', opacity: 0.8 }}>
+                                                        Disp: {ready} / Req: {needed} UDS
+                                                    </div>
+
                                                     <div style={{ width: '100%', height: '6px', background: 'rgba(0,0,0,0.05)', borderRadius: '10px', overflow: 'hidden' }}>
                                                         <div style={{ 
-                                                            width: `${fulfillment}%`, 
+                                                            width: `${percentage}%`, 
                                                             height: '100%', 
-                                                            background: isDone ? '#10b981' : (fulfillment > 0 ? institutionOcre : premiumSalmon),
+                                                            background: isDone ? '#10b981' : (percentage > 0 ? institutionOcre : premiumSalmon),
                                                             boxShadow: isDone ? '0 0 10px rgba(16, 185, 129, 0.2)' : 'none',
                                                             transition: 'width 1s cubic-bezier(0.16, 1, 0.3, 1)'
                                                         }} />

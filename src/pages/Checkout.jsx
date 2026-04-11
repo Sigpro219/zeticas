@@ -251,7 +251,7 @@ const Checkout = () => {
             clientId: finalClientId,
             amount: finalTotalToUse,
             total_amount: finalTotalToUse,
-            date: new Date().toISOString().split('T')[0],
+            date: new Date().toLocaleDateString('en-CA'),
             status: 'Pendiente',
             payment_status: 'Pagado',
             source: 'Pagina WEB',

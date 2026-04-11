@@ -111,7 +111,7 @@ export const BusinessProvider = ({ children }) => {
                 end_balance: newBalance,
                 description: description,
                 category: category,
-                date: new Date().toISOString().split('T')[0],
+                date: new Date().toLocaleDateString('en-CA'),
                 created_at: new Date().toISOString()
             });
 
@@ -226,7 +226,7 @@ export const BusinessProvider = ({ children }) => {
                     client: o.client || o.customer_name || o.client_name || o.user_fullName || o.billing_first_name || '',
                     items: mappedItems,
                     amount: Number(o.total_amount || o.amount || 0),
-                    date: isoDate.split('T')[0],
+                    date: new Date(isoDate).toLocaleDateString('en-CA'),
                     realDate: isoDate,
                 };
             }));
@@ -283,7 +283,7 @@ export const BusinessProvider = ({ children }) => {
                     dbId: doc.id,
                     providerName: p.provider_name || p.providerName || 'Proveedor',
                     providerId: p.provider_id || p.providerId,
-                    date: p.order_date || p.date || isoDate.split('T')[0],
+                    date: p.order_date || p.date || (isoDate ? new Date(isoDate).toLocaleDateString('en-CA') : ''),
                     total: Number(p.total_amount || p.total_cost || 0),
                     status: p.status || 'Enviada',
                     paymentStatus: p.payment_status || p.paymentStatus || 'Pendiente',
@@ -1074,7 +1074,7 @@ export const BusinessProvider = ({ children }) => {
 
             // 3. Create Expense Record (PyG module)
             await addDoc(collection(db, 'expenses'), {
-                expense_date: new Date().toISOString().split('T')[0],
+                expense_date: new Date().toLocaleDateString('en-CA'),
                 category: 'Materia Prima / Compras',
                 description: `Pago OC ${poId} - ${finalProvider}`,
                 amount: Number(finalAmount),
@@ -1228,10 +1228,16 @@ export const BusinessProvider = ({ children }) => {
 
     const loadFinishedGoods = useCallback(async (sku, quantity, alreadyConsumed = false) => {
         try {
-            const q = query(collection(db, 'products'), where('name', '==', String(sku)));
-            const snapshot = await getDocs(q);
-            if (!snapshot.empty) {
-                const docSnap = snapshot.docs[0];
+            // Normalize searching: case-insensitive and trimmed
+            const searchName = String(sku || '').toLowerCase().trim();
+            const snapshot = await getDocs(collection(db, 'products'));
+            const docSnap = snapshot.docs.find(d => {
+                const p = d.data();
+                const pName = String(p.name || '').toLowerCase().trim();
+                return pName === searchName;
+            });
+
+            if (docSnap) {
                 const ptId = docSnap.id;
 
                 // 1. Charge Finished Goods to inventory (Output from production)
@@ -1325,7 +1331,7 @@ export const BusinessProvider = ({ children }) => {
         if (sessionStorage.getItem(sessionKey)) return;
 
         try {
-            const today = new Date().toISOString().split('T')[0];
+            const today = new Date().toLocaleDateString('en-CA');
             const analyticsRef = doc(db, 'analytics', today);
             
             await setDoc(analyticsRef, {
