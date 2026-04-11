@@ -270,7 +270,7 @@ const Cartera = () => {
                                 <label style={{ fontSize: '0.75rem', fontWeight: '900', textTransform: 'uppercase', color: '#94a3b8', display: 'block', marginBottom: '8px' }}>Banco Recaudador</label>
                                 <select required value={paymentData.bank} onChange={e => setPaymentData({...paymentData, bank: e.target.value})} style={{ width: '100%', padding: '1.2rem', borderRadius: '18px', border: '1px solid #f1f5f9', background: '#fcfcfc', fontWeight: '700' }}>
                                     <option value="">Seleccione canal...</option>
-                                    {banks.map(b => <option key={b.id} value={b.id}>{b.name} (${b.balance.toLocaleString()})</option>)}
+                                    {banks.filter(b => b.type === 'cta de ahorros').map(b => <option key={b.id} value={b.id}>{b.name} (${b.balance.toLocaleString()})</option>)}
                                 </select>
                             </div>
                             <div>
