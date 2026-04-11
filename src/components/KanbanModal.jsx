@@ -6,7 +6,7 @@ import {
 import { useBusiness } from '../context/BusinessContext';
 
 const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
-    const { items: contextItems, productionOrders, recipes, updateOrder } = useBusiness();
+    const { items: contextItems, productionOrders, recipes, updateOrder, purchaseOrders } = useBusiness();
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [showHidden, setShowHidden] = useState(false);
 
@@ -17,7 +17,7 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
     const institutionOcre = "#D6BD98";
     const premiumSalmon = "#D4785A";
 
-    // Helper for stock fulfillment
+    // Helper for finished goods fulfillment
     const getStockFulfillment = (orderItems) => {
         if (!orderItems?.length) return 0;
         let totalNeeded = 0;
@@ -29,6 +29,30 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
             totalReady += Math.min((Number(item.quantity) || 0), Math.max(0, currentStock));
         }
         return (totalReady / totalNeeded) * 100;
+    };
+
+    // --- NUEVO HELPER: CUMPLIMIENTO DE MATERIA PRIMA (MP) ---
+    const getMaterialFulfillment = (orderItems) => {
+        if (!orderItems?.length) return 100;
+        let totalMet = 0;
+        let countableItems = 0;
+
+        orderItems.forEach(item => {
+            const recipeList = recipes[item.id] || recipes[item.name] || recipes[item.name?.toLowerCase().trim()] || [];
+            if (recipeList.length === 0) return;
+            
+            countableItems++;
+            const yieldQty = Number(recipeList[0]?.yield_quantity) || 1;
+            const itemMet = recipeList.every(ri => {
+                const mp = currentItems.find(i => i.id === ri.rm_id || (i.name && i.name.toLowerCase().trim() === (ri.name || '').toLowerCase().trim()));
+                const stock = mp ? ((mp.initial || 0) + (mp.purchases || 0) - (mp.sales || 0)) : 0;
+                const needed = (Number(ri.qty) / yieldQty) * Number(item.quantity);
+                return stock >= needed;
+            });
+            if (itemMet) totalMet++;
+        });
+
+        return countableItems > 0 ? (totalMet / countableItems) * 100 : 100;
     };
 
     const columns = [
@@ -65,8 +89,8 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
             const statusLower = (o.status || '').toLowerCase();
             const inProcessLowers = column.inProcessStatuses.map(s => s.toLowerCase());
             let isIncluded = inProcessLowers.includes(statusLower);
-            if (column.id === 'despachos' && statusLower === 'en producción') {
-                if (getStockFulfillment(o.items || []) >= 100) isIncluded = true;
+            if (column.id === 'despachos' && (statusLower === 'en producción' || statusLower === 'en producción (iniciada)')) {
+                isIncluded = true;
             }
             if (isIncluded) inProcess++;
         });
@@ -110,6 +134,29 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
                             </div>
                             <div style={{ flex: 1, padding: '0.8rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                 {(() => {
+                                    // Helper para priorizar: 1. Críticos, 2. Verdes (Accionables), 3. Antigüedad
+                                    const sortItems = (a, b, type) => {
+                                        // A. PRIORIDAD ABSOLUTA (CRíTICA)
+                                        const prioA = (a.priority === 'CRÍTICA' || a.is_critical || a.is_priority) ? 1 : 0;
+                                        const prioB = (b.priority === 'CRÍTICA' || b.is_critical || b.is_priority) ? 1 : 0;
+                                        if (prioA !== prioB) return prioB - prioA;
+
+                                        // B. ESTADO OPERATIVO (VERDES PRIMERO)
+                                        if (type === 'odp') {
+                                            const startedA = a.started_at ? 1 : 0;
+                                            const startedB = b.started_at ? 1 : 0;
+                                            if (startedA !== startedB) return startedB - startedA;
+                                        } else {
+                                            const readyA = getStockFulfillment(a.items || []) >= 100 ? 1 : 0;
+                                            const readyB = getStockFulfillment(b.items || []) >= 100 ? 1 : 0;
+                                            if (readyA !== readyB) return readyB - readyA;
+                                        }
+
+                                        // C. ANTIGÜEDAD (FIFO)
+                                        const dateA = new Date(a.created_at || a.realDate || 0);
+                                        const dateB = new Date(b.created_at || b.realDate || 0);
+                                        return dateA - dateB;
+                                    };
                                     if (col.id === 'produccion') {
                                         const plans = (productionOrders || []).filter(po => {
                                             const status = (po.status?.text || '').toLowerCase().trim();
@@ -133,10 +180,14 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
                                             });
 
                                             return allMaterialsReady && (showHidden || !po.kanban_hidden);
-                                        }).map(odp => {
+                                        }).sort((a, b) => sortItems(a, b, 'odp'))
+                                        .map(odp => {
                                             const isStarted = !!odp.started_at;
                                             return (
                                                 <div key={`odp-${odp.dbId || odp.id}`} style={{ background: '#fff', padding: '1.2rem', borderRadius: '16px', borderLeft: `6px solid ${isStarted ? '#10b981' : '#ef4444'}`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)', position: 'relative' }}>
+                                                    {(odp.priority === 'CRÍTICA' || odp.is_critical) && (
+                                                        <div style={{ position: 'absolute', top: '-8px', left: '12px', background: '#ef4444', color: '#fff', fontSize: '0.55rem', fontWeight: '900', padding: '2px 8px', borderRadius: '4px', zIndex: 1 }}>PRIORIDAD CRÍTICA</div>
+                                                    )}
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                         <div style={{ fontSize: '0.6rem', fontWeight: '950', color: isStarted ? '#10b981' : '#ef4444' }}>PLAN DE PRODUCCIÓN</div>
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -165,21 +216,7 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
                                             );
                                         });
 
-                                        const ordersInProd = orders.filter(o => !isTooOldForKanban(o)).filter(o => {
-                                            const status = (o.status || '').toLowerCase().trim();
-                                            return status === 'en producción' && getStockFulfillment(o.items || []) < 100 && (showHidden || !o.kanban_hidden);
-                                        }).map(order => (
-                                            <div key={`order-${order.dbId || order.id}`} onClick={() => setSelectedOrder({ ...order, stageName: col.label })} style={{ background: 'rgba(214, 120, 90, 0.03)', padding: '1.2rem', borderRadius: '16px', borderLeft: `6px solid ${premiumSalmon}`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)', cursor: 'pointer' }}>
-                                                <div style={{ fontSize: '0.6rem', fontWeight: '950', color: premiumSalmon }}>PEDIDO VINCULADO</div>
-                                                <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#1e293b' }}>{order.client}</div>
-                                                <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
-                                                    <span style={{ fontSize: '0.6rem', fontWeight: '900', background: 'rgba(2, 83, 87, 0.05)', color: deepTeal, padding: '2px 8px', borderRadius: '4px' }}>{order.items?.length || 0} SKU</span>
-                                                    <span style={{ fontSize: '0.6rem', fontWeight: '900', color: '#64748b' }}>FALTA STOCK</span>
-                                                </div>
-                                            </div>
-                                        ));
-
-                                        return [...plans, ...ordersInProd];
+                                        return [...plans];
                                     }
 
                                     if (col.id === 'compras') {
@@ -216,18 +253,32 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
                                         const ordersInCompras = orders.filter(o => !isTooOldForKanban(o)).filter(o => {
                                             const statusLower = (o.status || '').toLowerCase();
                                             return col.inProcessStatuses.map(s => s.toLowerCase()).includes(statusLower) && (showHidden || !o.kanban_hidden);
-                                        }).map(order => (
-                                            <div key={order.dbId || order.id} onClick={() => setSelectedOrder({ ...order, stageName: col.label })} style={{ background: '#fff', padding: '1.2rem', borderRadius: '16px', borderLeft: `6px solid #D4785A`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)', cursor: 'pointer' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', alignItems: 'center' }}>
-                                                    <span style={{ fontSize: '0.85rem', fontWeight: '950', color: '#1e293b' }}>#{order.id}</span>
-                                                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#D4785A' }} />
+                                        }).sort((a, b) => sortItems(a, b, 'sale'))
+                                        .map(order => {
+                                            const relatedPOs = (purchaseOrders || []).filter(po => {
+                                                const related = (po.relatedOrders || po.related_orders || []).map(id => String(id).toUpperCase().trim());
+                                                return related.includes(String(order.id).toUpperCase().trim()) || related.includes(String(order.dbId).toUpperCase().trim());
+                                            });
+                                            const allPaid = relatedPOs.length > 0 && relatedPOs.every(po => {
+                                                const status = String(po.payment_status || po.paymentStatus || '').toLowerCase();
+                                                return status === 'pagado';
+                                            });
+                                            const cardIdColor = allPaid ? '#10b981' : '#D4785A';
+                                            
+                                            return (
+                                                <div key={order.dbId || order.id} onClick={() => setSelectedOrder({ ...order, stageName: col.label })} style={{ background: '#fff', padding: '1.2rem', borderRadius: '16px', borderLeft: `6px solid ${cardIdColor}`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)', cursor: 'pointer' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', alignItems: 'center' }}>
+                                                        <span style={{ fontSize: '0.85rem', fontWeight: '950', color: '#1e293b' }}>#{order.id}</span>
+                                                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: cardIdColor }} />
+                                                    </div>
+                                                    <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#1e293b' }}>{order.client}</div>
+                                                    <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
+                                                        <span style={{ fontSize: '0.6rem', fontWeight: '900', background: 'rgba(2, 83, 87, 0.05)', color: deepTeal, padding: '2px 8px', borderRadius: '4px' }}>{order.items?.length || 0} SKU</span>
+                                                        {allPaid && <span style={{ fontSize: '0.6rem', fontWeight: '900', background: '#10b98115', color: '#10b981', padding: '2px 8px', borderRadius: '4px' }}>PAGADO</span>}
+                                                    </div>
                                                 </div>
-                                                <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#1e293b' }}>{order.client}</div>
-                                                <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
-                                                    <span style={{ fontSize: '0.6rem', fontWeight: '900', background: 'rgba(2, 83, 87, 0.05)', color: deepTeal, padding: '2px 8px', borderRadius: '4px' }}>{order.items?.length || 0} SKU</span>
-                                                </div>
-                                            </div>
-                                        ));
+                                            );
+                                        });
 
                                         return [...pendingInCompras, ...ordersInCompras];
                                     }
@@ -236,14 +287,13 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
                                         const statusLower = (o.status || '').toLowerCase();
                                         const inProcessLowers = col.inProcessStatuses.map(s => s.toLowerCase());
                                         let isIncluded = inProcessLowers.includes(statusLower);
-                                        if (col.id === 'despachos' && statusLower === 'en producción') {
-                                            if (getStockFulfillment(o.items || []) >= 100) isIncluded = true;
+                                        if (col.id === 'despachos' && (statusLower === 'en producción' || statusLower === 'en producción (iniciada)')) {
+                                            isIncluded = true;
                                         }
-                                        // Orders in Prod Ready for Dispatch are in Despachos. Those NOT ready are in Produccion (handled above).
-                                        if (col.id === 'despachos' && statusLower === 'en producción' && getStockFulfillment(o.items || []) < 100) isIncluded = false;
                                         
                                         return isIncluded && !isTooOldForKanban(o) && (showHidden || !o.kanban_hidden);
-                                    }).map(order => {
+                                    }).sort((a, b) => sortItems(a, b, 'sale'))
+                                    .map(order => {
                                         const statusLower = (order.status || '').toLowerCase().trim();
                                         const fulfillment = getStockFulfillment(order.items || []);
                                         const isReady = fulfillment >= 100;
@@ -289,6 +339,9 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
                                                 <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
                                                     <span style={{ fontSize: '0.6rem', fontWeight: '900', background: 'rgba(2, 83, 87, 0.05)', color: deepTeal, padding: '2px 8px', borderRadius: '4px' }}>{order.items?.length || 0} SKU</span>
                                                     {(statusLower === 'pendiente' || statusLower === 'pendiente de explosión de materiales' || statusLower === 'pendiente para ejecución') && <span style={{ fontSize: '0.6rem', fontWeight: '900', background: '#0ea5e9', color: '#fff', padding: '2px 8px', borderRadius: '4px' }}>PENDIENTE EXPLOSIÓN</span>}
+                                                    {(statusLower === 'en producción' || statusLower === 'en producción (iniciada)') && !isReady && (
+                                                        <span style={{ fontSize: '0.6rem', fontWeight: '900', background: premiumSalmon + '20', color: premiumSalmon, padding: '2px 8px', borderRadius: '4px' }}>EN PRODUCCIÓN</span>
+                                                    )}
                                                     {isReady && col.id === 'despachos' && <span style={{ fontSize: '0.6rem', fontWeight: '900', background: '#10b98115', color: '#10b981', padding: '2px 8px', borderRadius: '4px' }}>LISTO</span>}
                                                 </div>
                                             </div>

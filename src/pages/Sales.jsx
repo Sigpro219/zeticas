@@ -493,8 +493,10 @@ const Orders = ({ orders }) => {
                 const safety = Number(pt.min_stock_level) || Number(pt.safety) || 0;
                 const batchSize = pt.batch_size || 1;
 
-                // Pedidos - Inv + Safety
-                const suggestedProduce = Math.max(0, totalDemand - inventoryPT + safety);
+                // FÓRMULA: Necesidad de Fabricación = (Pedido - Existencia) + Nivel de Seguridad
+                // Esto asegura que tras producir, quedemos exactamente en el Nivel de Seguridad.
+                const neededToReachSafety = (totalDemand - inventoryPT) + safety;
+                const suggestedProduce = Math.max(0, neededToReachSafety);
 
                 return {
                     ptId: pt.id,
@@ -526,8 +528,10 @@ const Orders = ({ orders }) => {
         pts.forEach(p => {
             if (p.manualProduce <= 0) return;
 
-            // Multiplicador exacto sobre el tamaño de lote (ej: si lote es 5 y producen 18 => 3.6 veces la receta)
-            const multiplier = p.manualProduce / p.batchSize;
+            // LÓGICA DE BATCHES ENTEROS (n): 
+            // n = redondeo.arriba( Unidades a Fabricar / Tamaño del Batch )
+            const nBatches = Math.ceil(p.manualProduce / p.batchSize);
+            const multiplier = nBatches;
 
             p.recipe.forEach(ing => {
                 const matInfo = items.find(i => i.id === ing.rm_id || i.id === ing.id || i.name === ing.name);
@@ -570,7 +574,7 @@ const Orders = ({ orders }) => {
                 requiredRawMaterials[matId].requiredQtyUsage += qtyForTotal;
 
                 requiredRawMaterials[matId].bomBreakdown.push(
-                    `${p.label}: prod=${p.manualProduce} / lote=${p.batchSize} (${multiplier.toFixed(2)}x) → req: ${qtyForTotal.toFixed(4).replace(/\.?0+$/, '')} ${matUnit}`
+                    `${p.label}: prod=${p.manualProduce} → n=${nBatches} batches (lote ${p.batchSize}) → req: ${qtyForTotal.toFixed(4).replace(/\.?0+$/, '')} ${matUnit}`
                 );
             });
         });
@@ -580,14 +584,19 @@ const Orders = ({ orders }) => {
             // Lógica de Reorden Kanban:
             // 1. Calculamos cómo quedará el stock físico al terminar la producción de estos lotes.
             const projectedStockAfterProd = mat.currentInvUsage - mat.requiredQtyUsage;
-            // 2. La alarma se dispara solo cuando el stock proyectado cae al 50% o menos de la Meta (Nivel Crítico).
-            const reorderThreshold = mat.safetyUsage / 2;
             
-            // 3. Si el stock final proyectado > 50% de la Meta, aún no compramos (0).
-            // Si el stock final proyectado <= 50% de la Meta, compramos para volver a subir hasta la Meta.
+            // 2. Umbral Dinámico: Usamos el configurado en el Dashboard (siteContent.inventory.config.redThreshold)
+            // Si el stock cae por debajo de este % de la meta, se dispara la OC.
+            const configThreshold = siteContent?.inventory?.config?.redThreshold !== undefined 
+                ? Number(siteContent.inventory.config.redThreshold) 
+                : 0.5; // default 50%
+            
+            const reorderThreshold = mat.safetyUsage * configThreshold;
+            
+            // 3. REPOSICIÓN TOTAL: Si cruzamos el umbral, compramos para volver al 100% de la Meta.
             let netUsageNeeds = 0;
             if (projectedStockAfterProd <= reorderThreshold) {
-                // Compramos la diferencia para llegar a la Meta (seguridad completa)
+                // Compramos para cubrir el hueco y quedar en el Nivel de Seguridad exacto
                 netUsageNeeds = Math.max(0, mat.safetyUsage - projectedStockAfterProd);
             }
 

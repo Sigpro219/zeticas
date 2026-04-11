@@ -566,6 +566,16 @@ const Shipping = () => {
         }
 
         return result.sort((a, b) => {
+            const fulfillA = getStockFulfillment(a.items);
+            const fulfillB = getStockFulfillment(b.items);
+            
+            const isReadyA = fulfillA >= 100 ? 1 : 0;
+            const isReadyB = fulfillB >= 100 ? 1 : 0;
+            
+            if (isReadyA !== isReadyB) {
+                return isReadyB - isReadyA; // 1 (Ready) comes before 0 (Partial)
+            }
+            
             return new Date(b.date || b.created_at) - new Date(a.date || a.created_at);
         });
     }, [orders, searchTerm, filterType, customRange, viewMode]);

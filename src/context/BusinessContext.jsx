@@ -756,7 +756,7 @@ export const BusinessProvider = ({ children }) => {
                 }
             }
 
-            // 2. Physical Stock Deduction (Safe Execution)
+            // 2. Physical Stock Deduction & Material Explosion (Safe Execution)
             const finalStatuses = ['finalizado', 'entregado', 'cobrado'];
             if (data.status && finalStatuses.includes(data.status.toLowerCase())) {
                 const wasFinal = oldData.status && finalStatuses.includes(oldData.status.toLowerCase());
@@ -764,9 +764,22 @@ export const BusinessProvider = ({ children }) => {
                     for (const item of oldData.items) {
                         if (item.id) {
                             try {
+                                // A. Increment Sales for the Finished Good
                                 await updateDoc(doc(db, 'products', item.id), {
                                     sales: increment(Number(item.quantity) || 0)
                                 });
+
+                                // B. Failsafe: Material Explosion (Ensure materials are consumed if ODP was skipped)
+                                // We check if the item has a recipe and consume materials accordingly
+                                const recipeList = recipes[item.id] || recipes[item.name] || [];
+                                if (recipeList.length > 0) {
+                                    const yieldQty = Number(recipeList[0].yield_quantity) || 1;
+                                    const materialsToConsume = recipeList.map(r => ({
+                                        id: r.rm_id,
+                                        qtyToConsume: (Number(r.qty) / yieldQty) * (Number(item.quantity) || 0)
+                                    }));
+                                    await consumeMaterials(materialsToConsume);
+                                }
                             } catch (e) {
                                 console.warn(`Stock update failed for item ${item.id}:`, e);
                             }
@@ -1213,24 +1226,41 @@ export const BusinessProvider = ({ children }) => {
         }
     }, []);
 
-    const loadFinishedGoods = useCallback(async (sku, quantity) => {
+    const loadFinishedGoods = useCallback(async (sku, quantity, alreadyConsumed = false) => {
         try {
-            const q = query(collection(db, 'products'), where('name', '==', sku));
+            const q = query(collection(db, 'products'), where('name', '==', String(sku)));
             const snapshot = await getDocs(q);
             if (!snapshot.empty) {
                 const docSnap = snapshot.docs[0];
-                // Use 'purchases' property to record PRODUCTO TERMINADO output accurately mapped in Kárdex (Inv. Final)
+                const ptId = docSnap.id;
+
+                // 1. Charge Finished Goods to inventory (Output from production)
+                // Use 'purchases' property to record PRODUCTO TERMINADO production output
                 await updateDoc(docSnap.ref, {
-                    purchases: increment(quantity)
+                    purchases: increment(Number(quantity) || 0)
                 });
+
+                // 2. Automatic Material Deduction (if not already done at start)
+                if (!alreadyConsumed) {
+                    const recipeList = recipes[ptId] || recipes[sku] || [];
+                    if (recipeList.length > 0) {
+                        const yieldQty = Number(recipeList[0].yield_quantity) || 1;
+                        const materialsToConsume = recipeList.map(r => ({
+                            id: r.rm_id,
+                            qtyToConsume: (Number(r.qty) / yieldQty) * (Number(quantity) || 0)
+                        }));
+                        await consumeMaterials(materialsToConsume);
+                    }
+                }
+                
                 return { success: true };
             }
-            throw new Error("Producto no encontrado en inventario");
+            throw new Error(`Producto [${sku}] no encontrado en el catálogo de productos.`);
         } catch (err) {
             console.error("Error loading finished goods:", err);
             return { success: false, error: err.message };
         }
-    }, []);
+    }, [recipes, consumeMaterials]);
 
     const saveWebCheckout = useCallback(async (data) => {
         try {

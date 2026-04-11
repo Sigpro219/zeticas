@@ -7,11 +7,11 @@ import {
 import { useBusiness } from '../context/BusinessContext';
 
 const KanbanSummary = ({ orders = [], productionOrders = [], items = [], recipes = {}, onOpenModal }) => {
-    const { siteContent } = useBusiness();
+    const { siteContent, purchaseOrders } = useBusiness();
     const deepTeal = "#025357";
     const premiumSalmon = "#D4785A";
 
-    // Helper for stock fulfillment (Same logic as KanbanModal)
+    // Helper for finished goods fulfillment
     const getStockFulfillment = (orderItems) => {
         if (!orderItems?.length) return 0;
         let totalNeeded = 0;
@@ -23,6 +23,30 @@ const KanbanSummary = ({ orders = [], productionOrders = [], items = [], recipes
             totalReady += Math.min((Number(item.quantity) || 0), Math.max(0, currentStock));
         }
         return totalNeeded > 0 ? (totalReady / totalNeeded) * 100 : 0;
+    };
+
+    // --- NUEVO HELPER: CUMPLIMIENTO DE MATERIA PRIMA (MP) ---
+    const getMaterialFulfillment = (orderItems) => {
+        if (!orderItems?.length) return 100;
+        let totalMet = 0;
+        let countableItems = 0;
+
+        orderItems.forEach(item => {
+            const recipeList = recipes[item.id] || recipes[item.name] || recipes[item.name?.toLowerCase().trim()] || [];
+            if (recipeList.length === 0) return; // Si no hay receta, no penaliza MP (ej: merch)
+            
+            countableItems++;
+            const yieldQty = Number(recipeList[0]?.yield_quantity) || 1;
+            const itemMet = recipeList.every(ri => {
+                const mp = items.find(i => i.id === ri.rm_id || (i.name && i.name.toLowerCase().trim() === (ri.name || '').toLowerCase().trim()));
+                const stock = mp ? ((mp.initial || 0) + (mp.purchases || 0) - (mp.sales || 0)) : 0;
+                const needed = (Number(ri.qty) / yieldQty) * Number(item.quantity);
+                return stock >= needed;
+            });
+            if (itemMet) totalMet++;
+        });
+
+        return countableItems > 0 ? (totalMet / countableItems) * 100 : 100;
     };
 
     // Helper: Determinar si un pedido debe desaparecer del Kanban (Política de 10 días tras entrega)
@@ -144,6 +168,24 @@ const KanbanSummary = ({ orders = [], productionOrders = [], items = [], recipes
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {(() => {
+                        // Helper para priorizar: 1. Críticos, 2. Verdes (Accionables), 3. Antigüedad
+                        const sortItems = (a, b) => {
+                            // A. PRIORIDAD ABSOLUTA (CRíTICA)
+                            const prioA = (a.priority === 'CRÍTICA' || a.is_critical || a.is_priority) ? 1 : 0;
+                            const prioB = (b.priority === 'CRÍTICA' || b.is_critical || b.is_priority) ? 1 : 0;
+                            if (prioA !== prioB) return prioB - prioA;
+
+                            // B. ESTADO OPERATIVO (VERDES PRIMERO)
+                            const readyA = getStockFulfillment(a.items || []) >= 100 ? 1 : 0;
+                            const readyB = getStockFulfillment(b.items || []) >= 100 ? 1 : 0;
+                            if (readyA !== readyB) return readyB - readyA;
+
+                            // C. ANTIGÜEDAD (FIFO)
+                            const dateA = new Date(a.created_at || a.realDate || 0);
+                            const dateB = new Date(b.created_at || b.realDate || 0);
+                            return dateA - dateB;
+                        };
+
                         const actionRequiredOrders = orders.filter(o => !isTooOldForKanban(o)).filter(o => {
                             const statusLower = (o.status || '').toLowerCase().trim();
                             
@@ -166,7 +208,7 @@ const KanbanSummary = ({ orders = [], productionOrders = [], items = [], recipes
                             }
 
                             return false;
-                        });
+                        }).sort(sortItems);
 
                         if (actionRequiredOrders.length === 0) {
                             return (
@@ -199,7 +241,18 @@ const KanbanSummary = ({ orders = [], productionOrders = [], items = [], recipes
                                     onMouseLeave={e => e.currentTarget.style.background = isReady ? 'rgba(239, 68, 68, 0.03)' : '#f8fafc'}
                                 >
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444' }} />
+                                        {(() => {
+                                            const relatedPOs = (purchaseOrders || []).filter(po => {
+                                                const related = (po.relatedOrders || po.related_orders || []).map(id => String(id).toUpperCase().trim());
+                                                return related.includes(String(order.id).toUpperCase().trim()) || related.includes(String(order.dbId).toUpperCase().trim());
+                                            });
+                                            const allPaid = relatedPOs.length > 0 && relatedPOs.every(po => {
+                                                const status = String(po.payment_status || po.paymentStatus || '').toLowerCase();
+                                                return status === 'pagado';
+                                            });
+                                            const dotColor = allPaid ? '#10b981' : (statusLower.includes('compras') ? '#f59e0b' : '#ef4444');
+                                            return <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: dotColor }} />;
+                                        })()}
                                         <span style={{ fontWeight: '800', fontSize: '0.85rem', color: '#1e293b' }}>
                                             #{order.id} — <span style={{ color: '#64748b' }}>{order.client}</span>
                                         </span>
@@ -213,14 +266,30 @@ const KanbanSummary = ({ orders = [], productionOrders = [], items = [], recipes
                                                 return <span style={{ fontSize: '0.6rem', background: '#0ea5e9', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontWeight: '900', marginLeft: '8px' }}>PENDIENTE EXPLOSIÓN</span>;
                                             }
 
+                                            const relatedPOs = (purchaseOrders || []).filter(po => {
+                                                const related = (po.relatedOrders || []).map(id => String(id).toUpperCase().trim());
+                                                return related.includes(String(order.id).toUpperCase().trim()) || related.includes(String(order.dbId).toUpperCase().trim());
+                                            });
+                                            const allPaid = relatedPOs.length > 0 && relatedPOs.every(po => {
+                                                const status = String(po.payment_status || po.paymentStatus || '').toLowerCase();
+                                                return status === 'pagado';
+                                            });
+
                                             // 2. Gestión de Compras
                                             if (statusLower === 'en compras' || statusLower === 'en compras (oc generadas)') {
+                                                if (allPaid) {
+                                                    return <span style={{ fontSize: '0.6rem', background: '#10b981', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontWeight: '900', marginLeft: '8px' }}>PAGADO - PENDIENTE RECIBIR</span>;
+                                                }
                                                 return <span style={{ fontSize: '0.6rem', background: '#f59e0b', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontWeight: '900', marginLeft: '8px' }}>PENDIENTE RECIBIR</span>;
                                             }
 
                                             // 3. Gestión de Producción
-                                            if ((statusLower === 'en producción' || statusLower === 'en producción (iniciada)') && fulfillment >= 100) {
+                                            const matFulfillment = getMaterialFulfillment(order.items || []);
+                                            if ((statusLower === 'en producción' || statusLower === 'en producción (iniciada)') && matFulfillment >= 100) {
                                                 return <span style={{ fontSize: '0.6rem', background: premiumSalmon, color: '#fff', padding: '2px 8px', borderRadius: '4px', fontWeight: '900', marginLeft: '8px' }}>LISTO PARA PRODUCIR</span>;
+                                            }
+                                            if ((statusLower === 'en producción' || statusLower === 'en producción (iniciada)') && matFulfillment < 100) {
+                                                return <span style={{ fontSize: '0.6rem', background: '#94a3b8', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontWeight: '900', marginLeft: '8px' }}>FALTA MATERIA PRIMA</span>;
                                             }
 
                                             // 4. Gestión de Despacho

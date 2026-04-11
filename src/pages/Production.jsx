@@ -37,6 +37,58 @@ const institutionOcre = "#D4785A";
 const premiumSalmon = "#E29783";
 const glassWhite = "rgba(255, 255, 255, 0.85)";
 
+/* 
+   Helper para calcular batches: redondear siempre al entero superior 
+   según la fórmula industrial: (Cantidad) / Batch
+*/
+const getBatchCount = (qty, item) => {
+    // Si el ítem no tiene TB (Tamaño de Batch), usamos 1 por defecto
+    const batchSize = Number(item?.TB || item?.batch_size || 1);
+    if (batchSize <= 0) return 1;
+    return Math.ceil(Number(qty) / batchSize);
+};
+
+// Componente secundario para el Cronómetro en Vivo
+const ProductionTimer = ({ startedAt, completedAt }) => {
+    const [elapsed, setElapsed] = React.useState(0);
+
+    React.useEffect(() => {
+        if (!startedAt) return;
+
+        const updateTimer = () => {
+            const start = new Date(startedAt).getTime();
+            const end = completedAt ? new Date(completedAt).getTime() : new Date().getTime();
+            const diffMin = Math.floor((end - start) / 60000);
+            setElapsed(Math.max(0, diffMin));
+        };
+
+        updateTimer();
+        const interval = setInterval(updateTimer, 60000); // Actualizar cada minuto
+        return () => clearInterval(interval);
+    }, [startedAt, completedAt]);
+
+    if (!startedAt) return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', opacity: 0.5 }}>
+            <span style={{ fontSize: '0.85rem', fontWeight: '950', color: '#94a3b8' }}>--:--</span>
+            <span style={{ fontSize: '0.55rem', fontWeight: '700', color: '#94a3b8' }}>INICIO</span>
+        </div>
+    );
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {!completedAt && <RefreshCw size={10} className="spin-slow" style={{ color: '#D4785A' }} />}
+                <span style={{ fontSize: '0.85rem', fontWeight: '950', color: completedAt ? '#10b981' : '#D4785A' }}>
+                    {elapsed} MIN {completedAt ? 'TOTAL' : ''}
+                </span>
+            </div>
+            <span style={{ fontSize: '0.55rem', fontWeight: '700', color: '#94a3b8' }}>
+                {completedAt ? 'FINALIZADO' : `INICIÓ: ${new Date(startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+            </span>
+        </div>
+    );
+};
+
 const Production = () => {
     const {
         orders,
@@ -341,10 +393,15 @@ const Production = () => {
             if (dateFrom && refDate) matchDate = refDate >= dateFrom;
             if (dateTo && refDate) matchDate = matchDate && refDate <= dateTo;
             return matchSearch && matchStatus && matchDate;
-        }).map(odp => ({
-            ...odp,
-            isPriority: prioritySkus.has(odp.sku)
-        })).sort((a, b) => {
+        }).map(odp => {
+            const settings = odpSettings[odp.sku] || {};
+            return {
+                ...odp,
+                isPriority: prioritySkus.has(odp.sku),
+                wasteQty: settings.wasteQty || 0,
+                settings: { ...odp.settings, ...settings } // Merge latest settings
+            };
+        }).sort((a, b) => {
             // Priority 1: Bottlenecks (isPriority)
             if (a.isPriority && !b.isPriority) return -1;
             if (!a.isPriority && b.isPriority) return 1;
@@ -356,7 +413,7 @@ const Production = () => {
             if (!aFinalized && bFinalized) return -1;
             return 0;
         });
-    }, [odpQueue, searchQuery, statusFilter, dateFilter, customRange, prioritySkus]);
+    }, [odpQueue, odpSettings, searchQuery, statusFilter, dateFilter, customRange, prioritySkus]);
 
     const handleDeleteOdp = async (odp) => {
         if (!window.confirm(`¿Deseas RETIRAR Y ELIMINAR permanentemente ${odp.sku} de la planta?\n\nLos pedidos vinculados volverán a estado "Pendiente" en el monitor de ventas.`)) return;
@@ -560,7 +617,7 @@ const Production = () => {
             }
 
             // 1. Charge Finished Goods to inventory
-            const result = await loadFinishedGoods(odp.sku, netQty);
+            const result = await loadFinishedGoods(odp.sku, netQty, odp.settings.mpSynced);
             if (result.success) {
                 // 2. Stop timer at the EXACT moment 'Finalizar' was clicked and finalize ODP
                 const newSettings = {
@@ -836,185 +893,195 @@ const Production = () => {
                 </div>
             </section>
 
-            {/* ODP Table */}
-            <div style={{ background: glassWhite, backdropFilter: 'blur(10px)', borderRadius: '24px', border: '1px solid rgba(2, 83, 87, 0.05)', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.02)', animation: 'fadeUp 1.1s ease-out' }}>
-                <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', minWidth: '1000px', borderCollapse: 'separate', borderSpacing: 0 }}>
-                        <thead>
-                            <tr style={{ background: 'rgba(2, 83, 87, 0.02)' }}>
-                                <th style={{ padding: '1.5rem 2rem', textAlign: 'left', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase' }}>Referencia ODP</th>
-                                <th style={{ padding: '1.5rem 1rem', textAlign: 'left', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase' }}>Producto / SKU</th>
-                                <th style={{ padding: '1.5rem 1rem', textAlign: 'center', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase' }}>Q. Plan</th>
-                                <th style={{ padding: '1.5rem 1rem', textAlign: 'center', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase' }}>Cronometría</th>
-                                <th style={{ padding: '1.5rem 1rem', textAlign: 'center', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase' }}>Desperdicio</th>
-                                <th style={{ padding: '1.5rem 1rem', textAlign: 'center', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase' }}>Eficiencia Und/Hora</th>
-                                <th style={{ padding: '1.5rem 1rem', textAlign: 'center', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase' }}>% Desperdicio</th>
-                                <th style={{ padding: '1.5rem 1rem', textAlign: 'center', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase' }}>Estado</th>
-                        <th style={{ padding: '1.5rem 2rem', textAlign: 'center', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase' }}>Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredOdpQueue.map((odp) => {
-                                const isStarted = !!odp.settings.start;
-                                const isFinished = !!odp.settings.end;
-                                const isCritical = odp.isPriority;
+            {/* ODP Card Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: '2rem', animation: 'fadeUp 1.1s ease-out' }}>
+                {filteredOdpQueue.map((odp) => {
+                    const isStarted = !!odp.settings.start;
+                    const isFinished = !!odp.settings.end;
+                    const isCritical = odp.isPriority;
+                    
+                    // --- CALCULO DE CUMPLIMIENTO DE MATERIALES ---
+                    const recipeList = recipes[odp.sku] || recipes[odp.sku?.toLowerCase().trim()] || [];
+                    let materialReadiness = 0;
+                    let missingDetails = [];
+                    
+                    if (recipeList.length > 0) {
+                        const yieldQty = Number(recipeList[0]?.yield_quantity) || 1;
+                        const totalReqMass = recipeList.reduce((acc, r) => acc + (Number(r.qty) / yieldQty) * odp.finalQty, 0);
+                        let availableMass = 0;
+                        
+                        recipeList.forEach(r => {
+                            const req = (Number(r.qty) / yieldQty) * odp.finalQty;
+                            const mat = items.find(i => i.id === r.rm_id || i.name === r.name);
+                            const stock = mat ? ((mat.initial || 0) + (mat.purchases || 0) - (mat.sales || 0)) : 0;
+                            availableMass += Math.min(req, Math.max(0, stock));
+                            if (stock < req) missingDetails.push(r.name);
+                        });
+                        materialReadiness = totalReqMass > 0 ? (availableMass / totalReqMass) * 100 : 100;
+                    } else {
+                        materialReadiness = 100; 
+                    }
 
+                    const progressColor = materialReadiness === 100 ? '#10b981' : (materialReadiness > 50 ? institutionOcre : '#ef4444');
+
+                    return (
+                        <div 
+                            key={odp.dbId || odp.odpId} 
+                            style={{ 
+                                background: '#fff', 
+                                borderRadius: '32px', 
+                                padding: '2rem', 
+                                border: `1px solid ${isCritical && !isFinished ? institutionOcre + '30' : 'rgba(0,0,0,0.05)'}`,
+                                boxShadow: isCritical && !isFinished ? `0 20px 40px ${institutionOcre}15` : '0 10px 30px rgba(0,0,0,0.03)',
+                                position: 'relative',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '1.5rem',
+                                transition: 'transform 0.3s ease',
+                                overflow: 'hidden'
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-5px)'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
+                        >
+                            {/* Priority Glow */}
+                            {isCritical && !isFinished && (
+                                <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', background: institutionOcre }}></div>
+                            )}
+
+                            {/* Header Section */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <div>
+                                    <button
+                                        onClick={() => generateOdpPdfFull(odp)}
+                                        style={{ background: 'none', border: 'none', fontWeight: '950', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: '#94a3b8', fontSize: '0.75rem', padding: 0, marginBottom: '4px' }}
+                                    >
+                                        <FileText size={14} /> {odp.odpId}
+                                    </button>
+                                    <div style={{ fontWeight: '950', color: deepTeal, fontSize: '1.3rem', letterSpacing: '-0.5px' }}>{odp.sku.toUpperCase()}</div>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <span style={{ padding: '6px 14px', borderRadius: '12px', fontSize: '0.65rem', fontWeight: '900', background: odp.status.color, color: odp.status.textColor, textTransform: 'uppercase' }}>
+                                        {odp.status.text}
+                                    </span>
+                                    {isCritical && !isFinished && (
+                                        <div style={{ marginTop: '8px', fontSize: '0.6rem', background: institutionOcre, color: '#fff', padding: '3px 10px', borderRadius: '20px', fontWeight: '950', textAlign: 'center' }}>PRIORIDAD CRÍTICA</div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Material Fulfillment Progress Bar */}
+                            <div style={{ background: '#f8fafc', padding: '1.2rem', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                    <span style={{ fontSize: '0.7rem', fontWeight: '900', color: '#64748b', textTransform: 'uppercase' }}>Disponibilidad de Insumos</span>
+                                    <span style={{ fontSize: '0.8rem', fontWeight: '950', color: progressColor }}>{materialReadiness.toFixed(0)}%</span>
+                                </div>
+                                <div style={{ width: '100%', height: '8px', background: '#e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
+                                    <div style={{ width: `${materialReadiness}%`, height: '100%', background: progressColor, transition: 'width 1s ease-in-out', boxShadow: `0 0 10px ${progressColor}40` }}></div>
+                                </div>
+                                {missingDetails.length > 0 && (
+                                    <div style={{ marginTop: '10px', fontSize: '0.65rem', color: '#94a3b8', fontWeight: '700' }}>
+                                        Faltan: {missingDetails.slice(0, 2).join(', ')}{missingDetails.length > 2 ? '...' : ''}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Center Section: Qty & Chrono */}
+                            {(() => {
+                                const currentProduct = items.find(i => i.sku === odp.sku || i.name === odp.sku);
                                 return (
-                                    <tr key={odp.dbId || odp.odpId} style={{ 
-                                        borderBottom: '1px solid #f8fafc', 
-                                        transition: 'all 0.3s',
-                                        background: isCritical && !isFinished ? 'rgba(212, 120, 90, 0.03)' : 'transparent',
-                                        borderLeft: isCritical && !isFinished ? `6px solid ${institutionOcre}` : 'none'
-                                    }} onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(2, 83, 87, 0.02)'; }} onMouseLeave={(e) => { e.currentTarget.style.background = isCritical && !isFinished ? 'rgba(212, 120, 90, 0.03)' : 'transparent'; }}>
-                                        <td style={{ padding: '2rem' }}>
-                                            <button
-                                                onClick={() => generateOdpPdfFull(odp)}
-                                                style={{
-                                                    background: 'none',
-                                                    border: 'none',
-                                                    fontWeight: '900',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '0.8rem',
-                                                    cursor: 'pointer',
-                                                    color: deepTeal,
-                                                    padding: 0
-                                                }}
-                                            >
-                                                <FileText size={18} /> 
-                                                {isCritical && !isFinished && <span title="Prioridad Crítica: Libera Pedido" style={{ animation: 'pulse 2s infinite' }}>💡</span>}
-                                                {odp.odpId}
-                                            </button>
-                                        </td>
-                                        <td style={{ padding: '2rem 1rem' }}>
-                                            <div style={{ fontWeight: '900', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                {odp.sku}
-                                                {isCritical && !isFinished && (
-                                                    <span style={{ fontSize: '0.6rem', background: institutionOcre, color: '#fff', padding: '2px 8px', borderRadius: '4px', letterSpacing: '0.5px' }}>PRIORIDAD</span>
-                                                )}
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                        <div style={{ background: '#f8fafc', padding: '1.2rem', borderRadius: '20px', textAlign: 'center' }}>
+                                            <div style={{ fontSize: '0.6rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '8px' }}>Cantidad de Producción</div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <input
+                                                        type="number"
+                                                        value={odp.finalQty}
+                                                        onChange={(e) => updateOdp(odp.sku, 'customQty', Number(e.target.value))}
+                                                        style={{ width: '70px', background: 'transparent', border: 'none', borderBottom: '2px solid #e2e8f0', textAlign: 'center', fontWeight: '950', fontSize: '1.2rem', color: deepTeal, padding: '4px', outline: 'none' }}
+                                                    />
+                                                    <span style={{ fontSize: '0.7rem', fontWeight: '800', color: '#94a3b8' }}>UDS</span>
+                                                </div>
+                                                <div style={{ fontSize: '0.65rem', fontWeight: '950', color: institutionOcre, background: `${institutionOcre}10`, padding: '2px 8px', borderRadius: '4px', marginTop: '6px', textTransform: 'uppercase' }}>
+                                                    Lotes: {getBatchCount(odp.finalQty, currentProduct)}
+                                                </div>
                                             </div>
-                                        </td>
-                                        <td style={{ padding: '2rem 1rem', textAlign: 'center' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
-                                                <input
-                                                    type="number"
-                                                    value={odp.finalQty}
-                                                    onChange={(e) => updateOdp(odp.sku, 'customQty', Number(e.target.value))}
-                                                    style={{
-                                                        width: '80px',
-                                                        background: '#fff',
-                                                        border: '2px solid #e2e8f0',
-                                                        padding: '0.6rem',
-                                                        borderRadius: '14px',
-                                                        fontWeight: '900',
-                                                        textAlign: 'center',
-                                                        color: deepTeal,
-                                                        outline: 'none',
-                                                        transition: 'border 0.3s'
-                                                    }}
-                                                    onFocus={(e) => e.target.style.borderColor = institutionOcre}
-                                                    onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
-                                                />
-                                            </div>
-                                        </td>
-                                        <td style={{ padding: '2rem 1rem', textAlign: 'center' }}>
-                                            <div style={{ fontSize: '0.6rem', fontWeight: '900', color: '#64748b', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                                <span style={{ color: odp.settings.start ? deepTeal : '#94a3b8' }}>
-                                                    {odp.settings.start ? `${new Date(odp.settings.start).toLocaleDateString('es-CO')} ${new Date(odp.settings.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'DATE/TIME START'}
-                                                </span>
-                                                <div style={{ width: '1px', height: '8px', background: '#e2e8f0', margin: '0 auto' }} />
-                                                <span style={{ color: odp.settings.end ? '#10b981' : '#94a3b8' }}>
-                                                    {odp.settings.end ? `${new Date(odp.settings.end).toLocaleDateString('es-CO')} ${new Date(odp.settings.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'DATE/TIME END'}
-                                                </span>
-                                            </div>
-                                        </td>
-                                        <td style={{ padding: '2rem 1rem', textAlign: 'center' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                                                <input
-                                                    type="number"
-                                                    placeholder="0"
-                                                    value={odp.settings.wasteQty || ''}
-                                                    disabled={!isStarted || isFinished}
-                                                    onChange={(e) => updateOdp(odp.sku, 'wasteQty', e.target.value)}
-                                                    style={{ 
-                                                        width: '60px', 
-                                                        padding: '0.5rem', 
-                                                        borderRadius: '10px', 
-                                                        border: '1px solid #e2e8f0', 
-                                                        textAlign: 'center', 
-                                                        fontSize: '0.8rem', 
-                                                        fontWeight: '800',
-                                                        background: (!isStarted || isFinished) ? '#f8fafc' : '#fff',
-                                                        opacity: (!isStarted || isFinished) ? 0.6 : 1
-                                                    }}
-                                                />
-                                                <span style={{ fontSize: '0.6rem', fontWeight: '900', color: '#94a3b8' }}>UDS</span>
-                                            </div>
-                                        </td>
-                                        <td style={{ padding: '2rem 1rem', textAlign: 'center' }}>
-                                            <div style={{ fontSize: '1rem', fontWeight: '900', color: deepTeal }}>{odp.efficiency || '0.0'}</div>
-                                            <div style={{ fontSize: '0.55rem', color: '#94a3b8', fontWeight: '900', textTransform: 'uppercase' }}>und/hr</div>
-                                        </td>
-                                        <td style={{ padding: '2rem 1rem', textAlign: 'center' }}>
-                                            <div style={{ fontSize: '1rem', fontWeight: '900', color: Number(odp.waste_percent) > 5 ? '#ef4444' : premiumSalmon }}>{odp.waste_percent}%</div>
-                                        </td>
-                                        <td style={{ padding: '2rem 1rem', textAlign: 'center' }}>
-                                            <span style={{ padding: '6px 12px', borderRadius: '10px', fontSize: '0.65rem', fontWeight: '900', background: odp.status.color, color: odp.status.textColor, whiteSpace: 'nowrap' }}>{odp.status.text.toUpperCase()}</span>
-                                        </td>
-                                        <td style={{ padding: '2rem', textAlign: 'center' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem' }}>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                                <button
-                                                    onClick={() => updateOdp(odp.sku, 'start', new Date().toISOString())}
-                                                    disabled={!!odp.settings.start}
-                                                    style={{
-                                                        padding: '0.8rem 1.2rem',
-                                                        borderRadius: '15px',
-                                                        border: 'none',
-                                                        background: odp.settings.start ? '#e2e8f0' : deepTeal,
-                                                        color: '#fff',
-                                                        fontWeight: '900',
-                                                        cursor: odp.settings.start ? 'not-allowed' : 'pointer',
-                                                        fontSize: '0.75rem',
-                                                        boxShadow: !odp.settings.start ? '0 4px 12px rgba(2, 54, 54, 0.2)' : 'none',
-                                                        transition: 'all 0.2s',
-                                                        minWidth: '100px'
-                                                    }}
-                                                >
-                                                    INICIO
-                                                </button>
-                                                <button
-                                                    onClick={() => updateOdp(odp.sku, 'end', new Date().toISOString())}
-                                                    disabled={!odp.settings.start || !!odp.settings.end}
-                                                    style={{
-                                                        padding: '0.8rem 1.2rem',
-                                                        borderRadius: '15px',
-                                                        border: 'none',
-                                                        background: (!odp.settings.start || odp.settings.end) ? '#e2e8f0' : institutionOcre,
-                                                        color: '#fff',
-                                                        fontWeight: '900',
-                                                        cursor: (!odp.settings.start || odp.settings.end) ? 'not-allowed' : 'pointer',
-                                                        fontSize: '0.75rem',
-                                                        boxShadow: (odp.settings.start && !odp.settings.end) ? `0 4px 12px ${institutionOcre}30` : 'none',
-                                                        transition: 'all 0.2s',
-                                                        minWidth: '100px'
-                                                    }}
-                                                >
-                                                    FINALIZAR
-                                                </button>
-                                            </div>
-                                            {odp.status.text !== STATUS_FINALIZADA && (
-                                                <button onClick={() => handleDeleteOdp(odp)} style={{ width: '40px', height: '40px', borderRadius: '12px', border: '1px solid #f1f5f9', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444' }} title="Eliminar de Planta"><Trash2 size={16} /></button>
-                                            )}
-                                            <button onClick={() => generateOdpPdfFull(odp, true)} style={{ width: '40px', height: '40px', borderRadius: '12px', border: '1px solid #f1f5f9', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: deepTeal }} title="Descargar PDF"><Zap size={16} /></button>
                                         </div>
-                                        </td>
-                                    </tr>
+                                        <div style={{ background: '#f8fafc', padding: '1.2rem', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                                            <ProductionTimer startedAt={odp.settings.start} completedAt={odp.settings.end} />
+                                        </div>
+                                    </div>
                                 );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
+                            })()}
+
+                            {/* Returns / Waste Input (Agile) */}
+                            <div style={{ background: '#f8fafc', padding: '1.2rem', borderRadius: '20px', border: '1px solid #fecaca20' }}>
+                                <div style={{ fontSize: '0.6rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '8px', textAlign: 'center' }}>Unidades Rechazadas / Mermas</div>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px' }}>
+                                    <button 
+                                        onClick={() => updateOdp(odp.sku, 'wasteQty', Math.max(0, (odp.wasteQty || 0) - 1))}
+                                        style={{ width: '32px', height: '32px', borderRadius: '10px', border: '1px solid #f1f5f9', background: '#fff', color: '#ef4444', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                    >-</button>
+                                    
+                                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                                        <input
+                                            type="number"
+                                            value={odp.wasteQty || 0}
+                                            onChange={(e) => updateOdp(odp.sku, 'wasteQty', Number(e.target.value))}
+                                            style={{ width: '45px', background: 'transparent', border: 'none', textAlign: 'center', fontWeight: '950', fontSize: '1.1rem', color: '#ef4444', outline: 'none' }}
+                                        />
+                                        <span style={{ fontSize: '0.6rem', fontWeight: '800', color: '#94a3b8' }}>UDS</span>
+                                    </div>
+
+                                    <button 
+                                        onClick={() => updateOdp(odp.sku, 'wasteQty', (odp.wasteQty || 0) + 1)}
+                                        style={{ width: '32px', height: '32px', borderRadius: '10px', border: '1px solid #f1f5f9', background: '#fff', color: '#10b981', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                    >+</button>
+                                </div>
+                            </div>
+
+                            {/* Action Area */}
+                            <div style={{ marginTop: 'auto', display: 'flex', gap: '1rem', paddingTop: '1.5rem', borderTop: '1px solid #f1f5f9' }}>
+                                <div style={{ flex: 1, display: 'flex', gap: '0.8rem' }}>
+                                    <button
+                                        onClick={() => updateOdp(odp.sku, 'start', new Date().toISOString())}
+                                        disabled={!!odp.settings.start}
+                                        style={{
+                                            flex: 1, padding: '1rem', borderRadius: '18px', border: 'none',
+                                            background: odp.settings.start ? '#f1f5f9' : deepTeal,
+                                            color: odp.settings.start ? '#cbd5e1' : '#fff',
+                                            fontWeight: '950', fontSize: '0.8rem', cursor: odp.settings.start ? 'not-allowed' : 'pointer',
+                                            boxShadow: !odp.settings.start ? `0 10px 20px ${deepTeal}30` : 'none',
+                                            transition: 'all 0.3s'
+                                        }}
+                                    >
+                                        INICIAR
+                                    </button>
+                                    <button
+                                        onClick={() => updateOdp(odp.sku, 'end', new Date().toISOString())}
+                                        disabled={!odp.settings.start || !!odp.settings.end}
+                                        style={{
+                                            flex: 1, padding: '1rem', borderRadius: '18px', border: 'none',
+                                            background: (!odp.settings.start || odp.settings.end) ? '#f1f5f9' : institutionOcre,
+                                            color: (!odp.settings.start || odp.settings.end) ? '#cbd5e1' : '#fff',
+                                            fontWeight: '950', fontSize: '0.8rem', cursor: (!odp.settings.start || odp.settings.end) ? 'not-allowed' : 'pointer',
+                                            boxShadow: (odp.settings.start && !odp.settings.end) ? `0 10px 20px ${institutionOcre}30` : 'none',
+                                            transition: 'all 0.3s'
+                                        }}
+                                    >
+                                        FINALIZAR
+                                    </button>
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    {odp.status.text !== STATUS_FINALIZADA && (
+                                        <button onClick={() => handleDeleteOdp(odp)} style={{ width: '48px', height: '48px', borderRadius: '16px', border: '1px solid #fee2e2', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#fef2f2'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}><Trash2 size={18} /></button>
+                                    )}
+                                    <button onClick={() => generateOdpPdfFull(odp, true)} style={{ width: '48px', height: '48px', borderRadius: '16px', border: '1px solid #f1f5f9', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: deepTeal }}><Zap size={18} /></button>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
 
             {/* Basic Logic for Modals Restored */}
@@ -1029,22 +1096,64 @@ const Production = () => {
 
             {confModal.show && (
                 <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
-                    <div style={{ background: '#fff', padding: '3.5rem', borderRadius: '45px', maxWidth: '500px', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
-                        <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 2rem' }}>
-                            <Package size={40} />
+                    <div style={{ background: '#fff', padding: '3.5rem', borderRadius: '45px', maxWidth: '600px', width: '100%', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', position: 'relative', overflow: 'hidden' }}>
+                        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '6px', background: '#10b981' }}></div>
+                        
+                        <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
+                            <div style={{ width: '70px', height: '70px', borderRadius: '50%', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
+                                <ListChecks size={36} />
+                            </div>
+                            <h3 style={{ fontWeight: '950', color: deepTeal, margin: 0, fontSize: '1.8rem' }}>RESUMEN DE PRODUCCIÓN</h3>
+                            <p style={{ margin: '8px 0 0 0', fontSize: '0.9rem', color: '#94a3b8', fontWeight: '800', textTransform: 'uppercase' }}>{confModal.odp?.sku} — {confModal.odp?.odpId}</p>
                         </div>
-                        <h3 style={{ fontWeight: '900', color: deepTeal, marginBottom: '1.5rem', fontSize: '1.5rem' }}>Finalizar Producción</h3>
-                        <p style={{ fontWeight: '700', color: '#64748b', marginBottom: '2.5rem', lineHeight: '1.6' }}>
-                            ¿Autorizas el cargue de <span style={{ color: deepTeal }}>{Math.max(0, Number(confModal.odp?.finalQty || 0) - Number(confModal.odp?.waste || 0))} unidades</span> de {confModal.odp?.sku}?
-                            <br />
-                            <span style={{ fontSize: '0.9rem', color: institutionOcre }}>
-                                Se sumarán a las {confModal.odp?.inventoryPT} unidades del inventario inicial para un total de <b>{Math.max(0, Number(confModal.odp?.finalQty || 0) - Number(confModal.odp?.waste || 0)) + Number(confModal.odp?.inventoryPT || 0)} unidades</b>.
-                                {Number(confModal.odp?.waste || 0) > 0 && <span style={{ color: '#ef4444', display: 'block', fontSize: '0.75rem', marginTop: '0.5rem' }}>* {confModal.odp?.waste} unidades descontadas automáticamente por desperdicio/daño.</span>}
-                            </span>
-                        </p>
+
+                        {/* Ficha de Métricas Finales */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.5rem', marginBottom: '2.5rem' }}>
+                            {(() => {
+                                const startTime = new Date(confModal.odp?.settings?.start).getTime();
+                                const endTime = new Date(confModal.endTime).getTime();
+                                const totalMin = Math.max(1, Math.floor((endTime - startTime) / 60000));
+                                const totalHrs = totalMin / 60;
+                                
+                                const totalPlanned = Number(confModal.odp?.finalQty || 0);
+                                const waste = Number(confModal.odp?.wasteQty || 0);
+                                const netQty = Math.max(0, totalPlanned - waste);
+                                
+                                const efficiency = (netQty / totalHrs).toFixed(1);
+                                const wastePct = ((waste / totalPlanned) * 100).toFixed(1);
+
+                                return (
+                                    <>
+                                        <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '24px', border: '1px solid #f1f5f9' }}>
+                                            <div style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '10px' }}>Rendimiento Neto</div>
+                                            <div style={{ fontSize: '1.8rem', fontWeight: '950', color: deepTeal }}>{efficiency} <small style={{ fontSize: '0.8rem', fontWeight: '700', color: '#94a3b8' }}>U/H</small></div>
+                                            <div style={{ fontSize: '0.7rem', fontWeight: '800', color: '#10b981', marginTop: '4px' }}>Basado en {netQty} unidades buenas</div>
+                                        </div>
+                                        <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '24px', border: '1px solid #f1f5f9' }}>
+                                            <div style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '10px' }}>Calidad del Lote</div>
+                                            <div style={{ fontSize: '1.8rem', fontWeight: '950', color: Number(wastePct) > 5 ? '#ef4444' : institutionOcre }}>{wastePct}% <small style={{ fontSize: '0.8rem', fontWeight: '700', color: '#94a3b8' }}>MERMA</small></div>
+                                            <div style={{ fontSize: '0.7rem', fontWeight: '800', color: '#64748b', marginTop: '4px' }}>{waste} unidades perdidas</div>
+                                        </div>
+                                        <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '24px', border: '1px solid #f1f5f9', gridColumn: 'span 2' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <div>
+                                                    <div style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '4px' }}>Tiempo Total de Proceso</div>
+                                                    <div style={{ fontSize: '1.2rem', fontWeight: '950', color: deepTeal }}>{totalMin} Minutos</div>
+                                                </div>
+                                                <div style={{ textAlign: 'right' }}>
+                                                    <div style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '4px' }}>Impacto en Stock</div>
+                                                    <div style={{ fontSize: '1.2rem', fontWeight: '950', color: '#10b981' }}>+{netQty} UDS</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </>
+                                );
+                            })()}
+                        </div>
+
                         <div style={{ display: 'flex', gap: '1.5rem' }}>
-                            <button onClick={() => setConfModal({ show: false, odp: null, endTime: null })} style={{ flex: 1, padding: '1.2rem', borderRadius: '20px', border: '2px solid #f1f5f9', background: '#fff', fontWeight: '900', cursor: 'pointer' }}>CANCELAR</button>
-                            <button onClick={() => handleInventorySync(confModal.odp)} style={{ flex: 2, padding: '1.2rem', borderRadius: '20px', border: 'none', background: '#10b981', color: '#fff', fontWeight: '900', cursor: 'pointer', boxShadow: '0 10px 20px rgba(16, 185, 129, 0.2)' }}>SÍ, AUTORIZAR CARGUE PT</button>
+                            <button onClick={() => setConfModal({ show: false, odp: null, endTime: null })} style={{ flex: 1, padding: '1.2rem', borderRadius: '25px', border: '2px solid #f1f5f9', background: '#fff', fontWeight: '950', cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}>CANCELAR</button>
+                            <button onClick={() => handleInventorySync(confModal.odp)} style={{ flex: 2, padding: '1.2rem', borderRadius: '25px', border: 'none', background: '#10b981', color: '#fff', fontWeight: '950', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 10px 20px rgba(16, 185, 129, 0.2)' }} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}>CONFIRMAR Y CERRAR LOTE</button>
                         </div>
                     </div>
                 </div>
