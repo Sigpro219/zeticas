@@ -114,6 +114,7 @@ const Production = () => {
     const [pdfPreview, setPdfPreview] = useState({ show: false, url: '', fileName: '', odpData: null });
     const [confModal, setConfModal] = useState({ show: false, odp: null, endTime: null });
     const [mpConfModal, setMpConfModal] = useState({ show: false, odp: null, materials: [] });
+    const [deleteModal, setDeleteModal] = useState({ show: false, odp: null, confirmText: '' });
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState(STATUS_ALL);
     const [showEficList, setShowEficList] = useState(false);
@@ -416,9 +417,7 @@ const Production = () => {
     }, [odpQueue, odpSettings, searchQuery, statusFilter, dateFilter, customRange, prioritySkus]);
 
     const handleDeleteOdp = async (odp) => {
-        if (!window.confirm(`¿Deseas RETIRAR Y ELIMINAR permanentemente ${odp.sku} de la planta?\n\nLos pedidos vinculados volverán a estado "Pendiente" en el monitor de ventas.`)) return;
-        
-        // setIsLoading(true);
+        // Validation handled by the modal
         try {
             // 1. Return related sales orders to 'Pendiente'
             const updatePromises = (odp.relatedOrders || []).map(order => {
@@ -435,7 +434,6 @@ const Production = () => {
             if (odp.dbId) {
                 await deleteOdp(odp.dbId);
             } else {
-                // Fallback trying to find it if dbId wasn't passed early
                 console.warn("ODP sin dbId para borrado directo.");
             }
 
@@ -1074,7 +1072,7 @@ const Production = () => {
                                 </div>
                                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                                     {odp.status.text !== STATUS_FINALIZADA && (
-                                        <button onClick={() => handleDeleteOdp(odp)} style={{ width: '48px', height: '48px', borderRadius: '16px', border: '1px solid #fee2e2', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#fef2f2'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}><Trash2 size={18} /></button>
+                                        <button onClick={() => setDeleteModal({ show: true, odp, confirmText: '' })} style={{ width: '48px', height: '48px', borderRadius: '16px', border: '1px solid #fee2e2', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#fef2f2'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}><Trash2 size={18} /></button>
                                     )}
                                     <button onClick={() => generateOdpPdfFull(odp, true)} style={{ width: '48px', height: '48px', borderRadius: '16px', border: '1px solid #f1f5f9', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: deepTeal }}><Zap size={18} /></button>
                                 </div>
@@ -1191,6 +1189,47 @@ const Production = () => {
                         <div style={{ display: 'flex', gap: '1.5rem' }}>
                             <button onClick={() => setMpConfModal({ show: false, odp: null, materials: [] })} style={{ flex: 1, padding: '1.2rem', borderRadius: '20px', border: '2px solid #f1f5f9', background: '#fff', fontWeight: '900', cursor: 'pointer' }}>CANCELAR</button>
                             <button onClick={handleConfirmMp} style={{ flex: 2, padding: '1.2rem', borderRadius: '20px', border: 'none', background: deepTeal, color: '#fff', fontWeight: '900', cursor: 'pointer', boxShadow: '0 10px 20px rgba(2, 54, 54, 0.2)' }}>SÍ, AUTORIZAR RETIRO</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {deleteModal.show && (
+                <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+                    <div style={{ background: '#fff', padding: '3rem', borderRadius: '40px', maxWidth: '500px', width: '100%', textAlign: 'center', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
+                        <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: '#fee2e2', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
+                            <Trash2 size={36} />
+                        </div>
+                        <h3 style={{ fontWeight: '950', color: deepTeal, margin: '0 0 1rem 0', fontSize: '1.5rem' }}>¿BORRAR ESTE LOTE?</h3>
+                        <p style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: '700', lineHeight: 1.6, marginBottom: '2rem' }}>
+                            Esta acción es irreversible y los pedidos relacionados volverán a estado <span style={{ color: institutionOcre }}>"PENDIENTE"</span> en logística.
+                        </p>
+
+                        <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '24px', marginBottom: '2rem', border: '1px solid #f1f5f9' }}>
+                            <p style={{ fontSize: '0.75rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '12px' }}>Para confirmar, escribe <span style={{ color: '#ef4444' }}>ELIMINAR</span>:</p>
+                            <input 
+                                type="text" 
+                                value={deleteModal.confirmText}
+                                onChange={(e) => setDeleteModal({ ...deleteModal, confirmText: e.target.value.toUpperCase() })}
+                                placeholder="Escribe aquí..."
+                                style={{ width: '100%', padding: '1rem', borderRadius: '14px', border: '2px solid #fee2e2', textAlign: 'center', fontSize: '1rem', fontWeight: '950', color: '#ef4444', outline: 'none' }}
+                            />
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '1.2rem' }}>
+                            <button onClick={() => setDeleteModal({ show: false, odp: null, confirmText: '' })} style={{ flex: 1, padding: '1rem', borderRadius: '20px', border: '2px solid #f1f5f9', background: '#fff', fontWeight: '950', cursor: 'pointer' }}>CANCELAR</button>
+                            <button 
+                                onClick={() => handleDeleteOdp(deleteModal.odp)} 
+                                disabled={deleteModal.confirmText !== 'ELIMINAR'}
+                                style={{ 
+                                    flex: 2, padding: '1rem', borderRadius: '20px', border: 'none', 
+                                    background: deleteModal.confirmText === 'ELIMINAR' ? '#ef4444' : '#fee2e2', 
+                                    color: '#fff', fontWeight: '950', cursor: deleteModal.confirmText === 'ELIMINAR' ? 'pointer' : 'not-allowed',
+                                    transition: 'all 0.3s'
+                                }}
+                            >
+                                ELIMINAR DEFINITIVAMENTE
+                            </button>
                         </div>
                     </div>
                 </div>

@@ -913,7 +913,7 @@ const Shipping = () => {
                                         style={{ padding: '1.2rem 1rem', textAlign: 'center', cursor: 'pointer' }}
                                     >
                                         {(() => {
-                                            const days = getLeadTime(order);
+                                            const hours = getLeadTime(order);
                                             const isDone = order.status === 'Entregado' || order.status === 'Finalizado';
                                             return (
                                                 <div style={{ 
