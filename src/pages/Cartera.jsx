@@ -12,8 +12,7 @@ const Cartera = () => {
     const [selectedInvoice, setSelectedInvoice] = useState(null);
     const [paymentData, setPaymentData] = useState({
         paymentDate: new Date().toISOString().split('T')[0],
-        bank: '',
-        observations: ''
+        bank: ''
     });
 
     // Date Filter State
@@ -130,7 +129,11 @@ const Cartera = () => {
         if (!selectedBank) return alert("Selecciona un banco");
 
         try {
-            await updateOrder(selectedInvoice.orderId, { status: 'Pagado', payment_bank_id: selectedBank.id });
+            await updateOrder(selectedInvoice.orderId, { 
+                status: 'Conciliada', 
+                payment_status: 'Pagado',
+                payment_bank_id: selectedBank.id 
+            });
             await updateBankBalance(selectedBank.id, amount, 'income', `Pago Recibido - Factura ${selectedInvoice.id}`, selectedInvoice.orderId);
             setIsPaymentModalOpen(false);
             setSelectedInvoice(null);
@@ -273,10 +276,7 @@ const Cartera = () => {
                                     {banks.filter(b => b.type === 'cta de ahorros').map(b => <option key={b.id} value={b.id}>{b.name} (${b.balance.toLocaleString()})</option>)}
                                 </select>
                             </div>
-                            <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: '900', textTransform: 'uppercase', color: '#94a3b8', display: 'block', marginBottom: '8px' }}>Observación Contable</label>
-                                <textarea placeholder="Opcional: Detalle de transferencia..." style={{ width: '100%', padding: '1.2rem', borderRadius: '18px', border: '1px solid #f1f5f9', background: '#fcfcfc', fontWeight: '700', minHeight: '100px', outline: 'none' }} />
-                            </div>
+
                             <button type="submit" style={{ width: '100%', padding: '1.2rem', borderRadius: '20px', background: `linear-gradient(90deg, ${deepTeal}, #014346)`, color: '#fff', fontWeight: '900', border: 'none', cursor: 'pointer', boxShadow: '0 10px 25px rgba(2, 54, 54, 0.2)' }}>FINALIZAR CONCILIACIÓN</button>
                         </form>
                     </div>
