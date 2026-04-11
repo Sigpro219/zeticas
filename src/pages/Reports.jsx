@@ -90,8 +90,28 @@ const Reports = ({ orders = [], taxSettings = {}, setTaxSettings, expenses = [],
     }, []);
 
     const operationalKPIs = useMemo(() => {
-        return { leadTime: '—', taktTime: '—' };
-    }, []);
+        const processedOrders = (Array.isArray(orders) ? orders : []).filter(o => 
+            new Date(o.date).getFullYear() === selectedYear && 
+            ['Despachado', 'Pagado', 'Entregado', 'Finalizado'].includes(o.status)
+        );
+
+        if (processedOrders.length === 0) return { leadTime: '—', taktTime: '—' };
+
+        const totalHours = processedOrders.reduce((acc, o) => {
+            const start = new Date(o.realDate || o.created_at || o.date);
+            let end = new Date();
+            if (o.delivered_at) end = new Date(o.delivered_at);
+            else if (o.dispatched_at) end = new Date(o.dispatched_at);
+            else if (o.lead_time_days !== undefined) return acc + (o.lead_time_days * 24);
+
+            return acc + (Math.abs(end - start) / (1000 * 60 * 60));
+        }, 0);
+
+        return { 
+            leadTime: (totalHours / processedOrders.length).toFixed(1), 
+            taktTime: '—' 
+        };
+    }, [orders, selectedYear]);
 
     const oeeData = useMemo(() => {
         return { oee: '—', availability: '—', performance: '—', quality: '—' };
@@ -538,7 +558,7 @@ const Reports = ({ orders = [], taxSettings = {}, setTaxSettings, expenses = [],
                                 <div style={{ fontSize: '0.95rem', fontWeight: '700', color: '#334155' }}>Lead Time (Promedio)</div>
                                 <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Tiempo desde pedido hasta despacho</div>
                             </div>
-                            <span style={{ fontSize: '1.2rem', fontWeight: '900', color: 'var(--color-primary)' }}>{operationalKPIs.leadTime} días</span>
+                            <span style={{ fontSize: '1.2rem', fontWeight: '900', color: 'var(--color-primary)' }}>{operationalKPIs.leadTime} horas</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '0.8rem', borderBottom: '1px solid #f1f5f9' }}>
                             <div>

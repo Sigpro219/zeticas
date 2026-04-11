@@ -71,13 +71,15 @@ const Shipping = () => {
 
     // Calculate Lead Time (Dynamic from DB or Real-time)
     const getLeadTime = (order) => {
-        if (order.delivered_at || order.lead_time_days !== undefined) {
-            // Conversión de histórico de días a horas si es necesario
-            return (order.lead_time_days || 0) * 24;
-        }
-        const today = new Date();
         const created = new Date(order.realDate || order.created_at || order.date);
-        const diffTime = Math.abs(today - created);
+        let end = new Date();
+        
+        // Prioridad: Entrega > Despacho > Hoy (si sigue activo)
+        if (order.delivered_at) end = new Date(order.delivered_at);
+        else if (order.dispatched_at) end = new Date(order.dispatched_at);
+        else if (order.lead_time_days !== undefined) return (order.lead_time_days || 0) * 24;
+
+        const diffTime = Math.abs(end - created);
         const hours = diffTime / (1000 * 60 * 60);
         return parseFloat(hours.toFixed(1));
     };

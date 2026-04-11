@@ -258,9 +258,9 @@ const Production = () => {
                     settings: { ...settings, start: startTime, end: endTime },
                     status,
                     efficiency,
-                    waste,
+                    wasteQty: waste || 0,
                     waste_percent: waste_percent || '0.0',
-                    relatedOrders: [], // Se podría cruzar con pedidos si fuera necesario
+                    relatedOrders: [], 
                 };
             });
         }
@@ -600,7 +600,7 @@ const Production = () => {
 
     const handleInventorySync = async (odp) => {
         try {
-            const wasteQty = Number(odp.waste || 0);
+            const wasteQty = Number(odp.wasteQty || 0);
             const netQty = Math.max(0, Number(odp.finalQty || 0) - wasteQty);
 
             // LOG REJECTED PRODUCT IF WASTE > 0
