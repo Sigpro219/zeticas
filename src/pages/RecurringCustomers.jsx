@@ -65,6 +65,12 @@ const RecurringCustomers = () => {
     const config = useMemo(() => siteContent.recurring || {}, [siteContent]);
     const planDurations = ["3 Meses", "6 Meses", "12 Meses"];
 
+    // Maximum discount across all configured plans (dynamic, from CMS)
+    const maxDiscount = useMemo(() => {
+        const discounts = planDurations.map(d => Number(config[`plan_${d.split(' ')[0]}_discount`]) || 0);
+        return Math.max(...discounts);
+    }, [config]);
+
     const [authData, setAuthData] = useState({
         email: '', password: '', confirmPassword: '', name: '', phone: '', address: '', city: '', idNumber: ''
     });
@@ -606,7 +612,7 @@ const RecurringCustomers = () => {
                         <h1 className="font-serif" style={{ fontSize: 'clamp(2.2rem, 5vw, 4rem)', color: deepTeal, lineHeight: 1, marginBottom: '1rem' }}>Propósito Artesanal</h1>
                         <p style={{ fontSize: '1.05rem', color: '#555', maxWidth: '750px', margin: '0 auto 2.5rem' }}>Transforma tu consumo recurrente en apoyo al campo con beneficios exclusivos.</p>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '2rem', maxWidth: '1100px', margin: '0 auto' }}>
-                            <div className="benefit-card"><Star size={26} color={institutionOcre} /><h3>Descuento Real</h3><p>Tu ahorro es permanente.</p></div>
+                            <div className="benefit-card"><Star size={26} color={institutionOcre} /><h3>Descuento Real</h3><p>{maxDiscount > 0 ? <>Hasta <b style={{color: institutionOcre}}>{maxDiscount}% OFF</b> en tus productos.</> : 'Tu ahorro es permanente.'}</p></div>
                             <div className="benefit-card"><RefreshCw size={26} color={institutionOcre} /><h3>Cero Preocupaciones</h3><p>Programamos tu despensa.</p></div>
                             <div className="benefit-card"><Truck size={26} color={institutionOcre} /><h3>Logística Premium</h3><p>Envíos prioritarios.</p></div>
                         </div>
