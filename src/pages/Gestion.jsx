@@ -30,7 +30,8 @@ import {
     ChevronDown,
     LogOut,
     Menu,
-    Users
+    Users,
+    RefreshCw
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -58,10 +59,11 @@ import CMSContents from './CMSContents';
 import ShippingAdmin from './ShippingAdmin';
 import UsersAdmin from './UsersAdmin';
 import KanbanModal from '../components/KanbanModal';
+import AdminSubscriptions from './AdminSubscriptions';
 
 const allTabs = [
     'kanban', 'orders', 'purchases', 'shipping', 'cartera', 'expenses', 'reports',
-    'production', 'inventory', 'recipes', 'costs', 'products', 'clients', 'suppliers', 'banks', 'crm', 'web_cms', 'web_shipping', 'users_admin'
+    'production', 'inventory', 'recipes', 'costs', 'products', 'clients', 'suppliers', 'banks', 'crm', 'subscriptions', 'web_cms', 'web_shipping', 'users_admin'
 ];
 
 const Gestion = () => {
@@ -272,6 +274,30 @@ const Gestion = () => {
                         }}
                     >
                         <Zap size={18} /> Commercial / CRM
+                    </button>
+
+                    {/* Subscriptions - alongside CRM */}
+                    <button
+                        onClick={() => setActiveTab('subscriptions')}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.8rem',
+                            padding: '1rem 1.25rem',
+                            border: 'none',
+                            background: activeTab === 'subscriptions' ? `linear-gradient(135deg, #025357, #023636)` : 'rgba(2, 83, 87, 0.05)',
+                            color: activeTab === 'subscriptions' ? '#fff' : deepTeal,
+                            borderRadius: '16px',
+                            cursor: 'pointer',
+                            fontSize: '0.85rem',
+                            fontWeight: '800',
+                            transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                            boxShadow: activeTab === 'subscriptions' ? '0 10px 25px rgba(2, 83, 87, 0.25)' : 'none',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px'
+                        }}
+                    >
+                        <RefreshCw size={18} /> Suscripciones
                     </button>
 
                     <div style={{ marginTop: '1.2rem', marginBottom: '0.5rem' }}>
@@ -535,6 +561,7 @@ const Gestion = () => {
 
                 <div style={{ animation: 'fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1)' }}>
                     {activeTab === 'crm' && <CRM />}
+                    {activeTab === 'subscriptions' && <AdminSubscriptions />}
                     {activeTab === 'kanban' && (
                         <Kanban 
                             orders={orders} 
