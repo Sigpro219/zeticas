@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import {
-    Users, Search, RefreshCw, Star, Truck, Calendar,
+    Users, Search, RefreshCw, Star, Calendar,
     Clock, CheckCircle, XCircle, AlertTriangle,
     ChevronDown, ChevronUp, Package, Phone, Mail,
-    MapPin, TrendingUp, Download
+    MapPin, TrendingUp, Download, Archive, Trash2
 } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
 import * as XLSX from 'xlsx';
@@ -170,7 +170,7 @@ const MemberDrawer = ({ member, items, onClose }) => {
 // MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════════════════════
 const AdminSubscriptions = () => {
-    const { clients, subscriptions, items } = useBusiness();
+    const { clients, subscriptions, items, updateClient } = useBusiness();
 
     const [search, setSearch] = useState('');
     const [filterStatus, setFilterStatus] = useState('all');
@@ -178,6 +178,24 @@ const AdminSubscriptions = () => {
     const [sortBy, setSortBy] = useState('name');
     const [sortDir, setSortDir] = useState('asc');
     const [selectedMember, setSelectedMember] = useState(null);
+    const [archiveConfirm, setArchiveConfirm] = useState(null); // memberId waiting 2nd click
+
+    const archiveMember = async (e, member) => {
+        e.stopPropagation();
+        if (archiveConfirm !== member.id) {
+            // First click — request confirmation
+            setArchiveConfirm(member.id);
+            setTimeout(() => setArchiveConfirm(null), 4000); // auto-cancel after 4s
+            return;
+        }
+        // Second click — proceed
+        setArchiveConfirm(null);
+        try {
+            await updateClient(member.id, { is_member: false, archived_at: new Date().toISOString() });
+        } catch (err) {
+            console.error('Error archivando socio:', err);
+        }
+    };
 
     // Members are clients with is_member===true or who have a membership plan
     const allMembers = useMemo(() => {
@@ -332,7 +350,7 @@ const AdminSubscriptions = () => {
             {/* ── Table ────────────────────────────────────────────────────── */}
             <div style={{ background: '#fff', borderRadius: '20px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.04)' }}>
                 {/* Header */}
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1.2fr 0.8fr 0.8fr', gap: '1rem', padding: '0.9rem 1.5rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: '0.7rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1.2fr 0.8fr 48px', gap: '1rem', padding: '0.9rem 1.5rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: '0.7rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     {[['name','Socio'],['plan','Plan'],['days','Vigencia'],['',null],['pantry','Despensa'],['','']].map(([col, label], idx) =>
                         label ? (
                             <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: col ? 'pointer' : 'default' }} onClick={() => col && toggleSort(col)}>
@@ -362,7 +380,7 @@ const AdminSubscriptions = () => {
                             key={m.id || idx}
                             onClick={() => setSelectedMember(m)}
                             style={{
-                                display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1.2fr 0.8fr 0.8fr', gap: '1rem',
+                                display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1.2fr 0.8fr 48px', gap: '1rem',
                                 padding: '1rem 1.5rem', borderBottom: '1px solid #f8fafc',
                                 cursor: 'pointer', transition: 'background 0.2s',
                                 background: idx % 2 === 0 ? '#fff' : '#fafbfc',
@@ -416,9 +434,27 @@ const AdminSubscriptions = () => {
                                 <span style={{ fontWeight: 700, fontSize: '0.9rem', color: pantryCount > 0 ? deepTeal : '#cbd5e1' }}>{pantryCount}</span>
                             </div>
 
-                            {/* Delivery chip */}
-                            <div>
-                                <Truck size={14} color="#94a3b8" />
+                            {/* Archive button */}
+                            <div onClick={e => e.stopPropagation()} style={{ display: 'flex', justifyContent: 'center' }}>
+                                <button
+                                    onClick={(e) => archiveMember(e, m)}
+                                    title={archiveConfirm === m.id ? 'Haz clic de nuevo para confirmar' : 'Archivar suscriptor'}
+                                    style={{
+                                        background: archiveConfirm === m.id ? '#fee2e2' : 'transparent',
+                                        border: archiveConfirm === m.id ? '1px solid #fca5a5' : '1px solid transparent',
+                                        borderRadius: '8px',
+                                        padding: '0.35rem',
+                                        cursor: 'pointer',
+                                        color: archiveConfirm === m.id ? '#dc2626' : '#cbd5e1',
+                                        transition: 'all 0.2s',
+                                        display: 'flex',
+                                        alignItems: 'center'
+                                    }}
+                                    onMouseEnter={e => { if (archiveConfirm !== m.id) { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.color = '#ef4444'; }}}
+                                    onMouseLeave={e => { if (archiveConfirm !== m.id) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#cbd5e1'; }}}
+                                >
+                                    {archiveConfirm === m.id ? <Trash2 size={14} /> : <Archive size={14} />}
+                                </button>
                             </div>
                         </div>
                     );

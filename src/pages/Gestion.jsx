@@ -276,28 +276,28 @@ const Gestion = () => {
                         <Zap size={18} /> Commercial / CRM
                     </button>
 
-                    {/* Subscriptions - alongside CRM */}
+                    {/* Subscriptions - regular style */}
                     <button
                         onClick={() => setActiveTab('subscriptions')}
                         style={{
                             display: 'flex',
                             alignItems: 'center',
                             gap: '0.8rem',
-                            padding: '1rem 1.25rem',
+                            padding: '0.7rem 1.25rem',
                             border: 'none',
-                            background: activeTab === 'subscriptions' ? `linear-gradient(135deg, #025357, #023636)` : 'rgba(2, 83, 87, 0.05)',
-                            color: activeTab === 'subscriptions' ? '#fff' : deepTeal,
-                            borderRadius: '16px',
+                            background: activeTab === 'subscriptions' ? deepTeal : 'transparent',
+                            color: activeTab === 'subscriptions' ? '#fff' : '#64748b',
+                            borderRadius: '14px',
                             cursor: 'pointer',
                             fontSize: '0.85rem',
-                            fontWeight: '800',
+                            fontWeight: '700',
                             transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-                            boxShadow: activeTab === 'subscriptions' ? '0 10px 25px rgba(2, 83, 87, 0.25)' : 'none',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.5px'
+                            transform: activeTab === 'subscriptions' ? 'translateX(5px)' : 'none',
+                            boxShadow: activeTab === 'subscriptions' ? `0 8px 20px ${deepTeal}25` : 'none'
                         }}
                     >
-                        <RefreshCw size={18} /> Suscripciones
+                        <span style={{ opacity: activeTab === 'subscriptions' ? 1 : 0.6 }}><RefreshCw size={18} /></span>
+                        Suscripciones
                     </button>
 
                     <div style={{ marginTop: '1.2rem', marginBottom: '0.5rem' }}>
