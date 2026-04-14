@@ -1302,7 +1302,8 @@ const RecurringCustomers = () => {
                 .input-group input, .input-group select { border: none; background: transparent; outline: none; width: 100%; font-weight: 600; color: ${deepTeal}; font-size: 1.05rem; }
 
                 /* Slim form placeholders — light grey */
-                input::placeholder, select::placeholder { color: #c8d3de !important; font-weight: 400; }
+                input::placeholder, select::placeholder,
+                .input-group input::placeholder { color: #c8d3de !important; font-weight: 400; }
                 
                 /* Premium Carousel Layout Fix */
                 .premium-carousel-container { 
