@@ -751,27 +751,27 @@ const RecurringCustomers = () => {
                                     <button type="button" onClick={() => setAuthMode('register')} style={{ background: 'none', border: 'none', color: deepTeal, fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', marginTop: '0.5rem' }}>No tengo cuenta, quiero registrarme</button>
                                 </form>
                             ) : (
-                                <form onSubmit={handleOnboardingRegister} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', marginTop: '1rem' }}>
+                                <form onSubmit={handleOnboardingRegister} autoComplete="off" style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', marginTop: '1rem' }}>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.2rem' }}>
                                         <div className="input-group">
                                             <User size={20} color={deepTeal} style={{ opacity: 0.5 }} />
-                                            <input type="text" placeholder="Nombre completo" value={authData.name} onChange={e => setAuthData({...authData, name: e.target.value})} required/>
+                                            <input type="text" placeholder="Nombre completo" autoComplete="off" value={authData.name} onChange={e => setAuthData({...authData, name: e.target.value})} required/>
                                         </div>
                                         <div className="input-group">
                                             <Phone size={20} color={deepTeal} style={{ opacity: 0.5 }} />
-                                            <input type="tel" placeholder="WhatsApp" value={authData.phone} onChange={e => setAuthData({...authData, phone: e.target.value})} required/>
+                                            <input type="tel" placeholder="WhatsApp" autoComplete="off" value={authData.phone} onChange={e => setAuthData({...authData, phone: e.target.value})} required/>
                                         </div>
                                     </div>
 
                                     <div className="input-group">
                                         <Mail size={18} color={deepTeal} style={{ opacity: 0.5 }} />
-                                        <input type="email" placeholder="Correo electrónico" value={authData.email} onChange={e => setAuthData({...authData, email: e.target.value})} required/>
+                                        <input type="email" placeholder="Correo electrónico" autoComplete="off" value={authData.email} onChange={e => setAuthData({...authData, email: e.target.value})} required/>
                                     </div>
 
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                         <div className="input-group">
                                             <Hash size={18} color={deepTeal} style={{ opacity: 0.5 }} />
-                                            <input type="text" placeholder="NIT / Cédula" value={authData.idNumber} onChange={e => setAuthData({...authData, idNumber: e.target.value})} required/>
+                                            <input type="text" placeholder="NIT / Cédula" autoComplete="off" value={authData.idNumber} onChange={e => setAuthData({...authData, idNumber: e.target.value})} required/>
                                         </div>
                                         <div className="input-group">
                                             <MapPin size={18} color={deepTeal} style={{ opacity: 0.5 }} />
@@ -784,7 +784,7 @@ const RecurringCustomers = () => {
 
                                     <div className="input-group">
                                         <MapPin size={18} color={deepTeal} style={{ opacity: 0.5 }} />
-                                        <input type="text" placeholder="Dirección de entrega" value={authData.address} onChange={e => setAuthData({...authData, address: e.target.value})} required/>
+                                        <input type="text" placeholder="Dirección de entrega" autoComplete="off" value={authData.address} onChange={e => setAuthData({...authData, address: e.target.value})} required/>
                                     </div>
 
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '1rem 1.4rem', background: '#f8f9fa', borderRadius: '14px', marginTop: '0.8rem', border: '1px solid #eee' }}>
@@ -803,6 +803,7 @@ const RecurringCustomers = () => {
                                                 <input 
                                                     type={showPass ? "text" : "password"} 
                                                     placeholder="Contraseña" 
+                                                    autoComplete="new-password"
                                                     value={authData.password}
                                                     onChange={e => setAuthData({...authData, password: e.target.value})} 
                                                     required
@@ -823,6 +824,7 @@ const RecurringCustomers = () => {
                                                 <input 
                                                     type={showConfirm ? "text" : "password"} 
                                                     placeholder="Confirmar" 
+                                                    autoComplete="new-password"
                                                     value={authData.confirmPassword}
                                                     onChange={e => setAuthData({...authData, confirmPassword: e.target.value})} 
                                                     required
