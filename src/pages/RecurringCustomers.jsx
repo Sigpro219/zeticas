@@ -757,114 +757,150 @@ const RecurringCustomers = () => {
                                     <button type="button" onClick={() => setAuthMode('register')} style={{ background: 'none', border: 'none', color: deepTeal, fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', marginTop: '0.5rem' }}>No tengo cuenta, quiero registrarme</button>
                                 </form>
                             ) : (
-                                <form onSubmit={handleOnboardingRegister} autoComplete="off" style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', marginTop: '1rem' }}>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.2rem' }}>
-                                        <div className="input-group">
-                                            <User size={20} color={deepTeal} style={{ opacity: 0.5 }} />
-                                            <input type="text" placeholder="Nombre completo" autoComplete="off" value={authData.name} onChange={e => setAuthData({...authData, name: e.target.value})} required/>
+                                <form onSubmit={handleOnboardingRegister} autoComplete="off" style={{ display: 'flex', flexDirection: 'column', gap: '0', marginTop: '1rem' }}>
+
+                                    {/* Row 1: Nombre + Teléfono */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                            <label style={{ fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Nombre Completo</label>
+                                            <input
+                                                type="text" autoComplete="off" required
+                                                placeholder="Ej: María García"
+                                                value={authData.name}
+                                                onChange={e => setAuthData({...authData, name: e.target.value})}
+                                                style={{ padding: '0.75rem 0', border: 'none', borderBottom: `1.5px solid ${authData.name ? deepTeal : '#e2e8f0'}`, background: 'transparent', fontSize: '0.95rem', color: deepTeal, fontWeight: 600, outline: 'none', width: '100%', transition: 'border-color 0.2s' }}
+                                            />
                                         </div>
-                                        <div className="input-group">
-                                            <Phone size={20} color={deepTeal} style={{ opacity: 0.5 }} />
-                                            <input type="tel" placeholder="WhatsApp" autoComplete="off" value={authData.phone} onChange={e => setAuthData({...authData, phone: e.target.value})} required/>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                            <label style={{ fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>WhatsApp</label>
+                                            <input
+                                                type="tel" autoComplete="off" required
+                                                placeholder="310 000 0000"
+                                                value={authData.phone}
+                                                onChange={e => setAuthData({...authData, phone: e.target.value})}
+                                                style={{ padding: '0.75rem 0', border: 'none', borderBottom: `1.5px solid ${authData.phone ? deepTeal : '#e2e8f0'}`, background: 'transparent', fontSize: '0.95rem', color: deepTeal, fontWeight: 600, outline: 'none', width: '100%', transition: 'border-color 0.2s' }}
+                                            />
                                         </div>
                                     </div>
 
-                                    <div className="input-group">
-                                        <Mail size={18} color={deepTeal} style={{ opacity: 0.5 }} />
-                                        <input type="email" placeholder="Correo electrónico" autoComplete="off" value={authData.email} onChange={e => setAuthData({...authData, email: e.target.value})} required/>
+                                    {/* Row 2: Email */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '1.5rem' }}>
+                                        <label style={{ fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Correo Electrónico</label>
+                                        <input
+                                            type="email" autoComplete="off" required
+                                            placeholder="ejemplo@correo.com"
+                                            value={authData.email}
+                                            onChange={e => setAuthData({...authData, email: e.target.value})}
+                                            style={{ padding: '0.75rem 0', border: 'none', borderBottom: `1.5px solid ${authData.email ? deepTeal : '#e2e8f0'}`, background: 'transparent', fontSize: '0.95rem', color: deepTeal, fontWeight: 600, outline: 'none', width: '100%', transition: 'border-color 0.2s' }}
+                                        />
+                                        {authData.email && (
+                                            <p style={{ margin: 0, fontSize: '0.72rem', color: '#94a3b8' }}>
+                                                <Sparkles size={11} style={{ marginRight: 4, color: institutionOcre }} />
+                                                <b>{authData.email}</b> será tu usuario para ingresar al Círculo.
+                                            </p>
+                                        )}
                                     </div>
 
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                        <div className="input-group">
-                                            <Hash size={18} color={deepTeal} style={{ opacity: 0.5 }} />
-                                            <input type="text" placeholder="NIT / Cédula" autoComplete="off" value={authData.idNumber} onChange={e => setAuthData({...authData, idNumber: e.target.value})} required/>
+                                    {/* Row 3: NIT + Ciudad */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                            <label style={{ fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>NIT / Cédula</label>
+                                            <input
+                                                type="text" autoComplete="off" required
+                                                placeholder="123456789"
+                                                value={authData.idNumber}
+                                                onChange={e => setAuthData({...authData, idNumber: e.target.value})}
+                                                style={{ padding: '0.75rem 0', border: 'none', borderBottom: `1.5px solid ${authData.idNumber ? deepTeal : '#e2e8f0'}`, background: 'transparent', fontSize: '0.95rem', color: deepTeal, fontWeight: 600, outline: 'none', width: '100%', transition: 'border-color 0.2s' }}
+                                            />
                                         </div>
-                                        <div className="input-group">
-                                            <MapPin size={18} color={deepTeal} style={{ opacity: 0.5 }} />
-                                            <select value={authData.city} onChange={e => setAuthData({...authData, city: e.target.value})} required style={{border:'none', background:'transparent', width:'100%', outline: 'none', color: deepTeal, fontWeight: 600 }}>
-                                                <option value="">Ciudad...</option>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                            <label style={{ fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Ciudad</label>
+                                            <select
+                                                value={authData.city}
+                                                onChange={e => setAuthData({...authData, city: e.target.value})}
+                                                required
+                                                style={{ padding: '0.75rem 0', border: 'none', borderBottom: `1.5px solid ${authData.city ? deepTeal : '#e2e8f0'}`, background: 'transparent', fontSize: '0.95rem', color: authData.city ? deepTeal : '#94a3b8', fontWeight: 600, outline: 'none', width: '100%', appearance: 'none', cursor: 'pointer' }}
+                                            >
+                                                <option value="">Seleccionar...</option>
                                                 {colombia_cities.map(c => <option key={c.city} value={c.city}>{c.city}</option>)}
                                             </select>
                                         </div>
                                     </div>
 
-                                    <div className="input-group">
-                                        <MapPin size={18} color={deepTeal} style={{ opacity: 0.5 }} />
-                                        <input type="text" placeholder="Dirección de entrega" autoComplete="off" value={authData.address} onChange={e => setAuthData({...authData, address: e.target.value})} required/>
+                                    {/* Row 4: Dirección */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '2.5rem' }}>
+                                        <label style={{ fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Dirección de Entrega</label>
+                                        <input
+                                            type="text" autoComplete="off" required
+                                            placeholder="Calle 123 # 45-67, Apto 201"
+                                            value={authData.address}
+                                            onChange={e => setAuthData({...authData, address: e.target.value})}
+                                            style={{ padding: '0.75rem 0', border: 'none', borderBottom: `1.5px solid ${authData.address ? deepTeal : '#e2e8f0'}`, background: 'transparent', fontSize: '0.95rem', color: deepTeal, fontWeight: 600, outline: 'none', width: '100%', transition: 'border-color 0.2s' }}
+                                        />
                                     </div>
 
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '1rem 1.4rem', background: '#f8f9fa', borderRadius: '14px', marginTop: '0.8rem', border: '1px solid #eee' }}>
-                                        <Sparkles size={18} color={institutionOcre} />
-                                        <p style={{ fontSize: '0.85rem', color: '#444', margin: 0, lineHeight: 1.4 }}>
-                                            Tu correo <b>{authData.email || '...'}</b> será tu nombre de usuario para ingresar al Círculo.
-                                        </p>
-                                    </div>
-
-                                    {/* Pasword Section at the End */}
-                                    <div style={{ padding: '0.8rem 0', marginTop: '0.8rem', borderTop: '1px solid #f0f0f0' }}>
-                                        <p style={{ fontSize: '0.85rem', color: '#777', marginBottom: '1rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px' }}>Creación de Contraseña</p>
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.2rem' }}>
-                                            <div className="input-group">
-                                                <Lock size={20} color={deepTeal} style={{ opacity: 0.5 }} />
-                                                <input 
-                                                    type={showPass ? "text" : "password"} 
-                                                    placeholder="Contraseña" 
-                                                    autoComplete="new-password"
-                                                    value={authData.password}
-                                                    onChange={e => setAuthData({...authData, password: e.target.value})} 
-                                                    required
-                                                />
-                                                <button 
-                                                    type="button" 
-                                                    onClick={() => setShowPass(!showPass)}
-                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: deepTeal, opacity: 0.4 }}
-                                                >
-                                                    {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
-                                                </button>
+                                    {/* Divider + Password Section */}
+                                    <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '1.8rem', marginBottom: '1.5rem' }}>
+                                        <p style={{ fontSize: '0.65rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '1.5rem' }}>Creación de Contraseña</p>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                                            {/* Password */}
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                                <label style={{ fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Contraseña</label>
+                                                <div style={{ display: 'flex', alignItems: 'center', borderBottom: `1.5px solid ${authData.password ? deepTeal : '#e2e8f0'}`, transition: 'border-color 0.2s' }}>
+                                                    <input
+                                                        type={showPass ? 'text' : 'password'}
+                                                        autoComplete="new-password" required
+                                                        placeholder="Mínimo 6 caracteres"
+                                                        value={authData.password}
+                                                        onChange={e => setAuthData({...authData, password: e.target.value})}
+                                                        style={{ flex: 1, padding: '0.75rem 0', border: 'none', background: 'transparent', fontSize: '0.95rem', color: deepTeal, fontWeight: 600, outline: 'none' }}
+                                                    />
+                                                    <button type="button" onClick={() => setShowPass(!showPass)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: '0 0.2rem' }}>
+                                                        {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                                                    </button>
+                                                </div>
                                             </div>
-                                            <div className="input-group" style={{ 
-                                                border: authData.confirmPassword && authData.password !== authData.confirmPassword ? '1px solid #ff4d4f' : '1px solid #eef2f6',
-                                                background: authData.confirmPassword && authData.password !== authData.confirmPassword ? '#fff1f0' : undefined
-                                            }}>
-                                                <Lock size={20} color={deepTeal} style={{ opacity: 0.5 }} />
-                                                <input 
-                                                    type={showConfirm ? "text" : "password"} 
-                                                    placeholder="Confirmar" 
-                                                    autoComplete="new-password"
-                                                    value={authData.confirmPassword}
-                                                    onChange={e => setAuthData({...authData, confirmPassword: e.target.value})} 
-                                                    required
-                                                />
-                                                <button 
-                                                    type="button" 
-                                                    onClick={() => setShowConfirm(!showConfirm)}
-                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: deepTeal, opacity: 0.4 }}
-                                                >
-                                                    {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
-                                                </button>
+                                            {/* Confirm */}
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                                <label style={{ fontSize: '0.7rem', fontWeight: 800, color: authData.confirmPassword && authData.password !== authData.confirmPassword ? '#ef4444' : '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                                                    {authData.confirmPassword && authData.password !== authData.confirmPassword ? '⚠ No coinciden' : 'Confirmar'}
+                                                </label>
+                                                <div style={{ display: 'flex', alignItems: 'center', borderBottom: `1.5px solid ${authData.confirmPassword ? (authData.password === authData.confirmPassword ? '#22c55e' : '#ef4444') : '#e2e8f0'}`, transition: 'border-color 0.2s' }}>
+                                                    <input
+                                                        type={showConfirm ? 'text' : 'password'}
+                                                        autoComplete="new-password" required
+                                                        placeholder="Repite la contraseña"
+                                                        value={authData.confirmPassword}
+                                                        onChange={e => setAuthData({...authData, confirmPassword: e.target.value})}
+                                                        style={{ flex: 1, padding: '0.75rem 0', border: 'none', background: 'transparent', fontSize: '0.95rem', color: deepTeal, fontWeight: 600, outline: 'none' }}
+                                                    />
+                                                    <button type="button" onClick={() => setShowConfirm(!showConfirm)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: '0 0.2rem' }}>
+                                                        {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
-                                        {authData.confirmPassword && authData.password !== authData.confirmPassword && (
-                                            <p style={{ color: '#ff4d4f', fontSize: '0.8rem', marginTop: '0.6rem', fontWeight: 800 }}>Las contraseñas no coinciden</p>
-                                        )}
                                     </div>
 
-                                    <button 
-                                        type="submit" 
+                                    <button
+                                        type="submit"
                                         disabled={authData.password !== authData.confirmPassword || !authData.password}
-                                        style={{ 
-                                            background: deepTeal, 
-                                            color: '#fff', 
-                                            padding: '1.2rem', 
-                                            borderRadius: '16px', 
-                                            border: 'none', 
-                                            fontWeight: '900',
+                                        style={{
+                                            background: deepTeal,
+                                            color: '#fff',
+                                            padding: '1.1rem 2rem',
+                                            borderRadius: '14px',
+                                            border: 'none',
+                                            fontWeight: 900,
+                                            fontSize: '0.9rem',
+                                            letterSpacing: '0.5px',
                                             cursor: 'pointer',
                                             marginTop: '0.5rem',
-                                            opacity: (authData.password !== authData.confirmPassword || !authData.password) ? 0.5 : 1
+                                            opacity: (authData.password !== authData.confirmPassword || !authData.password) ? 0.45 : 1,
+                                            transition: 'opacity 0.2s'
                                         }}
                                     >
-                                        CONTINUAR
+                                        CONTINUAR AL CÍRCULO →
                                     </button>
                                 </form>
                             )}
