@@ -169,6 +169,11 @@ const RecurringCustomers = () => {
         }
     }, [activeMember, availableProducts, clients, subscriptionData.plan]);
 
+    // Scroll to top on every step transition
+    React.useEffect(() => {
+        window.scrollTo({ top: 0, behavior: 'instant' });
+    }, [step]);
+
     const handleBoldSuccess = async (chkID) => {
         setIsSaving(true);
         try {
