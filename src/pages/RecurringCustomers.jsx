@@ -1300,6 +1300,9 @@ const RecurringCustomers = () => {
                 .input-group { display: flex; align-items: center; gap: 12px; background: #f0f0f0; padding: 0 18px; border-radius: 14px; height: 56px; border: 1px solid #eef2f6; transition: all 0.3s ease; }
                 .input-group:focus-within { border-color: ${institutionOcre}; background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
                 .input-group input, .input-group select { border: none; background: transparent; outline: none; width: 100%; font-weight: 600; color: ${deepTeal}; font-size: 1.05rem; }
+
+                /* Slim form placeholders — light grey */
+                input::placeholder, select::placeholder { color: #c8d3de !important; font-weight: 400; }
                 
                 /* Premium Carousel Layout Fix */
                 .premium-carousel-container { 
