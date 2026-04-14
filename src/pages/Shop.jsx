@@ -99,17 +99,22 @@ const Shop = () => {
                     </h1>
                     
                     {/* Refined Control Bar */}
-                    <div style={{ 
+                    <div className="shop-controls" style={{ 
                         display: 'flex', 
+                        flexDirection: isMobile ? 'column' : 'row',
                         justifyContent: 'center', 
                         alignItems: 'center', 
                         marginBottom: '4rem',
                         borderBottom: '1px solid rgba(0,0,0,0.05)',
-                        paddingBottom: '0.5rem',
+                        paddingBottom: isMobile ? '1.5rem' : '0.5rem',
                         position: 'relative',
-                        gap: '2rem'
+                        gap: isMobile ? '1.5rem' : '2rem'
                     }}>
-                        <nav style={{ display: 'flex', gap: '3rem' }}>
+                        <nav style={{ 
+                            display: 'flex', 
+                            gap: isMobile ? '1.5rem' : '3rem',
+                            order: isMobile ? 2 : 1 
+                        }}>
                             {['Todos', 'Dulce', 'Sal'].map((cat) => (
                                 <button
                                     key={cat}
@@ -118,7 +123,7 @@ const Shop = () => {
                                         background: 'none',
                                         border: 'none',
                                         color: activeCategory === cat ? 'var(--color-primary)' : '#999',
-                                        fontSize: '0.9rem',
+                                        fontSize: isMobile ? '0.8rem' : '0.9rem',
                                         fontWeight: activeCategory === cat ? '800' : '500',
                                         cursor: 'pointer',
                                         padding: '0.5rem 0',
@@ -145,11 +150,14 @@ const Shop = () => {
                         </nav>
 
                         <div style={{ 
-                            position: 'absolute', 
-                            right: 0,
+                            position: isMobile ? 'static' : 'absolute', 
+                            right: isMobile ? 'auto' : 0,
                             display: 'flex', 
                             alignItems: 'center',
-                            gap: '12px'
+                            gap: '12px',
+                            order: isMobile ? 1 : 2,
+                            width: isMobile ? '100%' : 'auto',
+                            justifyContent: isMobile ? 'center' : 'flex-end'
                         }}>
                             {(activeCategory !== 'Todos' || searchTerm) && (
                                 <button 
