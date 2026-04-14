@@ -56,7 +56,7 @@ function AppContent() {
         <Route path="/checkout" element={<Checkout />} />
         <Route path="/gestion" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Gestion /></ProtectedRoute>} />
         <Route path="/gestion/:tab" element={<ProtectedRoute allowedRoles={['admin', 'super_admin']}><Gestion /></ProtectedRoute>} />
-        <Route path="/recurrentes" element={<ProtectedRoute allowedRoles={['member', 'admin', 'super_admin']}><RecurringCustomers /></ProtectedRoute>} />
+        <Route path="/recurrentes" element={<RecurringCustomers />} />
 
       </Routes>
       <Chatbot />
