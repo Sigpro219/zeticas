@@ -3,7 +3,7 @@ import {
     Users, Search, RefreshCw, Star, Calendar,
     Clock, CheckCircle, XCircle, AlertTriangle,
     ChevronDown, ChevronUp, Package, Phone, Mail,
-    MapPin, TrendingUp, Download, Archive, Trash2
+    MapPin, TrendingUp, Download, Archive, Trash2, FolderArchive, UserCheck
 } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
 import * as XLSX from 'xlsx';
@@ -22,6 +22,7 @@ const STATUS_STYLES = {
     Active:   { bg: '#dcfce7', color: '#15803d', label: 'Activo' },
     Inactive: { bg: '#fee2e2', color: '#dc2626', label: 'Inactivo' },
     Pending:  { bg: '#fef9c3', color: '#ca8a04', label: 'Pendiente' },
+    Archived: { bg: '#f1f5f9', color: '#64748b', label: 'Archivado' },
 };
 
 // ── Utility ──────────────────────────────────────────────────────────────────
@@ -170,7 +171,7 @@ const MemberDrawer = ({ member, items, onClose }) => {
 // MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════════════════════
 const AdminSubscriptions = () => {
-    const { clients, subscriptions, items, updateClient } = useBusiness();
+    const { clients, items, updateClient, deleteClient } = useBusiness();
 
     const [search, setSearch] = useState('');
     const [filterStatus, setFilterStatus] = useState('all');
@@ -179,22 +180,40 @@ const AdminSubscriptions = () => {
     const [sortDir, setSortDir] = useState('asc');
     const [selectedMember, setSelectedMember] = useState(null);
     const [archiveConfirm, setArchiveConfirm] = useState(null); // memberId waiting 2nd click
+    const [deleteConfirm, setDeleteConfirm] = useState(null);
+    const [view, setView] = useState('active'); // 'active' or 'archived'
 
-    const archiveMember = async (e, member) => {
+    const handleArchive = async (e, member) => {
         e.stopPropagation();
         if (archiveConfirm !== member.id) {
-            // First click — request confirmation
             setArchiveConfirm(member.id);
-            setTimeout(() => setArchiveConfirm(null), 4000); // auto-cancel after 4s
+            setTimeout(() => setArchiveConfirm(null), 3000);
             return;
         }
-        // Second click — proceed
         setArchiveConfirm(null);
         try {
-            await updateClient(member.id, { is_member: false, archived_at: new Date().toISOString() });
-        } catch (err) {
-            console.error('Error archivando socio:', err);
+            await updateClient(member.id, { status: 'Archived', archived_at: new Date().toISOString() });
+        } catch (err) { console.error(err); }
+    };
+
+    const handleRestore = async (e, member) => {
+        e.stopPropagation();
+        try {
+            await updateClient(member.id, { status: 'Active', archived_at: null });
+        } catch (err) { console.error(err); }
+    };
+
+    const handleDelete = async (e, member) => {
+        e.stopPropagation();
+        if (deleteConfirm !== member.id) {
+            setDeleteConfirm(member.id);
+            setTimeout(() => setDeleteConfirm(null), 3000);
+            return;
         }
+        setDeleteConfirm(null);
+        try {
+            await deleteClient(member.id);
+        } catch (err) { console.error(err); }
     };
 
     // Members are clients with is_member===true or who have a membership plan
@@ -210,6 +229,11 @@ const AdminSubscriptions = () => {
     const filtered = useMemo(() => {
         const q = search.toLowerCase().trim();
         let result = allMembers.filter(m => {
+            // View filter
+            const isArchived = m.status === 'Archived';
+            if (view === 'active' && isArchived) return false;
+            if (view === 'archived' && !isArchived) return false;
+
             const matchSearch = !q ||
                 (m.name || '').toLowerCase().includes(q) ||
                 (m.email || '').toLowerCase().includes(q) ||
@@ -240,21 +264,22 @@ const AdminSubscriptions = () => {
         });
 
         return result;
-    }, [allMembers, search, filterStatus, filterPlan, sortBy, sortDir]);
+    }, [allMembers, search, filterStatus, filterPlan, sortBy, sortDir, view]);
 
     // ── KPIs ─────────────────────────────────────────────────────────────────
     const kpis = useMemo(() => {
-        const active = allMembers.filter(m => !daysRemaining(m)?.isExpired && m.status !== 'Inactive').length;
-        const expired = allMembers.filter(m => daysRemaining(m)?.isExpired).length;
-        const approaching = allMembers.filter(m => daysRemaining(m)?.isApproaching).length;
-        const revenue = allMembers.reduce((acc, m) => {
+        const activePool = allMembers.filter(m => m.status !== 'Archived');
+        const active = activePool.filter(m => !daysRemaining(m)?.isExpired && m.status !== 'Inactive').length;
+        const expired = activePool.filter(m => daysRemaining(m)?.isExpired).length;
+        const approaching = activePool.filter(m => daysRemaining(m)?.isApproaching).length;
+        const revenue = activePool.reduce((acc, m) => {
             const pantry = m.pantry || [];
             return acc + pantry.reduce((s, p) => {
                 const product = items.find(i => i.id === p.id);
                 return s + (product?.price || p.price || 0) * p.quantity;
             }, 0);
         }, 0);
-        return { total: allMembers.length, active, expired, approaching, revenue };
+        return { total: activePool.length, active, expired, approaching, revenue, archived: allMembers.length - activePool.length };
     }, [allMembers, items]);
 
     // ── Export ────────────────────────────────────────────────────────────────
@@ -291,181 +316,161 @@ const AdminSubscriptions = () => {
     return (
         <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
             {/* ── KPI Row ─────────────────────────────────────────────────── */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
                 {[
                     { label: 'Total Socios', value: kpis.total, icon: <Users size={20} />, color: deepTeal, bg: '#e6f2f2' },
                     { label: 'Activos', value: kpis.active, icon: <CheckCircle size={20} />, color: '#16a34a', bg: '#dcfce7' },
-                    { label: 'Expirando', value: kpis.approaching, icon: <AlertTriangle size={20} />, color: '#d97706', bg: '#fef9c3' },
-                    { label: 'Expirados', value: kpis.expired, icon: <XCircle size={20} />, color: '#dc2626', bg: '#fee2e2' },
-                    { label: 'Revenue Est./envío', value: `$${kpis.revenue.toLocaleString()}`, icon: <TrendingUp size={20} />, color: institutionOcre, bg: '#fff7ed' },
+                    { label: 'Revenue Est.', value: `$${kpis.revenue.toLocaleString()}`, icon: <TrendingUp size={20} />, color: institutionOcre, bg: '#fff7ed' },
+                    { label: 'En Carpeta', value: kpis.archived, icon: <FolderArchive size={20} />, color: '#64748b', bg: '#f1f5f9' },
                 ].map(k => (
-                    <div key={k.label} style={{ background: '#fff', padding: '1.2rem 1.4rem', borderRadius: '20px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '1rem', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                    <div key={k.label} style={{ background: '#fff', padding: '1.2rem', borderRadius: '20px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '1rem' }}>
                         <div style={{ width: 42, height: 42, borderRadius: '12px', background: k.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: k.color, flexShrink: 0 }}>
                             {k.icon}
                         </div>
                         <div>
-                            <div style={{ fontWeight: 800, fontSize: '1.3rem', color: deepTeal, lineHeight: 1 }}>{k.value}</div>
-                            <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600, marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{k.label}</div>
+                            <div style={{ fontWeight: 800, fontSize: '1.2rem', color: deepTeal, lineHeight: 1 }}>{k.value}</div>
+                            <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700, marginTop: 4, textTransform: 'uppercase' }}>{k.label}</div>
                         </div>
                     </div>
                 ))}
             </div>
 
+            {/* ── View Switcher ── */}
+            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', borderBottom: '1px solid #e2e8f0' }}>
+                <button onClick={() => setView('active')} style={{ 
+                    padding: '0.8rem 1.5rem', border: 'none', background: 'none', cursor: 'pointer',
+                    fontSize: '0.9rem', fontWeight: 800, color: view === 'active' ? institutionOcre : '#64748b',
+                    borderBottom: view === 'active' ? `3px solid ${institutionOcre}` : '3px solid transparent',
+                    transition: 'all 0.3s'
+                }}>
+                    Suscripciones Activas
+                </button>
+                <button onClick={() => setView('archived')} style={{ 
+                    padding: '0.8rem 1.5rem', border: 'none', background: 'none', cursor: 'pointer',
+                    fontSize: '0.9rem', fontWeight: 800, color: view === 'archived' ? institutionOcre : '#64748b',
+                    borderBottom: view === 'archived' ? `3px solid ${institutionOcre}` : '3px solid transparent',
+                    transition: 'all 0.3s', display: 'flex', alignItems: 'center', gap: '8px'
+                }}>
+                    <FolderArchive size={16} /> Carpeta de Archivados
+                </button>
+            </div>
+
             {/* ── Filters ──────────────────────────────────────────────────── */}
-            <div style={{ background: '#fff', padding: '1.2rem 1.5rem', borderRadius: '20px', border: '1px solid #e2e8f0', marginBottom: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#f8fafc', padding: '0.6rem 1rem', borderRadius: '12px', flex: '1 1 220px' }}>
+            <div style={{ background: '#fff', padding: '1.2rem', borderRadius: '20px', border: '1px solid #e2e8f0', marginBottom: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#f8fafc', padding: '0.6rem 1rem', borderRadius: '12px', flex: 1 }}>
                     <Search size={16} color="#94a3b8" />
                     <input
                         type="text"
                         placeholder="Buscar socio..."
                         value={search}
                         onChange={e => setSearch(e.target.value)}
-                        style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.9rem', color: deepTeal, width: '100%', fontWeight: 600 }}
+                        style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.9rem', width: '100%' }}
                     />
                 </div>
 
-                <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ padding: '0.6rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '0.85rem', fontWeight: 700, color: deepTeal, background: '#fff', cursor: 'pointer' }}>
-                    <option value="all">Todos los estados</option>
-                    <option value="active">Activos</option>
-                    <option value="approaching">Expirando pronto (≤30d)</option>
-                    <option value="expired">Expirados</option>
-                    <option value="inactive">Inactivos</option>
-                </select>
+                {view === 'active' && (
+                    <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ padding: '0.6rem', borderRadius: '12px', border: '1px solid #e2e8f0', fontWeight: 700, color: deepTeal }}>
+                        <option value="all">Todos los estados</option>
+                        <option value="active">Activos</option>
+                        <option value="approaching">Expirando pronto</option>
+                        <option value="expired">Expirados</option>
+                        <option value="inactive">Inactivos (Baja)</option>
+                    </select>
+                )}
 
-                <select value={filterPlan} onChange={e => setFilterPlan(e.target.value)} style={{ padding: '0.6rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '0.85rem', fontWeight: 700, color: deepTeal, background: '#fff', cursor: 'pointer' }}>
-                    <option value="all">Todos los planes</option>
-                    <option value="3 Meses">3 Meses</option>
-                    <option value="6 Meses">6 Meses</option>
-                    <option value="12 Meses">12 Meses</option>
-                </select>
-
-                <button
-                    onClick={handleExport}
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1.2rem', background: deepTeal, color: '#fff', border: 'none', borderRadius: '12px', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', marginLeft: 'auto' }}
-                >
+                <button onClick={handleExport} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.6rem 1.2rem', background: deepTeal, color: '#fff', border: 'none', borderRadius: '12px', fontWeight: 700, cursor: 'pointer' }}>
                     <Download size={16} /> Exportar
                 </button>
             </div>
 
             {/* ── Table ────────────────────────────────────────────────────── */}
-            <div style={{ background: '#fff', borderRadius: '20px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.04)' }}>
-                {/* Header */}
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1.2fr 0.8fr 48px', gap: '1rem', padding: '0.9rem 1.5rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: '0.7rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                    {[['name','Socio'],['plan','Plan'],['days','Vigencia'],['',null],['pantry','Despensa'],['','']].map(([col, label], idx) =>
-                        label ? (
-                            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: col ? 'pointer' : 'default' }} onClick={() => col && toggleSort(col)}>
-                                {label} {col && <SortIcon col={col} />}
-                            </div>
-                        ) : <div key={idx}></div>
-                    )}
+            <div style={{ background: '#fff', borderRadius: '20px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1.2fr 0.8fr 80px', gap: '1rem', padding: '1rem 1.5rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: '0.7rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
+                    <div onClick={() => toggleSort('name')} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>Socio <SortIcon col="name" /></div>
+                    <div onClick={() => toggleSort('plan')} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>Plan <SortIcon col="plan" /></div>
+                    <div onClick={() => toggleSort('days')} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>Vigencia <SortIcon col="days" /></div>
+                    <div>Estado</div>
+                    <div onClick={() => toggleSort('pantry')} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>Despensa <SortIcon col="pantry" /></div>
+                    <div style={{ textAlign: 'center' }}>Acción</div>
                 </div>
 
-                {/* Rows */}
                 {filtered.length === 0 ? (
                     <div style={{ padding: '4rem', textAlign: 'center', color: '#94a3b8' }}>
-                        <Users size={48} style={{ opacity: 0.2, marginBottom: '1rem' }} />
-                        <p style={{ fontWeight: 700, fontSize: '1rem' }}>No se encontraron socios</p>
-                        <p style={{ fontSize: '0.85rem' }}>Ajusta los filtros o espera a que los usuarios se registren desde /recurrentes</p>
+                        <FolderArchive size={48} style={{ opacity: 0.2, marginBottom: '1rem' }} />
+                        <p style={{ fontWeight: 700 }}>No hay socios en esta vista</p>
                     </div>
                 ) : filtered.map((m, idx) => {
                     const plan = daysRemaining(m);
                     const planStr = m?.membership?.plan || m?.plan || '';
                     const planStyle = PLAN_COLORS[planStr] || { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0' };
                     const statusStyle = STATUS_STYLES[m.status] || STATUS_STYLES['Pending'];
-                    const pantryCount = (m.pantry || []).length;
-                    const freq = m.frequency || 'Mensual';
-
+                    
                     return (
                         <div
                             key={m.id || idx}
                             onClick={() => setSelectedMember(m)}
                             style={{
-                                display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1.2fr 0.8fr 48px', gap: '1rem',
-                                padding: '1rem 1.5rem', borderBottom: '1px solid #f8fafc',
-                                cursor: 'pointer', transition: 'background 0.2s',
-                                background: idx % 2 === 0 ? '#fff' : '#fafbfc',
-                                alignItems: 'center'
+                                display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1.2fr 0.8fr 80px', gap: '1rem',
+                                padding: '1.2rem 1.5rem', borderBottom: '1px solid #f8fafc',
+                                cursor: 'pointer', alignItems: 'center', transition: 'all 0.2s'
                             }}
-                            onMouseEnter={e => e.currentTarget.style.background = '#f0fdf4'}
-                            onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? '#fff' : '#fafbfc'}
+                            onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                         >
-                            {/* Name + contact */}
                             <div>
-                                <div style={{ fontWeight: 800, fontSize: '0.9rem', color: deepTeal }}>{m.name || '—'}</div>
-                                <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: 2 }}>{m.email || m.phone || m.city || '—'}</div>
+                                <div style={{ fontWeight: 800, color: deepTeal }}>{m.name || 'Sin nombre'}</div>
+                                <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{m.email}</div>
                             </div>
 
-                            {/* Plan badge */}
                             <div>
-                                {planStr ? (
-                                    <span style={{ padding: '0.3rem 0.8rem', borderRadius: '50px', fontSize: '0.7rem', fontWeight: 800, background: planStyle.bg, color: planStyle.color, border: `1px solid ${planStyle.border}` }}>
-                                        <Star size={10} style={{ marginRight: 3 }} />{planStr}
-                                    </span>
-                                ) : <span style={{ color: '#cbd5e1', fontSize: '0.8rem' }}>Sin plan</span>}
+                                <span style={{ padding: '0.3rem 0.8rem', borderRadius: '50px', fontSize: '0.7rem', fontWeight: 800, background: planStyle.bg, color: planStyle.color, border: `1px solid ${planStyle.border}` }}>
+                                    {planStr || 'Sin plan'}
+                                </span>
                             </div>
 
-                            {/* Vigencia */}
                             <div>
                                 {plan ? (
-                                    <div>
-                                        <span style={{ fontWeight: 800, fontSize: '0.85rem', color: plan.isExpired ? '#dc2626' : (plan.isApproaching ? '#d97706' : '#16a34a') }}>
-                                            {plan.isExpired ? 'EXPIRADO' : `${plan.days}d`}
-                                        </span>
-                                        <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: 2 }}>
-                                            {plan.isExpired ? `Expiró ${plan.end.toLocaleDateString('es-CO')}` : `Vence ${plan.end.toLocaleDateString('es-CO')}`}
-                                        </div>
-                                    </div>
-                                ) : <span style={{ color: '#cbd5e1', fontSize: '0.8rem' }}>—</span>}
+                                    <span style={{ fontWeight: 800, color: plan.isExpired ? '#dc2626' : (plan.isApproaching ? '#d97706' : '#16a34a') }}>
+                                        {plan.isExpired ? 'Expirado' : `${plan.days}d`}
+                                    </span>
+                                ) : '—'}
                             </div>
 
-                            {/* Status + Frequency */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                <span style={{ padding: '0.2rem 0.6rem', borderRadius: '50px', fontSize: '0.7rem', fontWeight: 700, background: statusStyle.bg, color: statusStyle.color, width: 'fit-content' }}>
+                            <div>
+                                <span style={{ padding: '0.3rem 0.6rem', borderRadius: '50px', fontSize: '0.7rem', fontWeight: 700, background: statusStyle.bg, color: statusStyle.color }}>
                                     {statusStyle.label}
                                 </span>
-                                <span style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 3 }}>
-                                    <RefreshCw size={10} /> {freq}
-                                </span>
                             </div>
 
-                            {/* Pantry count */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                <Package size={14} color={pantryCount > 0 ? deepTeal : '#cbd5e1'} />
-                                <span style={{ fontWeight: 700, fontSize: '0.9rem', color: pantryCount > 0 ? deepTeal : '#cbd5e1' }}>{pantryCount}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 700, color: deepTeal }}>
+                                <Package size={14} /> {(m.pantry || []).length}
                             </div>
 
-                            {/* Archive button */}
-                            <div onClick={e => e.stopPropagation()} style={{ display: 'flex', justifyContent: 'center' }}>
-                                <button
-                                    onClick={(e) => archiveMember(e, m)}
-                                    title={archiveConfirm === m.id ? 'Haz clic de nuevo para confirmar' : 'Archivar suscriptor'}
-                                    style={{
-                                        background: archiveConfirm === m.id ? '#fee2e2' : 'transparent',
-                                        border: archiveConfirm === m.id ? '1px solid #fca5a5' : '1px solid transparent',
-                                        borderRadius: '8px',
-                                        padding: '0.35rem',
-                                        cursor: 'pointer',
-                                        color: archiveConfirm === m.id ? '#dc2626' : '#cbd5e1',
-                                        transition: 'all 0.2s',
-                                        display: 'flex',
-                                        alignItems: 'center'
-                                    }}
-                                    onMouseEnter={e => { if (archiveConfirm !== m.id) { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.color = '#ef4444'; }}}
-                                    onMouseLeave={e => { if (archiveConfirm !== m.id) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#cbd5e1'; }}}
-                                >
-                                    {archiveConfirm === m.id ? <Trash2 size={14} /> : <Archive size={14} />}
-                                </button>
+                            <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }} onClick={e => e.stopPropagation()}>
+                                {view === 'active' ? (
+                                    <button 
+                                        onClick={(e) => handleArchive(e, m)}
+                                        style={{ background: archiveConfirm === m.id ? '#fee2e2' : 'none', border: 'none', color: archiveConfirm === m.id ? '#ef4444' : '#94a3b8', cursor: 'pointer', padding: '5px', borderRadius: '8px' }}
+                                        title="Archivar"
+                                    >
+                                        <Archive size={18} />
+                                    </button>
+                                ) : (
+                                    <>
+                                        <button onClick={(e) => handleRestore(e, m)} style={{ background: 'none', border: 'none', color: '#16a34a', cursor: 'pointer' }} title="Restaurar">
+                                            <UserCheck size={18} />
+                                        </button>
+                                        <button onClick={(e) => handleDelete(e, m)} style={{ background: deleteConfirm === m.id ? '#fee2e2' : 'none', border: 'none', color: deleteConfirm === m.id ? '#ef4444' : '#94a3b8', cursor: 'pointer', padding: '5px', borderRadius: '8px' }} title="Eliminar Permanente">
+                                            <Trash2 size={18} />
+                                        </button>
+                                    </>
+                                )}
                             </div>
                         </div>
                     );
                 })}
             </div>
 
-            <p style={{ textAlign: 'right', marginTop: '1rem', fontSize: '0.75rem', color: '#94a3b8' }}>
-                Mostrando {filtered.length} de {allMembers.length} socios
-            </p>
-
-            {/* ── Member Detail Drawer ─────────────────────────────────────── */}
             {selectedMember && (
                 <>
                     <div onClick={() => setSelectedMember(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 2999, backdropFilter: 'blur(2px)' }} />
