@@ -410,6 +410,30 @@ const RecurringCustomers = () => {
         return currentPantryJson !== savedPantryJson || currentPlan !== savedPlan || currentFreq !== savedFreq;
     }, [activeMember, subscriptionData]);
 
+    const { planEndDate, planMetrics } = useMemo(() => {
+        if (!activeMember?.membership?.created_at) return { planEndDate: null, planMetrics: { isExpired: false, progress: 0, daysRemaining: 0 } };
+        
+        const created = new Date(activeMember.membership.created_at);
+        const months = parseInt(activeMember.membership.plan?.split(' ')[0]) || 3;
+        const expiry = new Date(created.setMonth(created.getMonth() + months));
+        
+        const now = new Date();
+        const totalDays = months * 30;
+        const elapsedDays = Math.max(0, (now - new Date(activeMember.membership.created_at)) / (1000 * 60 * 60 * 24));
+        const daysRemaining = Math.max(0, Math.ceil((expiry - now) / (1000 * 60 * 60 * 24)));
+        const progress = Math.min(100, (elapsedDays / totalDays) * 100);
+
+        return {
+            planEndDate: expiry.toLocaleDateString(),
+            planMetrics: {
+                isExpired: now > expiry,
+                isApproaching: daysRemaining <= 15,
+                progress,
+                daysRemaining
+            }
+        };
+    }, [activeMember]);
+
     const handleOnboardingLogin = async (e) => {
         if (e) e.preventDefault();
         try {
