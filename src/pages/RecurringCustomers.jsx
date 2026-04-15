@@ -410,30 +410,6 @@ const RecurringCustomers = () => {
         return currentPantryJson !== savedPantryJson || currentPlan !== savedPlan || currentFreq !== savedFreq;
     }, [activeMember, subscriptionData]);
 
-    const { planEndDate, planMetrics } = useMemo(() => {
-        if (!activeMember?.membership?.created_at) return { planEndDate: null, planMetrics: { isExpired: false, progress: 0, daysRemaining: 0 } };
-        
-        const created = new Date(activeMember.membership.created_at);
-        const months = parseInt(activeMember.membership.plan?.split(' ')[0]) || 3;
-        const expiry = new Date(created.setMonth(created.getMonth() + months));
-        
-        const now = new Date();
-        const totalDays = months * 30;
-        const elapsedDays = Math.max(0, (now - new Date(activeMember.membership.created_at)) / (1000 * 60 * 60 * 24));
-        const daysRemaining = Math.max(0, Math.ceil((expiry - now) / (1000 * 60 * 60 * 24)));
-        const progress = Math.min(100, (elapsedDays / totalDays) * 100);
-
-        return {
-            planEndDate: expiry.toLocaleDateString(),
-            planMetrics: {
-                isExpired: now > expiry,
-                isApproaching: daysRemaining <= 15,
-                progress,
-                daysRemaining
-            }
-        };
-    }, [activeMember]);
-
     const handleOnboardingLogin = async (e) => {
         if (e) e.preventDefault();
         try {
@@ -940,205 +916,70 @@ const RecurringCustomers = () => {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '2rem' }}>
                         <div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                                <div 
-                                    onClick={() => navigate('/')} 
-                                    style={{ 
-                                        display: 'flex', 
-                                        alignItems: 'center', 
-                                        gap: '8px', 
-                                        cursor: 'pointer', 
-                                        color: deepTeal, 
-                                        fontWeight: '800', 
-                                        fontSize: '0.75rem', 
-                                        letterSpacing: '1px',
-                                        opacity: 0.6,
-                                        transition: 'all 0.3s ease',
-                                        width: 'fit-content'
-                                    }}
-                                    onMouseEnter={e => { e.currentTarget.style.opacity = 1; e.currentTarget.style.transform = 'translateX(-5px)'; }}
-                                    onMouseLeave={e => { e.currentTarget.style.opacity = 0.6; e.currentTarget.style.transform = 'translateX(0)'; }}
-                                >
-                                    <ArrowLeft size={16} />
-                                    <span>VOLVER AL INICIO</span>
+                                <div onClick={() => navigate('/')} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: deepTeal, fontWeight: '800', fontSize: '0.75rem', opacity: 0.6 }}>
+                                    <ArrowLeft size={16} /> <span>VOLVER AL INICIO</span>
                                 </div>
-
-                                <div 
-                                    onClick={() => { logout(); setStep(1); setIsHydrated(false); lastHydratedRef.current = null; }} 
-                                    style={{ 
-                                        display: 'flex', 
-                                        alignItems: 'center', 
-                                        gap: '8px', 
-                                        cursor: 'pointer', 
-                                        color: '#ef4444', 
-                                        fontWeight: '800', 
-                                        fontSize: '0.75rem', 
-                                        letterSpacing: '1px',
-                                        opacity: 0.6,
-                                        transition: 'all 0.3s ease',
-                                        width: 'fit-content'
-                                    }}
-                                    onMouseEnter={e => { e.currentTarget.style.opacity = 1; }}
-                                    onMouseLeave={e => { e.currentTarget.style.opacity = 0.6; }}
-                                >
-                                    <LogOut size={16} />
-                                    <span>SALIR DEL PORTAL</span>
+                                <div onClick={() => { logout(); setStep(1); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: '#ef4444', fontWeight: '800', fontSize: '0.75rem', opacity: 0.6 }}>
+                                    <LogOut size={16} /> <span>SALIR</span>
                                 </div>
                             </div>
-                            <h2 style={{ color: deepTeal, fontFamily: 'serif', fontSize: '2.5rem' }}>
-                                {activeMember ? `¡Bienvenido, ${activeMember.name?.split(' ')[0]}!` : 'Tu Despensa'}
-                            </h2>
-                            <p style={{ color: '#666', marginBottom: '2rem' }}>
-                                {user?.role === 'member' ? 'Gestiona los productos y frecuencia de tu círculo aquí.' : 'Selecciona los productos que deseas recibir periódicamente.'}
-                            </p>
 
-                            {isChangingPlan ? (
-                                <div style={{ background: '#fff', padding: '2.5rem', borderRadius: '35px', border: `2px solid ${institutionOcre}`, marginBottom: '2rem', animation: 'fadeIn 0.4s ease' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                                        <h3 style={{ color: deepTeal, margin: 0 }}>Mejora tu plan</h3>
-                                        <button onClick={() => setIsChangingPlan(false)} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontWeight: 'bold' }}>CANCELAR</button>
-                                    </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
-                                        {planDurations.map(p => {
-                                            const months = p.split(' ')[0];
-                                            const isActive = subscriptionData.plan === p;
-                                            return (
-                                                <div 
-                                                    key={p} 
-                                                    onClick={() => setSubscriptionData(prev => ({ ...prev, plan: p }))}
-                                                    style={{ 
-                                                        padding: '1.5rem', 
-                                                        borderRadius: '20px', 
-                                                        textAlign: 'center', 
-                                                        border: `2px solid ${isActive ? institutionOcre : '#eee'}`,
-                                                        background: isActive ? '#fdfaf5' : '#fff',
-                                                        cursor: 'pointer',
-                                                        transition: 'all 0.3s ease'
-                                                    }}
-                                                >
-                                                    <div style={{ fontSize: '1.2rem', fontWeight: '900', color: deepTeal }}>{p}</div>
-                                                    <div style={{ fontSize: '0.8rem', color: institutionOcre, fontWeight: '700' }}>{config[`plan_${months}_discount`]}% DTO</div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                    <button 
-                                        onClick={() => setIsChangingPlan(false)}
-                                        style={{ width: '100%', marginTop: '1.5rem', background: deepTeal, color: '#fff', padding: '1rem', borderRadius: '50px', border: 'none', fontWeight: '900', cursor: 'pointer' }}
-                                    >
-                                        CONFIRMAR CAMBIO
-                                    </button>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                                <div style={{ flex: 1 }}>
+                                    <h2 style={{ color: deepTeal, fontFamily: 'serif', fontSize: '2.5rem', margin: 0 }}>
+                                        {activeMember ? `¡Hola, ${activeMember.name?.split(' ')[0]}!` : 'Tu Despensa'}
+                                    </h2>
+                                    <p style={{ color: '#666', margin: '0.5rem 0 0' }}>
+                                        {isChangingPlan ? 'Elige tu nuevo plan de membresía' : 'Personaliza tu pedido sugerido para este ciclo.'}
+                                    </p>
                                 </div>
-                        <div style={{ flex: 1 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                                <h1 style={{ color: deepTeal, fontFamily: 'serif', margin: 0 }}>
-                                    {isChangingPlan ? 'Cambia tu Plan de Membresía' : 'Personaliza tu Despensa'}
-                                </h1>
                                 {isChangingPlan && (
-                                    <button 
-                                        onClick={() => setIsChangingPlan(false)}
-                                        style={{ background: 'none', border: `1px solid ${deepTeal}`, color: deepTeal, padding: '8px 16px', borderRadius: '50px', cursor: 'pointer', fontWeight: '800' }}
-                                    >
+                                    <button onClick={() => setIsChangingPlan(false)} style={{ background: 'none', border: `1px solid ${deepTeal}`, color: deepTeal, padding: '8px 20px', borderRadius: '50px', cursor: 'pointer', fontWeight: '800' }}>
                                         VER MI DESPENSA
                                     </button>
                                 )}
                             </div>
 
                             {isChangingPlan ? (
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '2rem', animation: 'fadeIn 0.5s ease-out' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem' }}>
                                     {[
-                                        { title: '3 Meses', months: 3, discount: 5, emoji: '🌱' },
-                                        { title: '6 Meses', months: 6, discount: 7, emoji: '🍃' },
-                                        { title: '12 Meses', months: 12, discount: 9, emoji: '🌳' }
+                                        { title: '3 Meses', months: 3, emoji: '🌱' },
+                                        { title: '6 Meses', months: 6, emoji: '🍃' },
+                                        { title: '12 Meses', months: 12, emoji: '🌳' }
                                     ].map(p => (
-                                        <div key={p.title} onClick={() => handlePlanSelection(`${p.months} Meses`)} className="plan-card" style={{ 
-                                            background: '#fff', padding: '2.5rem 2rem', borderRadius: '40px', border: subscriptionData.plan === p.title ? `3px solid ${institutionOcre}` : '1px solid #eef2f6',
-                                            textAlign: 'center', cursor: 'pointer', position: 'relative', transition: 'all 0.4s ease'
+                                        <div key={p.title} onClick={() => { setSubscriptionData(prev => ({ ...prev, plan: p.title })); setIsChangingPlan(false); }} style={{ 
+                                            background: '#fff', padding: '2rem', borderRadius: '30px', border: subscriptionData.plan === p.title ? `3px solid ${institutionOcre}` : '1px solid #eee',
+                                            textAlign: 'center', cursor: 'pointer', transition: 'all 0.3s ease'
                                         }}>
-                                            <div style={{ fontSize: '3rem', marginBottom: '1.5rem' }}>{p.emoji}</div>
-                                            <h3 style={{ fontSize: '1.8rem', color: deepTeal, marginBottom: '0.5rem' }}>{p.title}</h3>
-                                            <div style={{ color: institutionOcre, fontWeight: '900', fontSize: '1.4rem', marginBottom: '1rem' }}>{p.discount}% DCTO</div>
-                                            <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: 1.6 }}>En todos tus productos y envío gratis por compras mínimas.</p>
+                                            <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>{p.emoji}</div>
+                                            <h3 style={{ margin: '0 0 0.5rem', color: deepTeal }}>{p.title}</h3>
+                                            <div style={{ color: institutionOcre, fontWeight: '900', fontSize: '1.2rem' }}>{config[`plan_${p.months}_discount`]}% DCTO</div>
                                         </div>
                                     ))}
                                 </div>
                             ) : (
                                 <>
-                                    <div className="input-group" style={{ margin: '1rem 0 2rem' }}>
-                                        <Search size={18}/>
-                                        <input type="text" placeholder="Buscar productos para tu despensa..." onChange={e => setProductSearch(e.target.value)}/>
+                                    <div className="input-group" style={{ marginBottom: '1.5rem' }}>
+                                        <Search size={18} />
+                                        <input type="text" placeholder="Buscar productos..." onChange={e => setProductSearch(e.target.value)} />
                                     </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.2rem' }}>
                                         {filteredProducts.map(p => {
                                             const current = subscriptionData.products.find(sp => sp.id === p.id);
-                                            const originalPrice = p.price;
-                                            const rawDiscounted = originalPrice * (1 - (currentPlanConfig.discount / 100));
-                                            const discountedPrice = Math.ceil(rawDiscounted / 50) * 50;
-                                            const isDulce = p.product_type?.toLowerCase().includes('dulce') || p.category?.toLowerCase().includes('dulce');
-
+                                            const discountedPrice = Math.ceil((p.price * (1 - currentPlanConfig.discount/100)) / 50) * 50;
                                             return (
-                                                <div key={p.id} style={{ 
-                                                    background: '#fff', 
-                                                    padding: '1rem', 
-                                                    borderRadius: '24px', 
-                                                    border: current ? `2px solid ${institutionOcre}` : '1px solid #eee',
-                                                    display: 'grid',
-                                                    gridTemplateColumns: '80px 1fr',
-                                                    gap: '1rem',
-                                                    alignItems: 'center',
-                                                    transition: 'all 0.3s ease',
-                                                    boxShadow: current ? '0 10px 20px rgba(2, 83, 87, 0.05)' : 'none'
-                                                }}>
-                                                    <div style={{ width: '80px', height: '80px', background: '#f9f9f9', borderRadius: '16px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                        {p.image_url ? (
-                                                            <img src={p.image_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                        ) : (
-                                                            <Sparkles size={24} color={institutionOcre} style={{ opacity: 0.3 }} />
-                                                        )}
+                                                <div key={p.id} style={{ background: '#fff', padding: '1rem', borderRadius: '24px', border: current ? `2px solid ${institutionOcre}` : '1px solid #eee', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                                    <div style={{ width: '60px', height: '60px', borderRadius: '12px', background: '#f9f9f9', overflow: 'hidden' }}>
+                                                        <img src={p.image_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                                     </div>
-                                                    
-                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                                            <div style={{ 
-                                                                fontSize: '0.65rem', 
-                                                                fontWeight: '900', 
-                                                                textTransform: 'uppercase', 
-                                                                letterSpacing: '1px',
-                                                                color: isDulce ? '#d946ef' : deepTeal,
-                                                                background: isDulce ? '#fdf4ff' : lightSage,
-                                                                padding: '2px 8px',
-                                                                borderRadius: '50px'
-                                                            }}>
-                                                                {isDulce ? 'DULCE' : 'SAL'}
-                                                            </div>
-                                                        </div>
-                                                        <div style={{ fontWeight: '800', fontSize: '0.85rem', color: deepTeal, lineHeight: 1.2 }}>{p.name}</div>
-                                                        
+                                                    <div style={{ flex: 1 }}>
+                                                        <h4 style={{ margin: 0, fontSize: '0.85rem', color: deepTeal }}>{p.name}</h4>
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
-                                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                                <span style={{ fontSize: '0.7rem', color: '#bbb', textDecoration: 'line-through' }}>
-                                                                    ${originalPrice.toLocaleString()}
-                                                                </span>
-                                                                <span style={{ fontSize: '1rem', fontWeight: '900', color: institutionOcre }}>
-                                                                    ${discountedPrice.toLocaleString()}
-                                                                </span>
-                                                            </div>
-                                                            
-                                                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: '#f0f0f0', padding: '4px', borderRadius: '12px' }}>
-                                                                <button 
-                                                                    onClick={() => handleProductChange(p.id, (current?.quantity || 0) - 1)} 
-                                                                    style={{ background: '#fff', border: 'none', borderRadius: '8px', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}
-                                                                >
-                                                                    <Minus size={14} color={deepTeal} />
-                                                                </button>
-                                                                <span style={{ fontWeight: '900', fontSize: '0.9rem', minWidth: '20px', textAlign: 'center' }}>
-                                                                    {current?.quantity || 0}
-                                                                </span>
-                                                                <button 
-                                                                    onClick={() => handleProductChange(p.id, (current?.quantity || 0) + 1)} 
-                                                                    style={{ background: deepTeal, border: 'none', borderRadius: '8px', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 10px rgba(2, 83, 87, 0.2)' }}
-                                                                >
-                                                                    <Plus size={14} color="#fff" />
-                                                                </button>
+                                                            <b style={{ color: deepTeal }}>${discountedPrice.toLocaleString()}</b>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: lightSage, padding: '2px 10px', borderRadius: '50px' }}>
+                                                                <Minus size={12} style={{ cursor: 'pointer' }} onClick={() => handleProductChange(p.id, (current?.quantity || 0) - 1)} />
+                                                                <span style={{ fontWeight: '900', fontSize: '0.8rem' }}>{current?.quantity || 0}</span>
+                                                                <Plus size={12} style={{ cursor: 'pointer' }} onClick={() => handleProductChange(p.id, (current?.quantity || 0) + 1)} />
                                                             </div>
                                                         </div>
                                                     </div>
@@ -1149,187 +990,56 @@ const RecurringCustomers = () => {
                                 </>
                             )}
                         </div>
+
                         <div style={{ background: deepTeal, color: '#fff', padding: '2rem', borderRadius: '30px', height: 'fit-content', position: 'sticky', top: '20px' }}>
-                            <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '0.8rem', marginBottom: '1rem' }}>Resumen</h3>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span>Plan:</span>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <b>{subscriptionData.plan}</b>
-                                        <button 
-                                            onClick={() => setIsChangingPlan(true)}
-                                            style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: institutionOcre, padding: '2px 8px', borderRadius: '4px', fontSize: '0.6rem', cursor: 'pointer', fontWeight: '900' }}
-                                        >
-                                            CAMBIAR
-                                        </button>
-                                    </div>
+                            <h3 style={{ margin: '0 0 1rem', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '0.5rem' }}>Resumen</h3>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.9rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span>Plan: <b>{subscriptionData.plan}</b></span>
+                                    <button onClick={() => setIsChangingPlan(true)} style={{ background: 'none', border: 'none', color: institutionOcre, cursor: 'pointer', fontSize: '0.7rem', fontWeight: '900' }}>CAMBIAR</button>
                                 </div>
                                 {planEndDate && (
-                                    <div style={{ marginTop: '0.5rem', marginBottom: '1rem' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: planMetrics.isExpired ? '#ff4d4d' : institutionOcre, marginBottom: '6px' }}>
-                                            <span>{planMetrics.isExpired ? 'Expiró el:' : 'Vence:'}</span>
-                                            <b>{planEndDate}</b>
-                                        </div>
-                                        
-                                        {/* Elegant Progress Bar */}
-                                        {!planMetrics.isExpired && (
-                                            <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '10px', overflow: 'hidden', position: 'relative' }}>
-                                                <div style={{ 
-                                                    width: `${planMetrics.progress}%`, 
-                                                    height: '100%', 
-                                                    background: planMetrics.isApproaching ? institutionOcre : '#4ade80', 
-                                                    borderRadius: '10px', 
-                                                    transition: 'width 1.5s cubic-bezier(0.4, 0, 0.2, 1)',
-                                                    boxShadow: planMetrics.isApproaching ? `0 0 10px ${institutionOcre}88` : 'none'
-                                                }} />
-                                            </div>
-                                        )}
-                                        
-                                        <div style={{ 
-                                            fontSize: '0.65rem', 
-                                            marginTop: '6px', 
-                                            opacity: 0.7, 
-                                            fontWeight: '700', 
-                                            textTransform: 'uppercase', 
-                                            letterSpacing: '0.5px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '4px',
-                                            color: planMetrics.isExpired ? '#ff4d4d' : (planMetrics.isApproaching ? institutionOcre : '#fff')
-                                        }}>
-                                            {planMetrics.isExpired ? (
-                                                <>Tu membresía ha caducado. Renuévala para recuperar tus beneficios.</>
-                                            ) : (
-                                                <>
-                                                    <Clock size={10} />
-                                                    {planMetrics.daysRemaining} días restantes {planMetrics.isApproaching && '— ¡RENOVAR RECOMENDADO!'}
-                                                </>
-                                            )}
-                                        </div>
+                                    <div style={{ fontSize: '0.75rem', color: institutionOcre }}>
+                                        Vence: <b>{planEndDate}</b> ({planMetrics.daysRemaining} días)
                                     </div>
                                 )}
-                                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Descuento:</span><b>{currentPlanConfig.discount}%</b></div>
+                                <div style={{ margin: '1rem 0', padding: '1rem 0', borderTop: '1px solid rgba(255,255,255,0.1)', borderBottom: '1px solid rgba(255,255,255,0.1)', maxHeight: '200px', overflowY: 'auto' }}>
+                                    {subscriptionData.products.map(p => (
+                                        <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', fontSize: '0.8rem' }}>
+                                            <span>{p.quantity}x {p.name}</span>
+                                            <span>${(p.price * p.quantity * (1-currentPlanConfig.discount/100)).toLocaleString()}</span>
+                                        </div>
+                                    ))}
+                                </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Envío:</span><b>{shippingCost === 0 ? 'GRATIS' : `$${shippingCost.toLocaleString()}`}</b></div>
-                            </div>
-
-                            <div style={{ maxHeight: '300px', overflowY: 'auto', paddingRight: '10px', margin: '1.5rem 0', borderTop: '1px solid rgba(255,255,255,0.1)', borderBottom: '1px solid rgba(255,255,255,0.1)', py: '1rem' }}>
-                                <p style={{ fontSize: '0.75rem', color: institutionOcre, fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '1rem' }}>Tu Despensa</p>
-                                {subscriptionData.products.length === 0 ? (
-                                    <p style={{ fontSize: '0.8rem', opacity: 0.5, fontStyle: 'italic' }}>Sin productos seleccionados</p>
-                                ) : (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                        {subscriptionData.products.map(p => {
-                                            const discPrice = Math.ceil((p.price * (1 - currentPlanConfig.discount/100)) / 50) * 50;
-                                            return (
-                                                <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
-                                                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                                                        <span style={{ background: institutionOcre, color: deepTeal, width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', fontSize: '0.75rem' }}>{p.quantity}</span>
-                                                        <span style={{ fontWeight: '600' }}>{p.name}</span>
-                                                    </div>
-                                                    <span style={{ opacity: 0.8 }}>${(discPrice * p.quantity).toLocaleString()}</span>
-                                                </div>
-                                            );
-                                        })}
+                                <h2 style={{ color: institutionOcre, marginBottom: 0 }}>Total: ${totalAmount.toLocaleString()}</h2>
+                                {savings > 0 && <div style={{ color: '#4ade80', fontSize: '0.8rem', fontWeight: '800' }}>AHORRO: ${savings.toLocaleString()}</div>}
+                                
+                                <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '15px' }}>
+                                    <p style={{ fontSize: '0.65rem', color: institutionOcre, fontWeight: '900', marginBottom: '0.5rem' }}>ENTREGA: {subscriptionData.frequency}</p>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '5px' }}>
+                                        {['Semanal', 'Quincenal', 'Mensual'].map(f => (
+                                            <button key={f} onClick={() => (isChangingPlan || !activeMember) && setSubscriptionData({...subscriptionData, frequency: f})} style={{ 
+                                                background: subscriptionData.frequency === f ? institutionOcre : 'rgba(255,255,255,0.1)',
+                                                color: subscriptionData.frequency === f ? deepTeal : '#fff', border: 'none', padding: '5px', borderRadius: '5px', fontSize: '0.65rem', fontWeight: '900', cursor: 'pointer'
+                                            }}>{f}</button>
+                                        ))}
                                     </div>
+                                </div>
+
+                                <button onClick={(isChangingPlan || hasPendingChanges) ? finalizeMembership : handleBoldPayment} disabled={isSaving} style={{ 
+                                    width: '100%', padding: '1.2rem', background: institutionOcre, color: deepTeal, border: 'none', borderRadius: '20px', fontWeight: '900', fontSize: '1.1rem', cursor: 'pointer', marginTop: '1rem' 
+                                }}>
+                                    {isSaving ? '...' : (isChangingPlan || hasPendingChanges ? 'GUARDAR CAMBIOS' : 'PAGAR AHORA')}
+                                </button>
+                                {user?.role === 'member' && (
+                                    <button onClick={() => setIsCancelModalOpen(true)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', textDecoration: 'underline', cursor: 'pointer', fontSize: '0.7rem', marginTop: '1rem' }}>DEJAR DE SER MIEMBRO</button>
                                 )}
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '1.5rem' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                        <h2 style={{ color: institutionOcre, margin: 0, lineHeight: 1 }}>Total: ${totalAmount.toLocaleString()}</h2>
-                                        {savings > 0 && (
-                                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#4ade80', fontSize: '0.85rem', fontWeight: '800' }}>
-                                                <Sparkles size={14} />
-                                                AHORRASTE ${savings.toLocaleString()}
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '1.5rem' }}>
-                                    {subscriptionData.products.length > 0 && (
-                                        <>
-                                            {/* Highly Visual Frequency Toggle - Conditional Editability */}
-                                            <div style={{ marginTop: '0.5rem', background: 'rgba(255,255,255,0.05)', padding: '1.2rem', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                                                <p style={{ fontSize: '0.65rem', color: institutionOcre, fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                    <Calendar size={12} /> Frecuencia de Entrega {!isChangingPlan && user?.role === 'member' && '(Bloqueado)'}
-                                                </p>
-                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                                                    {['Semanal', 'Quincenal', 'Mensual'].map(freq => {
-                                                        const canEditFrequency = isChangingPlan || user?.role !== 'member';
-                                                        const isActive = subscriptionData.frequency === freq;
-                                                        
-                                                        return (
-                                                            <button
-                                                                key={freq}
-                                                                onClick={() => canEditFrequency && setSubscriptionData({...subscriptionData, frequency: freq})}
-                                                                style={{
-                                                                    background: isActive ? institutionOcre : 'rgba(255,255,255,0.1)',
-                                                                    color: isActive ? deepTeal : '#fff',
-                                                                    border: 'none',
-                                                                    padding: '0.8rem 0.2rem',
-                                                                    borderRadius: '12px',
-                                                                    fontSize: '0.75rem',
-                                                                    fontWeight: '800',
-                                                                    cursor: canEditFrequency ? 'pointer' : 'default',
-                                                                    transition: 'all 0.3s ease',
-                                                                    opacity: !canEditFrequency && !isActive ? 0.3 : 1
-                                                                }}
-                                                            >
-                                                                {freq}
-                                                            </button>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
-
-                                            <button 
-                                                onClick={(isChangingPlan || hasPendingChanges) ? finalizeMembership : handleBoldPayment} 
-                                                disabled={isSaving} 
-                                                style={{ 
-                                                    width: '100%', 
-                                                    padding: '1.4rem', 
-                                                    background: institutionOcre, 
-                                                    color: deepTeal, 
-                                                    border: 'none', 
-                                                    borderRadius: '20px', 
-                                                    fontWeight: '900', 
-                                                    fontSize: '1.1rem', 
-                                                    cursor: 'pointer', 
-                                                    boxShadow: '0 10px 25px rgba(0,0,0,0.2)', 
-                                                    transition: 'all 0.3s ease',
-                                                    marginTop: '1.5rem'
-                                                }}
-                                            >
-                                                {isSaving ? 'PROCESANDO...' : (isChangingPlan ? 'ACTUALIZAR MI SUSCRIPCIÓN' : 'PAGAR MI SUSCRIPCIÓN')}
-                                            </button>
-                                        </>
-                                    )}
-
-                                    {user?.role === 'member' && (
-                                        <button 
-                                            onClick={() => setIsCancelModalOpen(true)}
-                                            style={{ 
-                                                background: 'none', 
-                                                color: 'rgba(255,255,255,0.4)', 
-                                                width: '100%', 
-                                                padding: '0.5rem', 
-                                                border: 'none', 
-                                                textDecoration: 'underline',
-                                                fontSize: '0.7rem',
-                                                cursor: 'pointer'
-                                            }}
-                                        >
-                                            DEJAR DE SER MIEMBRO
-                                        </button>
-                                    )}
-                                </div>
                             </div>
                         </div>
                     </div>
                 )}
 
-                {/* MODAL DE DESPEDIDA (Baja de suscripción) */}
                 {isCancelModalOpen && (
                     <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(2, 83, 87, 0.95)', backdropFilter: 'blur(10px)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
                         <div style={{ background: '#fff', borderRadius: '40px', maxWidth: '500px', width: '100%', padding: '3rem', textAlign: 'center', animation: 'fadeInScale 0.4s ease-out' }}>
