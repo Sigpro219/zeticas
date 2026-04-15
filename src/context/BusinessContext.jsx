@@ -602,38 +602,50 @@ export const BusinessProvider = ({ children }) => {
     const upsertMember = useCallback(async (memberData) => {
         try {
             const nit = memberData.nit?.trim();
+            const email = memberData.email?.toLowerCase().trim();
+            
             if (!nit) throw new Error("NIT Requerido para registro.");
             
-            // Normalize email if present
-            const normalizedData = { ...memberData };
-            if (normalizedData.email) {
-                normalizedData.email = normalizedData.email.toLowerCase().trim();
+            // 1. Verificar existencia por NIT
+            const qNit = query(collection(db, 'clients'), where('nit', '==', nit));
+            const snapNit = await getDocs(qNit);
+            
+            // 2. Verificar existencia por Email
+            const qEmail = query(collection(db, 'clients'), where('email', '==', email));
+            const snapEmail = await getDocs(qEmail);
+
+            const existingByNit = !snapNit.empty ? snapNit.docs[0].data() : null;
+            const existingByEmail = !snapEmail.empty ? snapEmail.docs[0].data() : null;
+
+            // Si ya es miembro con esa cédula o correo, abortar con mensaje claro
+            if ((existingByNit && existingByNit.is_member) || (existingByEmail && existingByEmail.is_member)) {
+                return { 
+                    success: false, 
+                    error: "Ya existe un socio registrado con esta cédula o correo electrónico. Por favor, intenta iniciar sesión." 
+                };
             }
 
-            const q = query(collection(db, 'clients'), where('nit', '==', nit));
-            const snapshot = await getDocs(q);
-            
             let finalId;
             let finalData;
 
-            if (!snapshot.empty) {
-                // Update existing record with membership data
-                finalId = snapshot.docs[0].id;
-                const existingData = snapshot.docs[0].data();
+            if (!snapNit.empty) {
+                // Actualizar cliente existente (que quizá no era miembro aún)
+                finalId = snapNit.docs[0].id;
                 finalData = {
-                    ...existingData,
-                    ...normalizedData,
+                    ...snapNit.docs[0].data(),
+                    ...memberData,
+                    email, // Asegurar email normalizado
                     is_member: true,
-                    status: existingData.status || 'Active',
+                    status: 'Active',
                     updated_at: new Date().toISOString()
                 };
-                
                 await updateDoc(doc(db, 'clients', finalId), finalData);
                 return { success: true, id: finalId, mode: 'updated', data: finalData };
             } else {
-                // Create brand new member document
+                // Crear nuevo socio desde cero
                 finalData = {
-                    ...normalizedData,
+                    ...memberData,
+                    email,
                     is_member: true,
                     status: 'Active',
                     created_at: new Date().toISOString()
