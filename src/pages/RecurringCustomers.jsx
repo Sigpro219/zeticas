@@ -344,33 +344,30 @@ const RecurringCustomers = () => {
         const planStr = subscriptionData.plan || '';
         const months = planStr.split(' ')[0]; // "3", "6" o "12"
         
-        // Cargar valores desde el CMS o usar los defaults que pediste
+        // Cargar valores desde el CMS o usar los defaults
         const cmsDiscount = Number(config[`plan_${months}_discount`]);
         const cmsThreshold = Number(config[`plan_${months}_threshold`]);
+        const cmsPrice = Number(config[`plan_${months}_price`]);
         const cmsAlwaysFree = config[`plan_${months}_shipping`] === true;
 
-        // Establecer valores finales (Prioridad: CMS > Pedido del usuario > Fallback seguro)
+        // Establecer valores finales
         let finalDiscount = !isNaN(cmsDiscount) ? cmsDiscount : 0;
         let finalThreshold = !isNaN(cmsThreshold) ? cmsThreshold : 120000;
+        let finalPrice = !isNaN(cmsPrice) ? cmsPrice : 0;
         let finalFreeShipping = cmsAlwaysFree;
 
-        // Si no hay nada en el CMS, aplicamos tus reglas específicas:
-        if (isNaN(cmsDiscount)) {
-            if (months === '3') finalDiscount = 5;
-        }
-        
+        // Fallbacks específicos si el CMS está vacío
+        if (isNaN(cmsDiscount) && months === '3') finalDiscount = 5;
         if (isNaN(cmsThreshold)) {
             if (months === '6') finalThreshold = 60000;
             if (months === '3') finalThreshold = 120000;
         }
-
-        if (cmsAlwaysFree === undefined) {
-            if (months === '12') finalFreeShipping = true;
-        }
+        if (cmsAlwaysFree === undefined && months === '12') finalFreeShipping = true;
         
         return {
             discount: finalDiscount,
             threshold: finalThreshold,
+            monthlyPrice: finalPrice,
             freeShipping: finalFreeShipping
         };
     }, [config, subscriptionData.plan]);
@@ -386,7 +383,16 @@ const RecurringCustomers = () => {
     const freeByPlan = currentPlanConfig.freeShipping;
     const freeByAmount = discountedProductsSum >= currentPlanConfig.threshold;
     const shippingCost = (subtotal === 0 || freeByPlan || freeByAmount) ? 0 : (Number(siteContent.web_shipping?.tarifa_nacional) || 13500);
-    const totalAmount = discountedProductsSum + shippingCost;
+    
+    // LA REGLA DE ORO: El total es el Máximo entre el Fijo del Plan y el Consumo real (más envío)
+    const baseAmount = Math.max(currentPlanConfig.monthlyPrice, discountedProductsSum);
+    const totalAmount = baseAmount + shippingCost;
+
+    const canEditFrequency = useMemo(() => {
+        if (!activeMember) return true;
+        // Permitir editar siempre durante el onboarding o si ya es miembro
+        return true; 
+    }, [activeMember]);
 
     const hasPendingChanges = useMemo(() => {
         if (!activeMember) return true;
@@ -517,6 +523,7 @@ const RecurringCustomers = () => {
         try {
             const res = await upsertMember({ 
                 nit: activeMember?.nit || activeMember?.idNumber || authData.idNumber, 
+                email: activeMember?.email || authData.email, // Incluimos el correo para que pase la validación
                 pantry: subscriptionData.products.map(p => ({ id: p.id, quantity: p.quantity })), 
                 frequency: subscriptionData.frequency,
                 membership: { 
@@ -885,7 +892,7 @@ const RecurringCustomers = () => {
                                     <div style={{ gridColumn: '1 / -1' }}>
                                         <button type="submit" disabled={authData.password !== authData.confirmPassword || !authData.password}
                                             style={{ width: '100%', background: deepTeal, color: '#fff', padding: '0.85rem', borderRadius: '12px', border: 'none', fontWeight: 900, fontSize: '0.85rem', letterSpacing: '0.5px', cursor: 'pointer', opacity: (authData.password !== authData.confirmPassword || !authData.password) ? 0.4 : 1, transition: 'opacity 0.2s' }}>
-                                            CONTINUAR AL CÍRCULO →
+                                            INSCRIBIRSE
                                         </button>
                                         <button type="button" onClick={() => setAuthMode('login')} style={{ width: '100%', background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', marginTop: '0.5rem' }}>
                                             Ya tengo cuenta · Iniciar sesión
@@ -1182,14 +1189,12 @@ const RecurringCustomers = () => {
                                         </p>
                                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
                                             {['Semanal', 'Quincenal', 'Mensual'].map(freq => {
-                                                const canEditFrequency = isChangingPlan || user?.role !== 'member' || !activeMember?.frequency;
                                                 const isActive = subscriptionData.frequency === freq;
                                                 
                                                 return (
                                                     <button
                                                         key={freq}
-                                                        onClick={() => !canEditFrequency ? null : setSubscriptionData({...subscriptionData, frequency: freq})}
-                                                        disabled={!canEditFrequency}
+                                                        onClick={() => setSubscriptionData({...subscriptionData, frequency: freq})}
                                                         style={{
                                                             background: isActive ? institutionOcre : 'rgba(255,255,255,0.1)',
                                                             color: isActive ? deepTeal : '#fff',

@@ -601,10 +601,11 @@ export const BusinessProvider = ({ children }) => {
 
     const upsertMember = useCallback(async (memberData) => {
         try {
-            const nit = memberData.nit?.trim();
+            const nit = memberData.nit?.toString().trim();
             const email = memberData.email?.toLowerCase().trim();
             
-            if (!nit) throw new Error("NIT Requerido para registro.");
+            if (!nit) throw new Error("Cédula/NIT es requerido para el registro.");
+            if (!email) throw new Error("El Correo Electrónico es requerido para el registro.");
             
             // 1. Verificar existencia por NIT
             const qNit = query(collection(db, 'clients'), where('nit', '==', nit));
