@@ -50,14 +50,17 @@ const SEOManager = () => {
         metaDesc.setAttribute('content', description);
 
         // 4. Update Meta Keywords
-        if (seo.keywords) {
+        // Smart Fallback: If no explicit keywords, use the title words as hooks
+        const finalKeywords = seo.keywords || (isConsulting ? seo.consulting_title : seo.home_title) || "";
+        
+        if (finalKeywords) {
             let metaKeywords = document.querySelector('meta[name="keywords"]');
             if (!metaKeywords) {
                 metaKeywords = document.createElement('meta');
                 metaKeywords.setAttribute('name', 'keywords');
                 document.head.appendChild(metaKeywords);
             }
-            metaKeywords.setAttribute('content', seo.keywords);
+            metaKeywords.setAttribute('content', finalKeywords);
         }
 
         // 5. Update Open Graph Tags
