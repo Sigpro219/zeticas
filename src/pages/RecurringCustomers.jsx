@@ -1177,65 +1177,68 @@ const RecurringCustomers = () => {
                                     </div>
                                 </div>
 
-                                {/* Highly Visual Frequency Toggle - Now enabled for all */}
-                                <div style={{ marginTop: '0.5rem', background: 'rgba(255,255,255,0.05)', padding: '1.2rem', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                                    <p style={{ fontSize: '0.65rem', color: institutionOcre, fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                        <Calendar size={12} /> Frecuencia de Entrega
-                                    </p>
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                                        {['Semanal', 'Quincenal', 'Mensual'].map(freq => {
-                                            const canEditFrequency = isChangingPlan || user?.role !== 'member' || !activeMember?.frequency;
-                                            const isActive = subscriptionData.frequency === freq;
-                                            
-                                            return (
-                                                <button
-                                                    key={freq}
-                                                    onClick={() => !canEditFrequency ? null : setSubscriptionData({...subscriptionData, frequency: freq})}
-                                                    disabled={!canEditFrequency}
-                                                    style={{
-                                                        background: isActive ? institutionOcre : 'rgba(255,255,255,0.1)',
-                                                        color: isActive ? deepTeal : '#fff',
-                                                        border: 'none',
-                                                        padding: '0.8rem 0.2rem',
-                                                        borderRadius: '12px',
-                                                        fontSize: '0.75rem',
-                                                        fontWeight: '800',
-                                                        cursor: !canEditFrequency ? 'default' : 'pointer',
-                                                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                                                        boxShadow: isActive ? `0 4px 12px ${institutionOcre}44` : 'none',
-                                                        transform: isActive ? 'scale(1.05)' : 'scale(1)',
-                                                        opacity: !canEditFrequency && !isActive ? 0.3 : 1
-                                                    }}
-                                                >
-                                                    {freq}
-                                                </button>
-                                            );
-                                        })}
+                            {subscriptionData.products.length > 0 && (
+                                <>
+                                    {/* Highly Visual Frequency Toggle - Now enabled for all */}
+                                    <div style={{ marginTop: '0.5rem', background: 'rgba(255,255,255,0.05)', padding: '1.2rem', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                        <p style={{ fontSize: '0.65rem', color: institutionOcre, fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <Calendar size={12} /> Frecuencia de Entrega
+                                        </p>
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                                            {['Semanal', 'Quincenal', 'Mensual'].map(freq => {
+                                                const canEditFrequency = isChangingPlan || user?.role !== 'member' || !activeMember?.frequency;
+                                                const isActive = subscriptionData.frequency === freq;
+                                                
+                                                return (
+                                                    <button
+                                                        key={freq}
+                                                        onClick={() => !canEditFrequency ? null : setSubscriptionData({...subscriptionData, frequency: freq})}
+                                                        disabled={!canEditFrequency}
+                                                        style={{
+                                                            background: isActive ? institutionOcre : 'rgba(255,255,255,0.1)',
+                                                            color: isActive ? deepTeal : '#fff',
+                                                            border: 'none',
+                                                            padding: '0.8rem 0.2rem',
+                                                            borderRadius: '12px',
+                                                            fontSize: '0.75rem',
+                                                            fontWeight: '800',
+                                                            cursor: !canEditFrequency ? 'default' : 'pointer',
+                                                            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                                            boxShadow: isActive ? `0 4px 12px ${institutionOcre}44` : 'none',
+                                                            transform: isActive ? 'scale(1.05)' : 'scale(1)',
+                                                            opacity: !canEditFrequency && !isActive ? 0.3 : 1
+                                                        }}
+                                                    >
+                                                        {freq}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
-                                </div>
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '1.5rem' }}>
-                                {subscriptionData.products.length > 0 && (
-                                    <button 
-                                        onClick={(hasPendingChanges || isChangingPlan || user?.role !== 'member') ? finalizeMembership : handleBoldPayment} 
-                                        disabled={isSaving} 
-                                        style={{ 
-                                            width: '100%', 
-                                            padding: '1.4rem', 
-                                            background: institutionOcre, 
-                                            color: deepTeal, 
-                                            border: 'none', 
-                                            borderRadius: '20px', 
-                                            fontWeight: '900', 
-                                            fontSize: '1.1rem', 
-                                            cursor: 'pointer', 
-                                            boxShadow: '0 10px 25px rgba(0,0,0,0.2)', 
-                                            transition: 'all 0.3s ease' 
-                                        }}
-                                    >
-                                        {isSaving ? 'PROCESANDO...' : ((hasPendingChanges || isChangingPlan || user?.role !== 'member') ? 'GUARDAR MI SUSCRIPCIÓN' : 'PAGAR MI SUSCRIPCIÓN')}
-                                    </button>
-                                )}
+
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '1.5rem' }}>
+                                        <button 
+                                            onClick={(hasPendingChanges || isChangingPlan || user?.role !== 'member') ? finalizeMembership : handleBoldPayment} 
+                                            disabled={isSaving} 
+                                            style={{ 
+                                                width: '100%', 
+                                                padding: '1.4rem', 
+                                                background: institutionOcre, 
+                                                color: deepTeal, 
+                                                border: 'none', 
+                                                borderRadius: '20px', 
+                                                fontWeight: '900', 
+                                                fontSize: '1.1rem', 
+                                                cursor: 'pointer', 
+                                                boxShadow: '0 10px 25px rgba(0,0,0,0.2)', 
+                                                transition: 'all 0.3s ease' 
+                                            }}
+                                        >
+                                            {isSaving ? 'PROCESANDO...' : ((hasPendingChanges || isChangingPlan || user?.role !== 'member') ? 'GUARDAR MI SUSCRIPCIÓN' : 'PAGAR MI SUSCRIPCIÓN')}
+                                        </button>
+                                    </div>
+                                </>
+                            )}
 
                                 {user?.role === 'member' && (
                                     <button 
