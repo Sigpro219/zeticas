@@ -592,7 +592,7 @@ const Products = () => {
                                         </td>
 
                                         <td style={{ padding: '1rem' }}>
-                                            <span style={{ padding: '4px 10px', borderRadius: '8px', fontSize: '0.7rem', fontWeight: '900', background: p.product_type === 'Sal' ? '#f1f5f9' : p.product_type === 'Dulce' ? '#fff7ed' : p.product_type === 'Kit' ? '#f0fdfa' : '#f8fafc', color: p.product_type === 'Sal' ? '#475569' : p.product_type === 'Dulce' ? '#c2410c' : p.product_type === 'Kit' ? '#0d9488' : '#94a3b8', border: '1px solid currentColor', opacity: p.product_type === 'Insumo' ? 0.3 : 1 }}>{p.product_type}</span>
+                                            <span style={{ padding: '4px 10px', borderRadius: '8px', fontSize: '0.7rem', fontWeight: '900', background: p.product_type === 'Sal' ? '#f1f5f9' : p.product_type === 'Dulce' ? '#fff7ed' : p.product_type === 'Kit' ? '#f0fdfa' : '#f8fafc', color: p.product_type === 'Sal' ? '#475569' : p.product_type === 'Dulce' ? '#c2410c' : p.product_type === 'Kit' ? '#0d9488' : '#94a3b8', border: '1px solid currentColor', opacity: p.product_type === 'Kit' ? 1 : 1 }}>{p.product_type}</span>
                                         </td>
                                         <td style={{ padding: '1rem', fontSize: '0.85rem' }}>{p.category}</td>
                                         <td style={{ padding: '1rem', color: '#666' }}>${p.cost?.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 1 })}</td>
@@ -946,7 +946,6 @@ const Products = () => {
                                 )}
 
                                 {/* 5. Clasificación y Etiquetas */}
-                                </div>
                                 
                                 {/* 5.5 COMPOSICIÓN DEL KIT - SOLO SI ES KIT */}
                                 {formData.product_type === 'Kit' && (
@@ -1247,6 +1246,7 @@ const Products = () => {
                         text-align: center;
                         color: #666;
                         margin-top: 0.5mm;
+                    }
                     .no-print { display: none !important; }
                 }
             `}</style>

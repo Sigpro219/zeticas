@@ -72,6 +72,65 @@ export const BusinessProvider = ({ children }) => {
     const [lastUpdate, setLastUpdate] = useState(null);
     const [analytics, setAnalytics] = useState([]);
 
+    // ── CORE BUSINESS LOGIC (Hoisted to prevent TDZ) ───────────────────
+
+    /**
+     * consumeMaterials: Deducts physical stock by increasing the 'sales' counter.
+     */
+    const consumeMaterials = useCallback(async (materials) => {
+        try {
+            for (const mat of materials) {
+                // materials expected: { id, qtyToConsume }
+                const docRef = doc(db, 'products', mat.id);
+                await updateDoc(docRef, {
+                    sales: increment(Math.abs(mat.qtyToConsume))
+                });
+            }
+            return { success: true };
+        } catch (err) {
+            console.error("Error consuming materials:", err);
+            return { success: false, error: err.message };
+        }
+    }, []);
+
+    /**
+     * loadFinishedGoods: Updates inventory for produced items and optionally consumes BOM materials.
+     */
+    const loadFinishedGoods = useCallback(async (sku, quantity, alreadyConsumed = false) => {
+        try {
+            const searchName = String(sku || '').toLowerCase().trim();
+            const snapshot = await getDocs(collection(db, 'products'));
+            const docSnap = snapshot.docs.find(d => {
+                const p = d.data();
+                return String(p.name || '').toLowerCase().trim() === searchName;
+            });
+
+            if (docSnap) {
+                const ptId = docSnap.id;
+                await updateDoc(docSnap.ref, {
+                    purchases: increment(Number(quantity) || 0)
+                });
+
+                if (!alreadyConsumed) {
+                    const recipeList = recipes[ptId] || recipes[sku] || [];
+                    if (recipeList.length > 0) {
+                        const yieldQty = Number(recipeList[0].yield_quantity) || 1;
+                        const materialsToConsume = recipeList.map(r => ({
+                            id: r.rm_id,
+                            qtyToConsume: (Number(r.qty) / yieldQty) * (Number(quantity) || 0)
+                        }));
+                        await consumeMaterials(materialsToConsume);
+                    }
+                }
+                return { success: true };
+            }
+            throw new Error(`Producto [${sku}] no encontrado en el catálogo de productos.`);
+        } catch (err) {
+            console.error("Error loading finished goods:", err);
+            return { success: false, error: err.message };
+        }
+    }, [recipes, consumeMaterials]);
+
     // ── AUDIT LOGS SYSTEM ──────────────────────────────────────────────
     
     /**
@@ -588,6 +647,63 @@ export const BusinessProvider = ({ children }) => {
         }
     }, []);
 
+    const sendWelcomeEmail = useCallback(async (memberData, plan) => {
+        try {
+            const months = plan.split(' ')[0];
+            const discount = siteContent.recurring?.[`plan_${months}_discount`] || 0;
+            const isFreeShipping = String(siteContent.recurring?.[`plan_${months}_shipping`]).toLowerCase() === 'gratis' || months === '12';
+
+            const emailData = {
+                to: memberData.email,
+                message: {
+                    subject: '🌿 ¡Bienvenido al Círculo Zeticas!',
+                    html: `
+                        <div style="font-family: 'Playfair Display', serif; color: #025357; padding: 40px; background-color: #f8f9f5; border-radius: 20px;">
+                            <center>
+                                <img src="https://zeticas.com/favicon.png" width="80" style="margin-bottom: 20px;">
+                                <h1 style="color: #025357; font-size: 28px; margin-bottom: 10px;">¡Hola, ${memberData.name}!</h1>
+                                <p style="font-size: 18px; color: #555;">Es un gusto darte la bienvenida al <b>Círculo de Suscripción Zeticas</b>.</p>
+                            </center>
+                            
+                            <div style="background: white; padding: 30px; border-radius: 15px; margin-top: 30px; border-left: 5px solid #D6BD98;">
+                                <h3 style="color: #025357; margin-top: 0;">Tu membresía de ${plan} está activa</h3>
+                                <p style="margin-bottom: 20px;">Desde hoy, eres parte de una comunidad que valora lo artesanal y apoya directamente al campo. Estos son tus beneficios exclusivos:</p>
+                                
+                                <ul style="list-style: none; padding: 0;">
+                                    <li style="margin-bottom: 15px;">✅ <b>Ahorro Permanente:</b> Tienes un <b>${discount}% de descuento</b> aplicado automáticamente en todos tus productos terminados.</li>
+                                    <li style="margin-bottom: 15px;">✅ <b>Logística Premium:</b> Tus envíos son prioritarios. ${isFreeShipping ? '¡Cuentas con <b>envío gratis</b> en todos tus pedidos!' : 'Cuentas con tarifas preferenciales de envío.'}</li>
+                                    <li style="margin-bottom: 15px;">✅ <b>Despensa Inteligente:</b> Nosotros programamos tu entrega según tu frecuencia favorita para que nunca te falte el sabor de la Sabana.</li>
+                                </ul>
+                            </div>
+
+                            <p style="margin-top: 30px; text-align: center; color: #666; font-size: 14px;">
+                                Pronto nos pondremos en contacto contigo para coordinar tu primer despacho.<br>
+                                Si tienes dudas, escríbenos a este correo o por WhatsApp.
+                            </p>
+                            
+                            <hr style="border: 0; border-top: 1px solid #D6BD98; margin: 40px 0;">
+                            
+                            <center>
+                                <p style="font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 2px;">Propósito Artesanal • Zeticas</p>
+                            </center>
+                        </div>
+                    `
+                },
+                from: 'zeticas@gmail.com',
+                created_at: new Date().toISOString(),
+                member_nit: memberData.nit || '',
+                type: 'welcome_subscription'
+            };
+
+            await addDoc(collection(db, 'mail'), emailData);
+            console.log("✅ Welcome email queued for:", memberData.email);
+            return { success: true };
+        } catch (err) {
+            console.error("Error queueing welcome email:", err);
+            return { success: false, error: err.message };
+        }
+    }, [siteContent]);
+
     const addOrder = useCallback(async (orderData) => {
         try {
             const counterRef = doc(db, 'metadata', 'counters');
@@ -876,6 +992,49 @@ export const BusinessProvider = ({ children }) => {
         } catch (err) { return { success: false, error: err.message }; }
     }, []);
 
+    /**
+     * processItemStockDeduction: Recursive function to explode Kits and Recipes into physical stock deduction.
+     */
+    const processItemStockDeduction = useCallback(async (itemId, quantity) => {
+        try {
+            // Normalize ID and find product
+            const product = items.find(i => i.id === itemId);
+            if (!product) {
+                console.warn(`Item deduction skipped: Product ${itemId} not found in state.`);
+                return;
+            }
+
+            // A. Increment Sales for the item (Finished Good or Kit)
+            await updateDoc(doc(db, 'products', itemId), {
+                sales: increment(Number(quantity) || 0)
+            });
+
+            // B. If it's a Kit, explode components (Recursive)
+            if (product.product_type === 'Kit' && product.components && Array.isArray(product.components)) {
+                for (const comp of product.components) {
+                    // Multiply component qty by kit qty sold
+                    const totalCompQty = (Number(comp.qty) || 0) * (Number(quantity) || 0);
+                    if (totalCompQty > 0) {
+                        await processItemStockDeduction(comp.id, totalCompQty);
+                    }
+                }
+            } else {
+                // C. If it's NOT a Kit but has a recipe, explode materials (Failsafe)
+                const recipeList = recipes[itemId] || recipes[product.name] || [];
+                if (recipeList.length > 0) {
+                    const yieldQty = Number(recipeList[0].yield_quantity) || 1;
+                    const materialsToConsume = recipeList.map(r => ({
+                        id: r.rm_id,
+                        qtyToConsume: (Number(r.qty) / yieldQty) * (Number(quantity) || 0)
+                    }));
+                    await consumeMaterials(materialsToConsume);
+                }
+            }
+        } catch (e) {
+            console.error(`Recursive stock deduction failed for ${itemId}:`, e);
+        }
+    }, [items, recipes, consumeMaterials]);
+
     const updateOrder = useCallback(async (id, data) => {
         try {
             const orderRef = doc(db, 'orders', id);
@@ -906,7 +1065,7 @@ export const BusinessProvider = ({ children }) => {
                 }
             }
 
-            // 2. Physical Stock Deduction & Material Explosion (Safe Execution)
+            // 2. Physical Stock Deduction & Kit/Recipe Explosion
             const finalStatuses = ['finalizado', 'entregado', 'cobrado'];
             if (data.status && finalStatuses.includes(data.status.toLowerCase())) {
                 const wasFinal = oldData.status && finalStatuses.includes(oldData.status.toLowerCase());
@@ -915,26 +1074,7 @@ export const BusinessProvider = ({ children }) => {
                 if (!wasFinal && oldData.items && !alreadyConsumed) {
                     for (const item of oldData.items) {
                         if (item.id) {
-                            try {
-                                // A. Increment Sales for the Finished Good
-                                await updateDoc(doc(db, 'products', item.id), {
-                                    sales: increment(Number(item.quantity) || 0)
-                                });
-
-                                // B. Failsafe: Material Explosion (Ensure materials are consumed if ODP was skipped)
-                                // We check if the item has a recipe and consume materials accordingly
-                                const recipeList = recipes[item.id] || recipes[item.name] || [];
-                                if (recipeList.length > 0) {
-                                    const yieldQty = Number(recipeList[0].yield_quantity) || 1;
-                                    const materialsToConsume = recipeList.map(r => ({
-                                        id: r.rm_id,
-                                        qtyToConsume: (Number(r.qty) / yieldQty) * (Number(item.quantity) || 0)
-                                    }));
-                                    await consumeMaterials(materialsToConsume);
-                                }
-                            } catch (e) {
-                                console.warn(`Stock update failed for item ${item.id}:`, e);
-                            }
+                            await processItemStockDeduction(item.id, item.quantity);
                         }
                     }
                     // Mark as consumed to prevent double-deduction if order is edited later
@@ -949,7 +1089,7 @@ export const BusinessProvider = ({ children }) => {
             console.error("Critical error in updateOrder:", err);
             return { success: false, error: err.message };
         }
-    }, []);
+    }, [processItemStockDeduction]);
 
     const addPurchase = useCallback(async (purchaseData) => {
         try {
@@ -1535,64 +1675,7 @@ export const BusinessProvider = ({ children }) => {
     }, []);
 
 
-    const consumeMaterials = useCallback(async (materials) => {
-        try {
-            for (const mat of materials) {
-                // materials expected: { id, qtyToConsume }
-                // Use 'sales' property to record MATERIA PRIMA consumption accurately mapped in Kárdex (Inv. Final)
-                const docRef = doc(db, 'products', mat.id);
-                await updateDoc(docRef, {
-                    sales: increment(Math.abs(mat.qtyToConsume))
-                });
-            }
-            return { success: true };
-        } catch (err) {
-            console.error("Error consuming materials:", err);
-            return { success: false, error: err.message };
-        }
-    }, []);
 
-    const loadFinishedGoods = useCallback(async (sku, quantity, alreadyConsumed = false) => {
-        try {
-            // Normalize searching: case-insensitive and trimmed
-            const searchName = String(sku || '').toLowerCase().trim();
-            const snapshot = await getDocs(collection(db, 'products'));
-            const docSnap = snapshot.docs.find(d => {
-                const p = d.data();
-                const pName = String(p.name || '').toLowerCase().trim();
-                return pName === searchName;
-            });
-
-            if (docSnap) {
-                const ptId = docSnap.id;
-
-                // 1. Charge Finished Goods to inventory (Output from production)
-                // Use 'purchases' property to record PRODUCTO TERMINADO production output
-                await updateDoc(docSnap.ref, {
-                    purchases: increment(Number(quantity) || 0)
-                });
-
-                // 2. Automatic Material Deduction (if not already done at start)
-                if (!alreadyConsumed) {
-                    const recipeList = recipes[ptId] || recipes[sku] || [];
-                    if (recipeList.length > 0) {
-                        const yieldQty = Number(recipeList[0].yield_quantity) || 1;
-                        const materialsToConsume = recipeList.map(r => ({
-                            id: r.rm_id,
-                            qtyToConsume: (Number(r.qty) / yieldQty) * (Number(quantity) || 0)
-                        }));
-                        await consumeMaterials(materialsToConsume);
-                    }
-                }
-                
-                return { success: true };
-            }
-            throw new Error(`Producto [${sku}] no encontrado en el catálogo de productos.`);
-        } catch (err) {
-            console.error("Error loading finished goods:", err);
-            return { success: false, error: err.message };
-        }
-    }, [recipes, consumeMaterials]);
 
     const saveWebCheckout = useCallback(async (data) => {
         try {
@@ -1714,13 +1797,13 @@ export const BusinessProvider = ({ children }) => {
         setItems, setOrders, setExpenses, setPurchaseOrders, setBanks, setBankTransactions, setClients, setSiteContent, setProductionOrders, setLeads, setSubscriptions, setUsers, setUnits, setTaxSettings, setAnalytics,
         refreshData, addClient, upsertMember, addOrder, deleteOrders, updateSiteContent, recalculatePTCosts, updateBankBalance, updateClient, deleteClient,
         addItem, updateItem, deleteItem, addSupplier, updateSupplier, deleteSupplier, updateOrder, addPurchase, addRecipe, deleteRecipeByProduct, saveOdp, deleteOdp, addExpense, updateExpense, deleteExpense, addBank, updateBank, deleteBank, receivePurchase, payPurchase, updateLead, addLead, deleteLead, addQuotation, deleteQuotation,
-        addUser, updateUser, deleteUser, consumeMaterials, loadFinishedGoods, saveConversion, convertUnit, saveWebCheckout, getWebCheckout, updateWebCheckoutStatus, addRejectedProduct, createInternalOrder, updateInventoryConfig, logVisit, addAdminLog, auditStockAdjustment
+        addUser, updateUser, deleteUser, consumeMaterials, loadFinishedGoods, saveConversion, convertUnit, saveWebCheckout, getWebCheckout, updateWebCheckoutStatus, addRejectedProduct, createInternalOrder, updateInventoryConfig, logVisit, addAdminLog, auditStockAdjustment, sendWelcomeEmail
     }), [
         loading, items, recipes, providers, enrichedOrders, expenses, purchaseOrders, banks, bankTransactions, taxSettings, clients, siteContent, lastUpdate, processedProductionOrders, productionOrders, productionAnalytics, leads, subscriptions, quotations, users, units, ownCompany, analytics,
         setItems, setOrders, setExpenses, setPurchaseOrders, setBanks, setBankTransactions, setClients, setSiteContent, setProductionOrders, setLeads, setSubscriptions, setUsers, setUnits, setTaxSettings, setAnalytics,
         refreshData, addClient, upsertMember, addOrder, deleteOrders, updateSiteContent, recalculatePTCosts, updateBankBalance, updateClient, deleteClient,
         addItem, updateItem, deleteItem, addSupplier, updateSupplier, deleteSupplier, updateOrder, addPurchase, addRecipe, deleteRecipeByProduct, saveOdp, deleteOdp, addExpense, updateExpense, deleteExpense, addBank, updateBank, deleteBank, receivePurchase, payPurchase, updateLead, addLead, deleteLead, addQuotation, deleteQuotation,
-        addUser, updateUser, deleteUser, consumeMaterials, loadFinishedGoods, saveConversion, convertUnit, saveWebCheckout, getWebCheckout, updateWebCheckoutStatus, addRejectedProduct, createInternalOrder, updateInventoryConfig, logVisit, addAdminLog, auditStockAdjustment
+        addUser, updateUser, deleteUser, consumeMaterials, loadFinishedGoods, saveConversion, convertUnit, saveWebCheckout, getWebCheckout, updateWebCheckoutStatus, addRejectedProduct, createInternalOrder, updateInventoryConfig, logVisit, addAdminLog, auditStockAdjustment, sendWelcomeEmail
     ]);
 
     return (

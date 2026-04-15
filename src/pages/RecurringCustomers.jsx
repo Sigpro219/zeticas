@@ -47,7 +47,7 @@ const ProductCarousel = ({ products }) => {
 const RecurringCustomers = () => {
     const { 
         items, clients, siteContent, upsertMember, saveWebCheckout, 
-        getWebCheckout, addOrder, updateBankBalance, banks, addBank 
+        getWebCheckout, addOrder, updateBankBalance, banks, addBank, sendWelcomeEmail
     } = useBusiness();
     const { login, user, logout } = useAuth();
     const navigate = useNavigate();
@@ -416,6 +416,9 @@ const RecurringCustomers = () => {
             });
 
             if (res.success) {
+                // Notificación automática por correo "Under the hood"
+                sendWelcomeEmail(res.data, subscriptionData.plan);
+
                 // Try logging in with the normalized email
                 try {
                     await login(cleanEmail, authData.password);
