@@ -503,6 +503,12 @@ const RecurringCustomers = () => {
                 last_pantry_update: new Date().toISOString() 
             });
             alert("¡Cambios guardados con éxito en tu suscripción!");
+            
+            // Disparar correo de bienvenida/confirmación al finalizar la configuración
+            if (activeMember || res.data) {
+                sendWelcomeEmail(activeMember || res.data, subscriptionData.plan);
+            }
+
             setIsChangingPlan(false);
             
             // Redirigir a la primera página de la sección de suscriptores
