@@ -58,6 +58,7 @@ const RecurringCustomers = () => {
     const [productSearch, setProductSearch] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [isChangingPlan, setIsChangingPlan] = useState(false);
+    const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
     const [showGuideModal, setShowGuideModal] = useState(false);
     const [showPass, setShowPass] = useState(false);
     const [showConfirm, setShowConfirm] = useState(false);
@@ -997,91 +998,127 @@ const RecurringCustomers = () => {
                                         CONFIRMAR CAMBIO
                                     </button>
                                 </div>
-                            ) : (
-                                <div className="input-group" style={{ margin: '1rem 0 2rem' }}>
-                                    <Search size={18}/>
-                                    <input type="text" placeholder="Buscar productos para tu despensa..." onChange={e => setProductSearch(e.target.value)}/>
-                                </div>
-                            )}
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.2rem' }}>
-                                {filteredProducts.map(p => {
-                                    const current = subscriptionData.products.find(sp => sp.id === p.id);
-                                    const originalPrice = p.price;
-                                    const rawDiscounted = originalPrice * (1 - (currentPlanConfig.discount / 100));
-                                    const discountedPrice = Math.ceil(rawDiscounted / 50) * 50;
-                                    const isDulce = p.product_type?.toLowerCase().includes('dulce') || p.category?.toLowerCase().includes('dulce');
+                        <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                                <h1 style={{ color: deepTeal, fontFamily: 'serif', margin: 0 }}>
+                                    {isChangingPlan ? 'Cambia tu Plan de Membresía' : 'Personaliza tu Despensa'}
+                                </h1>
+                                {isChangingPlan && (
+                                    <button 
+                                        onClick={() => setIsChangingPlan(false)}
+                                        style={{ background: 'none', border: `1px solid ${deepTeal}`, color: deepTeal, padding: '8px 16px', borderRadius: '50px', cursor: 'pointer', fontWeight: '800' }}
+                                    >
+                                        VER MI DESPENSA
+                                    </button>
+                                )}
+                            </div>
 
-                                    return (
-                                        <div key={p.id} style={{ 
-                                            background: '#fff', 
-                                            padding: '1rem', 
-                                            borderRadius: '24px', 
-                                            border: current ? `2px solid ${institutionOcre}` : '1px solid #eee',
-                                            display: 'grid',
-                                            gridTemplateColumns: '80px 1fr',
-                                            gap: '1rem',
-                                            alignItems: 'center',
-                                            transition: 'all 0.3s ease',
-                                            boxShadow: current ? '0 10px 20px rgba(2, 83, 87, 0.05)' : 'none'
+                            {isChangingPlan ? (
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '2rem', animation: 'fadeIn 0.5s ease-out' }}>
+                                    {[
+                                        { title: '3 Meses', months: 3, discount: 5, emoji: '🌱' },
+                                        { title: '6 Meses', months: 6, discount: 7, emoji: '🍃' },
+                                        { title: '12 Meses', months: 12, discount: 9, emoji: '🌳' }
+                                    ].map(p => (
+                                        <div key={p.title} onClick={() => handlePlanSelection(`${p.months} Meses`)} className="plan-card" style={{ 
+                                            background: '#fff', padding: '2.5rem 2rem', borderRadius: '40px', border: subscriptionData.plan === p.title ? `3px solid ${institutionOcre}` : '1px solid #eef2f6',
+                                            textAlign: 'center', cursor: 'pointer', position: 'relative', transition: 'all 0.4s ease'
                                         }}>
-                                            <div style={{ width: '80px', height: '80px', background: '#f9f9f9', borderRadius: '16px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                {p.image_url ? (
-                                                    <img src={p.image_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                ) : (
-                                                    <Sparkles size={24} color={institutionOcre} style={{ opacity: 0.3 }} />
-                                                )}
-                                            </div>
-                                            
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                                    <div style={{ 
-                                                        fontSize: '0.65rem', 
-                                                        fontWeight: '900', 
-                                                        textTransform: 'uppercase', 
-                                                        letterSpacing: '1px',
-                                                        color: isDulce ? '#d946ef' : deepTeal,
-                                                        background: isDulce ? '#fdf4ff' : lightSage,
-                                                        padding: '2px 8px',
-                                                        borderRadius: '50px'
-                                                    }}>
-                                                        {isDulce ? 'DULCE' : 'SAL'}
-                                                    </div>
-                                                </div>
-                                                <div style={{ fontWeight: '800', fontSize: '0.85rem', color: deepTeal, lineHeight: 1.2 }}>{p.name}</div>
-                                                
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
-                                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                        <span style={{ fontSize: '0.7rem', color: '#bbb', textDecoration: 'line-through' }}>
-                                                            ${originalPrice.toLocaleString()}
-                                                        </span>
-                                                        <span style={{ fontSize: '1rem', fontWeight: '900', color: institutionOcre }}>
-                                                            ${discountedPrice.toLocaleString()}
-                                                        </span>
+                                            <div style={{ fontSize: '3rem', marginBottom: '1.5rem' }}>{p.emoji}</div>
+                                            <h3 style={{ fontSize: '1.8rem', color: deepTeal, marginBottom: '0.5rem' }}>{p.title}</h3>
+                                            <div style={{ color: institutionOcre, fontWeight: '900', fontSize: '1.4rem', marginBottom: '1rem' }}>{p.discount}% DCTO</div>
+                                            <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: 1.6 }}>En todos tus productos y envío gratis por compras mínimas.</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="input-group" style={{ margin: '1rem 0 2rem' }}>
+                                        <Search size={18}/>
+                                        <input type="text" placeholder="Buscar productos para tu despensa..." onChange={e => setProductSearch(e.target.value)}/>
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.2rem' }}>
+                                        {filteredProducts.map(p => {
+                                            const current = subscriptionData.products.find(sp => sp.id === p.id);
+                                            const originalPrice = p.price;
+                                            const rawDiscounted = originalPrice * (1 - (currentPlanConfig.discount / 100));
+                                            const discountedPrice = Math.ceil(rawDiscounted / 50) * 50;
+                                            const isDulce = p.product_type?.toLowerCase().includes('dulce') || p.category?.toLowerCase().includes('dulce');
+
+                                            return (
+                                                <div key={p.id} style={{ 
+                                                    background: '#fff', 
+                                                    padding: '1rem', 
+                                                    borderRadius: '24px', 
+                                                    border: current ? `2px solid ${institutionOcre}` : '1px solid #eee',
+                                                    display: 'grid',
+                                                    gridTemplateColumns: '80px 1fr',
+                                                    gap: '1rem',
+                                                    alignItems: 'center',
+                                                    transition: 'all 0.3s ease',
+                                                    boxShadow: current ? '0 10px 20px rgba(2, 83, 87, 0.05)' : 'none'
+                                                }}>
+                                                    <div style={{ width: '80px', height: '80px', background: '#f9f9f9', borderRadius: '16px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                        {p.image_url ? (
+                                                            <img src={p.image_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                        ) : (
+                                                            <Sparkles size={24} color={institutionOcre} style={{ opacity: 0.3 }} />
+                                                        )}
                                                     </div>
                                                     
-                                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: '#f0f0f0', padding: '4px', borderRadius: '12px' }}>
-                                                        <button 
-                                                            onClick={() => handleProductChange(p.id, (current?.quantity || 0) - 1)} 
-                                                            style={{ background: '#fff', border: 'none', borderRadius: '8px', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}
-                                                        >
-                                                            <Minus size={14} color={deepTeal} />
-                                                        </button>
-                                                        <span style={{ fontWeight: '900', fontSize: '0.9rem', minWidth: '20px', textAlign: 'center' }}>
-                                                            {current?.quantity || 0}
-                                                        </span>
-                                                        <button 
-                                                            onClick={() => handleProductChange(p.id, (current?.quantity || 0) + 1)} 
-                                                            style={{ background: deepTeal, border: 'none', borderRadius: '8px', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 10px rgba(2, 83, 87, 0.2)' }}
-                                                        >
-                                                            <Plus size={14} color="#fff" />
-                                                        </button>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                                            <div style={{ 
+                                                                fontSize: '0.65rem', 
+                                                                fontWeight: '900', 
+                                                                textTransform: 'uppercase', 
+                                                                letterSpacing: '1px',
+                                                                color: isDulce ? '#d946ef' : deepTeal,
+                                                                background: isDulce ? '#fdf4ff' : lightSage,
+                                                                padding: '2px 8px',
+                                                                borderRadius: '50px'
+                                                            }}>
+                                                                {isDulce ? 'DULCE' : 'SAL'}
+                                                            </div>
+                                                        </div>
+                                                        <div style={{ fontWeight: '800', fontSize: '0.85rem', color: deepTeal, lineHeight: 1.2 }}>{p.name}</div>
+                                                        
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                                <span style={{ fontSize: '0.7rem', color: '#bbb', textDecoration: 'line-through' }}>
+                                                                    ${originalPrice.toLocaleString()}
+                                                                </span>
+                                                                <span style={{ fontSize: '1rem', fontWeight: '900', color: institutionOcre }}>
+                                                                    ${discountedPrice.toLocaleString()}
+                                                                </span>
+                                                            </div>
+                                                            
+                                                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: '#f0f0f0', padding: '4px', borderRadius: '12px' }}>
+                                                                <button 
+                                                                    onClick={() => handleProductChange(p.id, (current?.quantity || 0) - 1)} 
+                                                                    style={{ background: '#fff', border: 'none', borderRadius: '8px', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}
+                                                                >
+                                                                    <Minus size={14} color={deepTeal} />
+                                                                </button>
+                                                                <span style={{ fontWeight: '900', fontSize: '0.9rem', minWidth: '20px', textAlign: 'center' }}>
+                                                                    {current?.quantity || 0}
+                                                                </span>
+                                                                <button 
+                                                                    onClick={() => handleProductChange(p.id, (current?.quantity || 0) + 1)} 
+                                                                    style={{ background: deepTeal, border: 'none', borderRadius: '8px', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 10px rgba(2, 83, 87, 0.2)' }}
+                                                                >
+                                                                    <Plus size={14} color="#fff" />
+                                                                </button>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                                            );
+                                        })}
+                                    </div>
+                                </>
+                            )}
+                        </div>
                         </div>
                         <div style={{ background: deepTeal, color: '#fff', padding: '2rem', borderRadius: '30px', height: 'fit-content', position: 'sticky', top: '20px' }}>
                             <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '0.8rem', marginBottom: '1rem' }}>Resumen</h3>
@@ -1180,84 +1217,116 @@ const RecurringCustomers = () => {
                                     </div>
                                 </div>
 
-                            {subscriptionData.products.length > 0 && (
-                                <>
-                                    {/* Highly Visual Frequency Toggle - Now enabled for all */}
-                                    <div style={{ marginTop: '0.5rem', background: 'rgba(255,255,255,0.05)', padding: '1.2rem', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                                        <p style={{ fontSize: '0.65rem', color: institutionOcre, fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                            <Calendar size={12} /> Frecuencia de Entrega
-                                        </p>
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                                            {['Semanal', 'Quincenal', 'Mensual'].map(freq => {
-                                                const isActive = subscriptionData.frequency === freq;
-                                                
-                                                return (
-                                                    <button
-                                                        key={freq}
-                                                        onClick={() => setSubscriptionData({...subscriptionData, frequency: freq})}
-                                                        style={{
-                                                            background: isActive ? institutionOcre : 'rgba(255,255,255,0.1)',
-                                                            color: isActive ? deepTeal : '#fff',
-                                                            border: 'none',
-                                                            padding: '0.8rem 0.2rem',
-                                                            borderRadius: '12px',
-                                                            fontSize: '0.75rem',
-                                                            fontWeight: '800',
-                                                            cursor: !canEditFrequency ? 'default' : 'pointer',
-                                                            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                                                            boxShadow: isActive ? `0 4px 12px ${institutionOcre}44` : 'none',
-                                                            transform: isActive ? 'scale(1.05)' : 'scale(1)',
-                                                            opacity: !canEditFrequency && !isActive ? 0.3 : 1
-                                                        }}
-                                                    >
-                                                        {freq}
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '1.5rem' }}>
+                                    {subscriptionData.products.length > 0 && (
+                                        <>
+                                            {/* Highly Visual Frequency Toggle - Conditional Editability */}
+                                            <div style={{ marginTop: '0.5rem', background: 'rgba(255,255,255,0.05)', padding: '1.2rem', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                                <p style={{ fontSize: '0.65rem', color: institutionOcre, fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    <Calendar size={12} /> Frecuencia de Entrega {!isChangingPlan && user?.role === 'member' && '(Bloqueado)'}
+                                                </p>
+                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                                                    {['Semanal', 'Quincenal', 'Mensual'].map(freq => {
+                                                        const canEditFrequency = isChangingPlan || user?.role !== 'member';
+                                                        const isActive = subscriptionData.frequency === freq;
+                                                        
+                                                        return (
+                                                            <button
+                                                                key={freq}
+                                                                onClick={() => canEditFrequency && setSubscriptionData({...subscriptionData, frequency: freq})}
+                                                                style={{
+                                                                    background: isActive ? institutionOcre : 'rgba(255,255,255,0.1)',
+                                                                    color: isActive ? deepTeal : '#fff',
+                                                                    border: 'none',
+                                                                    padding: '0.8rem 0.2rem',
+                                                                    borderRadius: '12px',
+                                                                    fontSize: '0.75rem',
+                                                                    fontWeight: '800',
+                                                                    cursor: canEditFrequency ? 'pointer' : 'default',
+                                                                    transition: 'all 0.3s ease',
+                                                                    opacity: !canEditFrequency && !isActive ? 0.3 : 1
+                                                                }}
+                                                            >
+                                                                {freq}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
 
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '1.5rem' }}>
+                                            <button 
+                                                onClick={(isChangingPlan || hasPendingChanges) ? finalizeMembership : handleBoldPayment} 
+                                                disabled={isSaving} 
+                                                style={{ 
+                                                    width: '100%', 
+                                                    padding: '1.4rem', 
+                                                    background: institutionOcre, 
+                                                    color: deepTeal, 
+                                                    border: 'none', 
+                                                    borderRadius: '20px', 
+                                                    fontWeight: '900', 
+                                                    fontSize: '1.1rem', 
+                                                    cursor: 'pointer', 
+                                                    boxShadow: '0 10px 25px rgba(0,0,0,0.2)', 
+                                                    transition: 'all 0.3s ease',
+                                                    marginTop: '1.5rem'
+                                                }}
+                                            >
+                                                {isSaving ? 'PROCESANDO...' : (isChangingPlan ? 'ACTUALIZAR MI SUSCRIPCIÓN' : 'PAGAR MI SUSCRIPCIÓN')}
+                                            </button>
+                                        </>
+                                    )}
+
+                                    {user?.role === 'member' && (
                                         <button 
-                                            onClick={(hasPendingChanges || isChangingPlan || user?.role !== 'member') ? finalizeMembership : handleBoldPayment} 
-                                            disabled={isSaving} 
+                                            onClick={() => setIsCancelModalOpen(true)}
                                             style={{ 
+                                                background: 'none', 
+                                                color: 'rgba(255,255,255,0.4)', 
                                                 width: '100%', 
-                                                padding: '1.4rem', 
-                                                background: institutionOcre, 
-                                                color: deepTeal, 
+                                                padding: '0.5rem', 
                                                 border: 'none', 
-                                                borderRadius: '20px', 
-                                                fontWeight: '900', 
-                                                fontSize: '1.1rem', 
-                                                cursor: 'pointer', 
-                                                boxShadow: '0 10px 25px rgba(0,0,0,0.2)', 
-                                                transition: 'all 0.3s ease' 
+                                                textDecoration: 'underline',
+                                                fontSize: '0.7rem',
+                                                cursor: 'pointer'
                                             }}
                                         >
-                                            {isSaving ? 'PROCESANDO...' : ((hasPendingChanges || isChangingPlan || user?.role !== 'member') ? 'GUARDAR MI SUSCRIPCIÓN' : 'PAGAR MI SUSCRIPCIÓN')}
+                                            DEJAR DE SER MIEMBRO
                                         </button>
-                                    </div>
-                                </>
-                            )}
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
-                                {user?.role === 'member' && (
-                                    <button 
-                                        onClick={handleCancelSubscription}
-                                        style={{ 
-                                            background: 'none', 
-                                            color: 'rgba(255,255,255,0.4)', 
-                                            width: '100%', 
-                                            padding: '0.5rem', 
-                                            border: 'none', 
-                                            textDecoration: 'underline',
-                                            fontSize: '0.7rem',
-                                            cursor: 'pointer'
-                                        }}
-                                    >
-                                        DEJAR DE SER MIEMBRO
-                                    </button>
-                                )}
+                {/* MODAL DE DESPEDIDA (Baja de suscripción) */}
+                {isCancelModalOpen && (
+                    <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(2, 83, 87, 0.95)', backdropFilter: 'blur(10px)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+                        <div style={{ background: '#fff', borderRadius: '40px', maxWidth: '500px', width: '100%', padding: '3rem', textAlign: 'center', animation: 'fadeInScale 0.4s ease-out' }}>
+                            <div style={{ width: '80px', height: '80px', background: '#ffebee', color: '#e53935', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
+                                <AlertCircle size={40} />
+                            </div>
+                            <h2 style={{ color: deepTeal, fontFamily: 'serif', fontSize: '1.8rem', marginBottom: '1rem' }}>Lamentamos mucho que nos dejes...</h2>
+                            <p style={{ color: '#666', marginBottom: '2rem', lineHeight: '1.6' }}>
+                                Si te vas, perderás tus **descuentos del {currentPlanConfig.discount}%** y tus beneficios de **envío gratis**. Tu despensa artesanal siempre estará esperándote aquí.
+                                <br/><br/>
+                                ¿Estás completamente seguro de que quieres darte de baja?
+                            </p>
+                            
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                <button 
+                                    onClick={() => setIsCancelModalOpen(false)}
+                                    style={{ width: '100%', background: deepTeal, color: '#fff', padding: '1.2rem', borderRadius: '50px', border: 'none', fontWeight: '900', cursor: 'pointer' }}
+                                >
+                                    ¡NO, ME QUEDO EN EL CÍRCULO!
+                                </button>
+                                <button 
+                                    onClick={confirmUnsubscribe}
+                                    style={{ width: '100%', background: 'none', color: '#e53935', padding: '0.8rem', border: 'none', fontWeight: '800', textDecoration: 'underline', cursor: 'pointer', fontSize: '0.9rem' }}
+                                >
+                                    Sí, confirmar mi baja
+                                </button>
                             </div>
                         </div>
                     </div>
