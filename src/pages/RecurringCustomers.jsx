@@ -1216,7 +1216,7 @@ const RecurringCustomers = () => {
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '1.5rem' }}>
                                 <button 
-                                    onClick={hasPendingChanges ? finalizeMembership : (user?.role === 'member' ? handleBoldPayment : finalizeMembership)} 
+                                    onClick={(isChangingPlan || user?.role !== 'member') ? finalizeMembership : handleBoldPayment} 
                                     disabled={isSaving || (user?.role !== 'member' && subscriptionData.products.length === 0)} 
                                     style={{ 
                                         width: '100%', 
@@ -1232,7 +1232,7 @@ const RecurringCustomers = () => {
                                         transition: 'all 0.3s ease' 
                                     }}
                                 >
-                                    {isSaving ? 'PROCESANDO...' : (hasPendingChanges ? 'GUARDAR MI SUSCRIPCIÓN' : 'PAGAR MI SUSCRIPCIÓN')}
+                                    {isSaving ? 'PROCESANDO...' : ((isChangingPlan || user?.role !== 'member') ? 'GUARDAR MI SUSCRIPCIÓN' : 'PAGAR MI SUSCRIPCIÓN')}
                                 </button>
 
                                 {user?.role === 'member' && (
