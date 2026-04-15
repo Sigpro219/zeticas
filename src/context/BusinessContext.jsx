@@ -618,13 +618,8 @@ export const BusinessProvider = ({ children }) => {
             const existingByNit = !snapNit.empty ? snapNit.docs[0].data() : null;
             const existingByEmail = !snapEmail.empty ? snapEmail.docs[0].data() : null;
 
-            // Si ya es miembro con esa cédula o correo, abortar con mensaje claro
-            if ((existingByNit && existingByNit.is_member) || (existingByEmail && existingByEmail.is_member)) {
-                return { 
-                    success: false, 
-                    error: "Ya existe un socio registrado con esta cédula o correo electrónico. Por favor, intenta iniciar sesión." 
-                };
-            }
+            // ELIMINADO: Bloqueo de "Ya existe el socio". 
+            // Ahora, si existe, simplemente lo dejaremos pasar y actualizaremos su info.
 
             let finalId;
             let finalData;
