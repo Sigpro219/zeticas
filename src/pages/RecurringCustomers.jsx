@@ -341,17 +341,39 @@ const RecurringCustomers = () => {
     }, [handleBoldSuccess, banks.length]);
 
     const currentPlanConfig = useMemo(() => {
-        // Find plan config regardless of prefix (e.g. "12 Meses" -> "12")
         const planStr = subscriptionData.plan || '';
-        const months = planStr.split(' ')[0];
-        const shippingVal = String(config[`plan_${months}_shipping`] || '').toLowerCase();
+        const months = planStr.split(' ')[0]; // "3", "6" o "12"
+        
+        // Cargar valores desde el CMS o usar los defaults que pediste
+        const cmsDiscount = Number(config[`plan_${months}_discount`]);
+        const cmsThreshold = Number(config[`plan_${months}_threshold`]);
+        const cmsAlwaysFree = config[`plan_${months}_shipping`] === true;
+
+        // Establecer valores finales (Prioridad: CMS > Pedido del usuario > Fallback seguro)
+        let finalDiscount = !isNaN(cmsDiscount) ? cmsDiscount : 0;
+        let finalThreshold = !isNaN(cmsThreshold) ? cmsThreshold : 120000;
+        let finalFreeShipping = cmsAlwaysFree;
+
+        // Si no hay nada en el CMS, aplicamos tus reglas específicas:
+        if (isNaN(cmsDiscount)) {
+            if (months === '3') finalDiscount = 5;
+        }
+        
+        if (isNaN(cmsThreshold)) {
+            if (months === '6') finalThreshold = 60000;
+            if (months === '3') finalThreshold = 120000;
+        }
+
+        if (cmsAlwaysFree === undefined) {
+            if (months === '12') finalFreeShipping = true;
+        }
         
         return {
-            discount: Number(config[`plan_${months}_discount`]) || 0,
-            threshold: Number(config[`plan_${months}_threshold`]) || 999999,
-            freeShipping: months === '12' || shippingVal === 'gratis' || shippingVal === 'incluido' || shippingVal === '0'
+            discount: finalDiscount,
+            threshold: finalThreshold,
+            freeShipping: finalFreeShipping
         };
-    }, [config, subscriptionData.plan, siteContent.web_shipping]);
+    }, [config, subscriptionData.plan]);
 
     const subtotal = subscriptionData.products.reduce((acc, p) => acc + (p.price * p.quantity), 0);
     // Calculated discounted sum with item-level 50-multiple rounding
