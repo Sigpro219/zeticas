@@ -89,7 +89,7 @@ const RecurringCustomers = () => {
         return clients.find(c => c.id === user.id || c.nit === user.nit) || user;
     }, [user, clients]);
 
-    const availableProducts = useMemo(() => items.filter(i => i.category === 'Producto Terminado' && (i.published !== false)), [items]);
+    const availableProducts = useMemo(() => items.filter(i => (i.category === 'Producto Terminado' || i.product_type === 'Kit') && (i.published !== false)), [items]);
 
     const filteredProducts = useMemo(() => {
         const query = productSearch.toLowerCase().trim();
@@ -515,7 +515,7 @@ const RecurringCustomers = () => {
     const finalizeMembership = async () => {
         setIsSaving(true);
         try {
-            await upsertMember({ 
+            const res = await upsertMember({ 
                 nit: activeMember?.nit || activeMember?.idNumber || authData.idNumber, 
                 pantry: subscriptionData.products.map(p => ({ id: p.id, quantity: p.quantity })), 
                 frequency: subscriptionData.frequency,
@@ -526,25 +526,21 @@ const RecurringCustomers = () => {
                 },
                 last_pantry_update: new Date().toISOString() 
             });
-            alert("¡Cambios guardados con éxito en tu suscripción!");
-            
-            // Disparar correo de bienvenida/confirmación al finalizar la configuración
-            if (activeMember || res.data) {
-                sendWelcomeEmail(activeMember || res.data, subscriptionData.plan);
-            }
 
-            setIsChangingPlan(false);
-            
-            // Redirigir a la primera página de la sección de suscriptores
-            // Limpiamos los datos locales y cerramos sesión para que el usuario decida entrar de nuevo
-            setAuthData({ email: '', password: '', confirmPassword: '', name: '', phone: '', address: '', city: '', idNumber: '' });
-            logout();
-            setStep(1);
+            if (res.success) {
+                if (activeMember || res.data) {
+                    sendWelcomeEmail(activeMember || res.data, subscriptionData.plan);
+                }
+                setStep(5);
+            } else {
+                throw new Error(res.error || 'Error al guardar membresía');
+            }
         } catch (err) { 
             console.error("Error al finalizar:", err);
             alert("Error: " + err.message); 
+        } finally { 
+            setIsSaving(false); 
         }
-        finally { setIsSaving(false); }
     };
 
     const handleBoldPayment = async () => {
@@ -852,7 +848,7 @@ const RecurringCustomers = () => {
                                         <select value={authData.city} onChange={e => setAuthData({...authData, city: e.target.value})} required
                                             style={{ padding: '0.45rem 0', border: 'none', borderBottom: `1.5px solid ${authData.city ? deepTeal : '#e2e8f0'}`, background: 'transparent', fontSize: '0.9rem', color: authData.city ? deepTeal : '#94a3b8', fontWeight: 600, outline: 'none', width: '100%', appearance: 'none', cursor: 'pointer' }}>
                                             <option value="">Seleccionar...</option>
-                                            {colombia_cities.map(c => <option key={c.city} value={c.city}>{c.city}</option>)}
+                                            {colombia_cities.map(c => <option key={`${c.city}-${c.state}`} value={c.city}>{c.city} ({c.state})</option>)}
                                         </select>
                                     </div>
 

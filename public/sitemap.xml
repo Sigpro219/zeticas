@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://zeticas.com/</loc>
+    <lastmod>2024-04-15</lastmod>
+    <priority>1.00</priority>
+  </url>
+  <url>
+    <loc>https://zeticas.com/tienda</loc>
+    <lastmod>2024-04-15</lastmod>
+    <priority>0.80</priority>
+  </url>
+  <url>
+    <loc>https://zeticas.com/nosotros</loc>
+    <lastmod>2024-04-15</lastmod>
+    <priority>0.70</priority>
+  </url>
+  <url>
+    <loc>https://zeticas.com/consultoria</loc>
+    <lastmod>2024-04-15</lastmod>
+    <priority>0.70</priority>
+  </url>
+  <url>
+    <loc>https://zeticas.com/catering</loc>
+    <lastmod>2024-04-15</lastmod>
+    <priority>0.70</priority>
+  </url>
+</urlset>

@@ -1,5 +1,11 @@
-# Zeticas - Private Mode
-# Blocking all web crawlers while the site is under construction.
+# Zeticas - Public Mode
+# Allowing all web crawlers.
 
 User-agent: *
-Disallow: /
+Allow: /
+Disallow: /gestion
+Disallow: /login
+Disallow: /checkout
+Disallow: /recurrentes
+
+Sitemap: https://zeticas.com/sitemap.xml

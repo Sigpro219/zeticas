@@ -390,16 +390,19 @@ const CMSContents = () => {
                                     
                                     // 3 Meses
                                     { key: 'plan_3_discount', label: '% Descuento', type: 'text', group: 'p3', header: 'Plan 3 Meses' },
+                                    { key: 'plan_3_price', label: 'Costo Fijo Mensual ($)', type: 'text', group: 'p3' },
                                     { key: 'plan_3_threshold', label: 'Umbral Envío Gratis', type: 'text', group: 'p3' },
                                     { key: 'plan_3_shipping', label: 'Envío Gratis SIEMPRE', type: 'toggle', group: 'p3' },
                                     
                                     // 6 Meses
                                     { key: 'plan_6_discount', label: '% Descuento', type: 'text', group: 'p6', header: 'Plan 6 Meses' },
+                                    { key: 'plan_6_price', label: 'Costo Fijo Mensual ($)', type: 'text', group: 'p6' },
                                     { key: 'plan_6_threshold', label: 'Umbral Envío Gratis', type: 'text', group: 'p6' },
                                     { key: 'plan_6_shipping', label: 'Envío Gratis SIEMPRE', type: 'toggle', group: 'p6' },
                                     
                                     // 12 Meses
                                     { key: 'plan_12_discount', label: '% Descuento', type: 'text', group: 'p12', header: 'Plan 12 Meses' },
+                                    { key: 'plan_12_price', label: 'Costo Fijo Mensual ($)', type: 'text', group: 'p12' },
                                     { key: 'plan_12_threshold', label: 'Umbral Envío Gratis', type: 'text', group: 'p12' },
                                     { key: 'plan_12_shipping', label: 'Envío Gratis SIEMPRE', type: 'toggle', group: 'p12' },
                                 ]
