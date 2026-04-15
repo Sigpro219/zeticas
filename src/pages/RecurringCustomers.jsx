@@ -385,7 +385,7 @@ const RecurringCustomers = () => {
     const savings = subtotal - discountedProductsSum;
     const freeByPlan = currentPlanConfig.freeShipping;
     const freeByAmount = discountedProductsSum >= currentPlanConfig.threshold;
-    const shippingCost = (freeByPlan || freeByAmount) ? 0 : (Number(siteContent.web_shipping?.tarifa_nacional) || 13500);
+    const shippingCost = (subtotal === 0 || freeByPlan || freeByAmount) ? 0 : (Number(siteContent.web_shipping?.tarifa_nacional) || 13500);
     const totalAmount = discountedProductsSum + shippingCost;
 
     const hasPendingChanges = useMemo(() => {
