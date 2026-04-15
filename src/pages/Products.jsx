@@ -113,7 +113,7 @@ const Products = () => {
         sku: i.sku,
         name: i.name,
         category: i.category || i.group || 'Otros',
-        product_type: i.product_type || 'Insumo',
+        product_type: i.product_type || 'Kit',
         price: i.price || 0,
         cost: i.avgCost || 0,
         stock: i.initial || 0,
@@ -128,7 +128,8 @@ const Products = () => {
         benefits: i.benefits || '',
         batch_size: i.batch_size || 1,   // ← tamaño del lote de producción
         min_stock_level: i.min_stock_level || 0, // ← política de stock
-        published: i.published !== undefined ? i.published : true
+        published: i.published !== undefined ? i.published : true,
+        components: i.components || [] // Array of { id, qty, name, unit, cost }
     }));
 
 
@@ -167,12 +168,13 @@ const Products = () => {
                 purchase_unit: normalizeUnit(product.purchase_unit),
                 barcode_text: product.barcode_text || '',
                 conversion_factor: product.conversion_factor || 1,
-                purchase_cost: (parseFloat(product.cost) || 0) * (parseFloat(product.conversion_factor) || 1)
+                purchase_cost: (parseFloat(product.cost) || 0) * (parseFloat(product.conversion_factor) || 1),
+                components: product.components || []
             });
         } else {
             setEditingProduct(null);
             setFormData({
-                sku: '', name: '', category: 'Producto Terminado', product_type: 'Sal', price: '', cost: '', purchase_cost: '', stock: '0', min_stock_level: 0, unit_measure: 'und', purchase_unit: 'und', conversion_factor: 1, type: 'PT', barcode_text: '', batch_size: 1, published: true
+                sku: '', name: '', category: 'Producto Terminado', product_type: 'Sal', price: '', cost: '', purchase_cost: '', stock: '0', min_stock_level: 0, unit_measure: 'und', purchase_unit: 'und', conversion_factor: 1, type: 'PT', barcode_text: '', batch_size: 1, published: true, components: []
             });
         }
         setSelectedFile(null);
@@ -226,6 +228,7 @@ const Products = () => {
                 description: formData.description || '',
                 benefits: formData.benefits || '',
                 min_stock_level: parseFloat(formData.min_stock_level) || 0,
+                components: formData.product_type === 'Kit' ? formData.components : [],
                 // Firestore no acepta undefined — solo incluir batch_size en Producto Terminado
                 ...(formData.category === 'Producto Terminado' && { batch_size: parseInt(formData.batch_size) || 1 }),
                 published: formData.published !== undefined ? formData.published : true
@@ -335,6 +338,59 @@ const Products = () => {
     const mpCount = productsList.filter(p => p.category === 'Materia Prima').length;
     const ptCount = productsList.filter(p => p.category === 'Producto Terminado').length;
 
+    // --- Component Management Logics ---
+    const [compSearch, setCompSearch] = useState('');
+    const availableForKit = useMemo(() => {
+        if (!compSearch) return [];
+        return productsList.filter(p => 
+            p.id !== editingProduct?.id && 
+            (p.name.toLowerCase().includes(compSearch.toLowerCase()) || p.sku.toLowerCase().includes(compSearch.toLowerCase()))
+        ).slice(0, 5);
+    }, [compSearch, productsList, editingProduct]);
+
+    const addComponentToKit = (p) => {
+        if (formData.components.find(c => c.id === p.id)) return;
+        const newComponents = [...formData.components, { 
+            id: p.id, 
+            name: p.name, 
+            qty: 1, 
+            unit: p.unit_measure, 
+            cost: p.cost 
+        }];
+        
+        // Auto-calculate total cost
+        const totalCost = newComponents.reduce((acc, c) => acc + (c.qty * c.cost), 0);
+        
+        setFormData({ 
+            ...formData, 
+            components: newComponents,
+            cost: totalCost.toFixed(2)
+        });
+        setCompSearch('');
+    };
+
+    const removeComponentFromKit = (id) => {
+        const newComponents = formData.components.filter(c => c.id !== id);
+        const totalCost = newComponents.reduce((acc, c) => acc + (c.qty * c.cost), 0);
+        setFormData({ 
+            ...formData, 
+            components: newComponents,
+            cost: totalCost.toFixed(2)
+        });
+    };
+
+    const updateComponentQty = (id, newQty) => {
+        const newComponents = formData.components.map(c => 
+            c.id === id ? { ...c, qty: parseFloat(newQty) || 0 } : c
+        );
+        const totalCost = newComponents.reduce((acc, c) => acc + (c.qty * c.cost), 0);
+        setFormData({ 
+            ...formData, 
+            components: newComponents,
+            cost: totalCost.toFixed(2)
+        });
+    };
+
     return (
         <div className="products-module" style={{ padding: '0 0.5rem' }}>            {/* ÁREA DE IMPRESIÓN PROFESIONAL (50mm x 25mm Standard) */}
             <div className="print-area">
@@ -440,7 +496,7 @@ const Products = () => {
                         <div style={{ width: '1px', height: '24px', background: '#e2e8f0', margin: '0 12px' }} />
 
                         <span style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginRight: '4px' }}>Línea:</span>
-                        {['Todos', 'Sal', 'Dulce'].map(line => (
+                        {['Todos', 'Sal', 'Dulce', 'Kit'].map(line => (
                             <button
                                 key={line}
                                 onClick={() => setSelectedLineFilter(line)}
@@ -536,7 +592,7 @@ const Products = () => {
                                         </td>
 
                                         <td style={{ padding: '1rem' }}>
-                                            <span style={{ padding: '4px 10px', borderRadius: '8px', fontSize: '0.7rem', fontWeight: '900', background: p.product_type === 'Sal' ? '#f1f5f9' : p.product_type === 'Dulce' ? '#fff7ed' : '#f8fafc', color: p.product_type === 'Sal' ? '#475569' : p.product_type === 'Dulce' ? '#c2410c' : '#94a3b8', border: '1px solid currentColor', opacity: p.product_type === 'Insumo' ? 0.3 : 1 }}>{p.product_type}</span>
+                                            <span style={{ padding: '4px 10px', borderRadius: '8px', fontSize: '0.7rem', fontWeight: '900', background: p.product_type === 'Sal' ? '#f1f5f9' : p.product_type === 'Dulce' ? '#fff7ed' : p.product_type === 'Kit' ? '#f0fdfa' : '#f8fafc', color: p.product_type === 'Sal' ? '#475569' : p.product_type === 'Dulce' ? '#c2410c' : p.product_type === 'Kit' ? '#0d9488' : '#94a3b8', border: '1px solid currentColor', opacity: p.product_type === 'Insumo' ? 0.3 : 1 }}>{p.product_type}</span>
                                         </td>
                                         <td style={{ padding: '1rem', fontSize: '0.85rem' }}>{p.category}</td>
                                         <td style={{ padding: '1rem', color: '#666' }}>${p.cost?.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 1 })}</td>
@@ -890,13 +946,81 @@ const Products = () => {
                                 )}
 
                                 {/* 5. Clasificación y Etiquetas */}
+                                </div>
+                                
+                                {/* 5.5 COMPOSICIÓN DEL KIT - SOLO SI ES KIT */}
+                                {formData.product_type === 'Kit' && (
+                                    <div style={{ background: '#f0fdfa', padding: '1.5rem', borderRadius: '20px', border: '1px solid #ccfbf1', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <label style={{ fontSize: '0.7rem', fontWeight: '900', color: '#0d9488', textTransform: 'uppercase', letterSpacing: '1px' }}>🛠️ COMPOSICIÓN DEL KIT</label>
+                                            <span style={{ fontSize: '0.65rem', background: '#0d9488', color: '#fff', padding: '2px 8px', borderRadius: '6px' }}>COSTO AUTO-CALCULADO</span>
+                                        </div>
+
+                                        <div style={{ position: 'relative' }}>
+                                            <Search size={16} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: '#0d9488', opacity: 0.5 }} />
+                                            <input 
+                                                placeholder="Buscar producto o insumo para añadir..." 
+                                                value={compSearch}
+                                                onChange={(e) => setCompSearch(e.target.value)}
+                                                style={{ width: '100%', padding: '0.8rem 1rem 0.8rem 2.5rem', borderRadius: '12px', border: '1px solid #99f6e4', outline: 'none', fontSize: '0.85rem' }} 
+                                            />
+                                            {availableForKit.length > 0 && (
+                                                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #ccfbf1', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', zIndex: 10, marginTop: '4px', overflow: 'hidden' }}>
+                                                    {availableForKit.map(p => (
+                                                        <div key={p.id} onClick={() => addComponentToKit(p)} style={{ padding: '0.8rem 1rem', cursor: 'pointer', borderBottom: '1px solid #f0fdfa', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'background 0.2s' }} onMouseEnter={(e) => e.target.style.background = '#f0fdfa'} onMouseLeave={(e) => e.target.style.background = 'transparent'}>
+                                                            <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#0f172a' }}>{p.name} <span style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 'normal' }}>({p.sku})</span></div>
+                                                            <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#0d9488' }}>${p.cost}</div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '0.5rem' }}>
+                                            {formData.components.length === 0 && (
+                                                <div style={{ padding: '1rem', textAlign: 'center', color: '#64748b', fontSize: '0.75rem', fontStyle: 'italic', background: 'rgba(255,255,255,0.5)', borderRadius: '12px' }}>
+                                                    No hay componentes añadidos. Busque arriba para empezar.
+                                                </div>
+                                            )}
+                                            {formData.components.map(c => (
+                                                <div key={c.id} style={{ display: 'flex', alignItems: 'center', background: '#fff', padding: '0.6rem 1rem', borderRadius: '12px', gap: '1rem', border: '1px solid #ccfbf1', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                                                    <div style={{ flex: 1 }}>
+                                                        <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#0f172a' }}>{c.name}</div>
+                                                        <div style={{ fontSize: '0.6rem', color: '#64748b' }}>Costo: ${c.cost} / {c.unit}</div>
+                                                    </div>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                        <input 
+                                                            type="number" 
+                                                            value={c.qty} 
+                                                            onChange={(e) => updateComponentQty(c.id, e.target.value)}
+                                                            style={{ width: '60px', padding: '0.4rem', borderRadius: '8px', border: '1px solid #99f6e4', textAlign: 'center', fontWeight: '900', color: '#0d9488' }} 
+                                                        />
+                                                        <span style={{ fontSize: '0.7rem', color: '#64748b', width: '30px' }}>{c.unit}</span>
+                                                        <button type="button" onClick={() => removeComponentFromKit(c.id)} style={{ padding: '0.4rem', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        
+                                        {formData.components.length > 0 && (
+                                            <div style={{ marginTop: '0.5rem', borderTop: '1px dashed #99f6e4', paddingTop: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <span style={{ fontSize: '0.75rem', fontWeight: '800', color: '#0d9488' }}>COSTO TOTAL DEL KIT:</span>
+                                                <span style={{ fontSize: '1rem', fontWeight: '900', color: '#0d9488' }}>${formData.cost}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* 5.6 Línea y EAN (Restored) */}
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                     <div>
                                         <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>LÍNEA DE PRODUCTO</label>
                                         <select value={formData.product_type} onChange={(e) => setFormData({ ...formData, product_type: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', background: '#fff', fontWeight: '700' }}>
                                             <option value="Sal">Sal</option>
                                             <option value="Dulce">Dulce</option>
-                                            <option value="Insumo">Insumo</option>
+                                            <option value="Kit">Kit (Bundle)</option>
                                         </select>
                                     </div>
                                     <div>
