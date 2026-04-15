@@ -9,7 +9,7 @@ import {
     ArrowRight, Star, RefreshCw, Truck,
     Lock, Sparkles,
     Minus, Plus, Search, User, Mail, UserPlus, LogIn,
-    MapPin, Hash, Phone, Eye, EyeOff, Calendar, Clock
+    MapPin, Hash, Phone, Eye, EyeOff, Calendar, Clock, AlertCircle
 } from 'lucide-react';
 import { colombia_cities } from '../data/colombia_cities';
 import CryptoJS from 'crypto-js';
