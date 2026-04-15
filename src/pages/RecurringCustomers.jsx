@@ -504,6 +504,12 @@ const RecurringCustomers = () => {
             });
             alert("¡Cambios guardados con éxito en tu suscripción!");
             setIsChangingPlan(false);
+            
+            // Redirigir a la primera página de la sección de suscriptores
+            // Limpiamos los datos locales y cerramos sesión para que el usuario decida entrar de nuevo
+            setAuthData({ email: '', password: '', confirmPassword: '', name: '', phone: '', address: '', city: '', idNumber: '' });
+            logout();
+            setStep(1);
         } catch (err) { 
             console.error("Error al finalizar:", err);
             alert("Error: " + err.message); 
