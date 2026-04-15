@@ -22,13 +22,13 @@ const SEOManager = () => {
         // 1. Determine local values based on context
         // Priority: Campaign (if home/active) > CMS SEO > Defaults
         const title = isConsulting 
-            ? (seo.consulting_title || 'CZ Sostenibilidad | Consultoría Ambiental')
+            ? (seo.consulting_title || 'Zeticas | Consultoría y Sostenibilidad')
             : (isCampaignActive && campaign.hero_title)
                 ? campaign.hero_title
                 : (seo.home_title || 'Zeticas | Sabores de la Sabana');
             
         const description = isConsulting
-            ? (seo.consulting_description || 'Apoyamos y acompañamos a comunidades y organizaciones para fortalecer capacidades en equilibrio con la naturaleza.')
+            ? (seo.consulting_description || 'Acompañamos a comunidades y organizaciones para fortalecer capacidades en equilibrio con la naturaleza.')
             : (isCampaignActive && campaign.hero_subtitle)
                 ? campaign.hero_subtitle
                 : (seo.home_description || 'Zeticas promueve un estilo de vida en armonía, consciente y diverso; recordando recetas tradicionales.');

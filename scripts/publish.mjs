@@ -9,7 +9,11 @@ async function publish() {
             day: '2-digit', month: '2-digit', year: 'numeric',
             hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
         });
+        
+        // Write to BOTH locations: src/data/ for local imports and public/ for static access
         fs.writeFileSync('src/data/build_info.json', JSON.stringify({ lastPublish: timestamp }, null, 4));
+        fs.writeFileSync('public/build_info.json', JSON.stringify({ lastPublish: timestamp }, null, 4));
+        
         console.log(`🕒 Registrada fecha de publicación: ${timestamp}`);
 
         // 1. Guardar cambios locales (Auto-publish)
