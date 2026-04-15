@@ -406,31 +406,51 @@ const RecurringCustomers = () => {
         }
         setIsSaving(true);
         try {
-            // Normalize on the fly to match AuthContext expectations
+            // Normalize on the fly
             const cleanEmail = authData.email.toLowerCase().trim();
+            
+            // Log for debugging (only in development context)
+            console.log("🚀 Intentando registrar socio:", { name: authData.name, email: cleanEmail, nit: authData.idNumber });
+
             const res = await upsertMember({
-                ...authData, 
+                name: authData.name,
                 email: cleanEmail,
+                password: authData.password, // Aseguramos que se guarde la clave
+                phone: authData.phone,
                 nit: authData.idNumber,
-                membership: { plan: subscriptionData.plan, status: 'Active', created_at: new Date().toISOString() }
+                is_member: true,
+                membership: { 
+                    plan: subscriptionData.plan, 
+                    status: 'Active', 
+                    created_at: new Date().toISOString() 
+                }
             });
 
             if (res.success) {
+                console.log("✅ Socio guardado en Firestore:", res.id);
+                
                 // Notificación automática por correo "Under the hood"
                 sendWelcomeEmail(res.data, subscriptionData.plan);
 
-                // Try logging in with the normalized email
-                try {
-                    await login(cleanEmail, authData.password);
-                    setStep(4);
-                    setShowGuideModal(true);
-                } catch (loginErr) {
-                    console.error("Auto-login failed after registration:", loginErr);
-                    alert("Cuenta creada con éxito. Por favor, intenta ingresar con tu correo y clave.");
-                    setAuthMode('login');
-                }
+                // Forzamos un pequeño delay para asegurar propagación en Firestore antes del login
+                setTimeout(async () => {
+                    try {
+                        const loginRes = await login(cleanEmail, authData.password);
+                        if (loginRes.success) {
+                            setStep(4);
+                            setShowGuideModal(true);
+                        }
+                    } catch (loginErr) {
+                        console.error("Auto-login falló:", loginErr.message);
+                        alert("¡Cuenta creada! Pero no pudimos iniciar sesión automáticamente. Por favor ingresa manualmente.");
+                        setAuthMode('login');
+                    }
+                }, 1000);
+            } else {
+                alert("Error al guardar en base de datos: " + res.error);
             }
         } catch (err) { 
+            console.error("Error crítico en registro:", err);
             alert("Error al crear cuenta: " + err.message); 
         } finally { 
             setIsSaving(false); 
