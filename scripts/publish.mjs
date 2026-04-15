@@ -28,7 +28,7 @@ async function publish() {
 
         // 3. Desplegar (Firebase Hosting)
         console.log('🔥 Desplegando en Google Cloud (Firebase Hosting)...');
-        execSync('firebase deploy --only hosting', { stdio: 'inherit' });
+        execSync('npx firebase deploy --only hosting', { stdio: 'inherit' });
 
         console.log('🔥 ¡SITIO ACTUALIZADO EN VIVO CON ÉXITO! 🔥');
     } catch (error) {
