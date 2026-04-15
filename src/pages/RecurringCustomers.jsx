@@ -1215,25 +1215,27 @@ const RecurringCustomers = () => {
                                 </div>
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '1.5rem' }}>
-                                <button 
-                                    onClick={(isChangingPlan || user?.role !== 'member') ? finalizeMembership : handleBoldPayment} 
-                                    disabled={isSaving || (user?.role !== 'member' && subscriptionData.products.length === 0)} 
-                                    style={{ 
-                                        width: '100%', 
-                                        padding: '1.4rem', 
-                                        background: institutionOcre, 
-                                        color: deepTeal, 
-                                        border: 'none', 
-                                        borderRadius: '20px', 
-                                        fontWeight: '900', 
-                                        fontSize: '1.1rem', 
-                                        cursor: 'pointer', 
-                                        boxShadow: '0 10px 25px rgba(0,0,0,0.2)', 
-                                        transition: 'all 0.3s ease' 
-                                    }}
-                                >
-                                    {isSaving ? 'PROCESANDO...' : ((isChangingPlan || user?.role !== 'member') ? 'GUARDAR MI SUSCRIPCIÓN' : 'PAGAR MI SUSCRIPCIÓN')}
-                                </button>
+                                {subscriptionData.products.length > 0 && (
+                                    <button 
+                                        onClick={(hasPendingChanges || isChangingPlan || user?.role !== 'member') ? finalizeMembership : handleBoldPayment} 
+                                        disabled={isSaving} 
+                                        style={{ 
+                                            width: '100%', 
+                                            padding: '1.4rem', 
+                                            background: institutionOcre, 
+                                            color: deepTeal, 
+                                            border: 'none', 
+                                            borderRadius: '20px', 
+                                            fontWeight: '900', 
+                                            fontSize: '1.1rem', 
+                                            cursor: 'pointer', 
+                                            boxShadow: '0 10px 25px rgba(0,0,0,0.2)', 
+                                            transition: 'all 0.3s ease' 
+                                        }}
+                                    >
+                                        {isSaving ? 'PROCESANDO...' : ((hasPendingChanges || isChangingPlan || user?.role !== 'member') ? 'GUARDAR MI SUSCRIPCIÓN' : 'PAGAR MI SUSCRIPCIÓN')}
+                                    </button>
+                                )}
 
                                 {user?.role === 'member' && (
                                     <button 
