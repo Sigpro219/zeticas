@@ -415,10 +415,12 @@ const RecurringCustomers = () => {
             const res = await upsertMember({
                 name: authData.name,
                 email: cleanEmail,
-                password: authData.password, // Aseguramos que se guarde la clave
+                password: authData.password,
                 phone: authData.phone,
                 nit: authData.idNumber,
                 is_member: true,
+                pantry: subscriptionData.products.map(p => ({ id: p.id, quantity: p.quantity })), // Guardamos selección inicial
+                frequency: subscriptionData.frequency || 'Quincenal', // Frecuencia por defecto o elegida
                 membership: { 
                     plan: subscriptionData.plan, 
                     status: 'Active', 
