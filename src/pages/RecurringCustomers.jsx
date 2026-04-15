@@ -1119,7 +1119,6 @@ const RecurringCustomers = () => {
                                 </>
                             )}
                         </div>
-                        </div>
                         <div style={{ background: deepTeal, color: '#fff', padding: '2rem', borderRadius: '30px', height: 'fit-content', position: 'sticky', top: '20px' }}>
                             <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '0.8rem', marginBottom: '1rem' }}>Resumen</h3>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
