@@ -492,23 +492,29 @@ const RecurringCustomers = () => {
         setAnimatingPlan(plan);
         setTimeout(() => {
             setSubscriptionData(prev => ({ ...prev, plan }));
-            setStep(3);
+            // Si es socio, no lo mandamos al paso 3 (datos), se queda en el portal (paso 4)
+            if (user?.role === 'member') {
+                setStep(4);
+                setIsChangingPlan(false); // Cerramos el modo edición al elegir
+            } else {
+                setStep(3);
+            }
             setAnimatingPlan(null);
         }, 650);
     };
 
-    const handleCancelSubscription = async () => {
+    const confirmUnsubscribe = async () => {
         if (!activeMember) return;
-        if (!window.confirm("¿Seguro que deseas cancelar tu suscripción? Perderás tus descuentos y beneficios de envío gratis.")) return;
-        
+        setIsCancelModalOpen(false);
         setIsSaving(true);
         try {
             await upsertMember({
                 nit: activeMember.nit || activeMember.idNumber || activeMember.id,
+                email: activeMember.email,
                 status: 'Inactive',
                 is_member: false
             });
-            alert("Suscripción cancelada exitosamente.");
+            alert("Lamentamos que te vayas. Tu suscripción ha sido cancelada.");
             setAuthData({ email: '', password: '', confirmPassword: '', name: '', phone: '', address: '', city: '', idNumber: '' });
             logout();
             setStep(1);
