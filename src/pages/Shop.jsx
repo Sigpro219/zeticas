@@ -5,6 +5,34 @@ import { Search, ShoppingBag, ArrowRight, X } from 'lucide-react';
 
 import { useMediaQuery } from '../hooks/useMediaQuery';
 
+const OptimizedImage = ({ src, alt, className, style }) => {
+    const [loaded, setLoaded] = useState(false);
+    return (
+        <div style={{ position: 'relative', width: '100%', height: '100%', backgroundColor: '#f0f0f0', borderRadius: 'inherit', overflow: 'hidden' }}>
+            {!loaded && (
+                <div className="skeleton-pulse" style={{
+                    position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+                    background: 'linear-gradient(90deg, #f0f0f0 25%, #f8f8f8 50%, #f0f0f0 75%)',
+                    backgroundSize: '200% 100%',
+                    animation: 'skeleton-shimmer 1.5s infinite linear'
+                }}></div>
+            )}
+            <img
+                src={src}
+                alt={alt}
+                loading="lazy"
+                onLoad={() => setLoaded(true)}
+                className={className}
+                style={{
+                    ...style,
+                    opacity: loaded ? 1 : 0,
+                    transition: 'opacity 0.5s ease-in-out',
+                }}
+            />
+        </div>
+    );
+};
+
 const Shop = () => {
     const isMobile = useMediaQuery('(max-width: 768px)');
     const isTablet = useMediaQuery('(max-width: 1024px)');
@@ -40,7 +68,7 @@ const Shop = () => {
         }
         // Simple notification or feedback could go here
     };
-    const [activeImage, setActiveImage] = useState(0);
+    const [activeImage, setActiveImage] = useState(0);
 
     const openQuickView = (product) => {
         setSelectedProduct(product);
@@ -228,20 +256,22 @@ const Shop = () => {
                                 alignItems: 'center',
                                 justifyContent: 'center'
                             }}>
-                                <img
+                                <OptimizedImage
                                     src={getThumbnailUrl(product.imagen_url)}
                                     alt={product.nombre}
                                     style={{ 
                                         width: '90%', 
                                         height: '90%', 
                                         objectFit: 'contain', 
-                                        transition: 'transform 0.8s' 
+                                        transition: 'transform 0.8s',
+                                        margin: 'auto'
                                     }}
                                 />
                                 <div className="card-overlay">
                                     <span style={{ color: '#fff', fontSize: '0.7rem', fontWeight: '800', letterSpacing: '0.2em' }}>DETALLES</span>
                                 </div>
                             </div>
+
 
                             <div style={{ padding: '0 0.5rem 1rem' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
@@ -342,7 +372,7 @@ const Shop = () => {
                             borderBottom: isTablet ? '1px solid #eee' : 'none'
                         }}>
                             <div style={{ flex: 1, borderRadius: '24px', overflow: 'hidden', background: '#fff', position: 'relative', cursor: 'zoom-in' }} className="zoom-container">
-                                <img 
+                                <OptimizedImage 
                                     src={activeImage === 0 ? selectedProduct.imagen_url : selectedProduct.imagen_url_2} 
                                     alt={selectedProduct.nombre} 
                                     style={{ width: '100%', height: '100%', objectFit: 'contain', transition: 'transform 0.5s ease' }} 
@@ -358,10 +388,11 @@ const Shop = () => {
                                         width: '74px', height: '74px', borderRadius: '12px', 
                                         border: activeImage === 0 ? '2px solid var(--color-primary)' : '1px solid #ddd', 
                                         padding: '4px', background: '#fff', cursor: 'pointer',
-                                        transition: 'all 0.2s', transform: activeImage === 0 ? 'scale(1.05)' : 'scale(1)'
+                                        transition: 'all 0.2s', transform: activeImage === 0 ? 'scale(1.05)' : 'scale(1)',
+                                        overflow: 'hidden'
                                     }}
                                 >
-                                    <img src={selectedProduct.imagen_url} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px' }} />
+                                    <OptimizedImage src={selectedProduct.imagen_url} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px' }} />
                                 </div>
                                 
                                 {/* Thumb 2 */}
@@ -372,10 +403,11 @@ const Shop = () => {
                                             width: '74px', height: '74px', borderRadius: '12px', 
                                             border: activeImage === 1 ? '2px solid var(--color-primary)' : '1px solid #ddd', 
                                             padding: '4px', background: '#fff', cursor: 'pointer',
-                                            transition: 'all 0.2s', transform: activeImage === 1 ? 'scale(1.05)' : 'scale(1)'
+                                            transition: 'all 0.2s', transform: activeImage === 1 ? 'scale(1.05)' : 'scale(1)',
+                                            overflow: 'hidden'
                                         }}
                                     >
-                                        <img src={selectedProduct.imagen_url_2} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px' }} />
+                                        <OptimizedImage src={selectedProduct.imagen_url_2} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px' }} />
                                     </div>
                                 )}
                             </div>
@@ -490,6 +522,10 @@ const Shop = () => {
                 @keyframes modalFadeIn {
                     from { opacity: 0; transform: scale(0.95) translateY(20px); }
                     to { opacity: 1; transform: scale(1) translateY(0); }
+                }
+                @keyframes skeleton-shimmer {
+                    0% { background-position: 200% 0; }
+                    100% { background-position: -200% 0; }
                 }
             `}</style>
         </div>
