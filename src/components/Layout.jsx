@@ -5,13 +5,10 @@ import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useBusiness } from '../context/BusinessContext';
+import { getTenantBranding, logo as fallbackLogo } from '../config/branding';
 
-const logoZeticas = '/logo.png';
-const logoDelta = '/assets/logos/logo-dct.png';
-const logoCZ = '/assets/logos/logo-cz.png';
-
-// Fallback for legacy components/styles that might still reference a single 'logo' variable
-const logo = logoZeticas;
+// Maintain a global 'logo' variable in this module to prevent ReferenceErrors in sub-components
+const logo = fallbackLogo;
 
 const deepTeal = "#025357";
 const institutionOcre = "#D6BD98";
@@ -136,6 +133,8 @@ const Navbar = ({ isConsulting, isMobile }) => {
         navigate('/');
     };
 
+    const branding = getTenantBranding(tenantId, isConsulting);
+
     return (
         <nav className="navbar navbar-dark" style={{
             width: '100%',
@@ -154,11 +153,11 @@ const Navbar = ({ isConsulting, isMobile }) => {
             }}>
                 <div className="logo" style={{ display: 'flex', alignItems: 'center', height: '100%' }}>
                     <Link to={isConsulting ? "/consultoria" : "/"} style={{ height: '100%', display: 'flex', alignItems: 'center', gap: '15px', textDecoration: 'none' }}>
-                        <img src={isConsulting ? logoCZ : (tenantId === 'deltacore' ? logoDelta : logoZeticas)} alt={isConsulting ? "CZ" : (tenantId === 'deltacore' ? "Delta CoreTech" : "Zeticas")} style={{ 
+                        <img src={branding.logo} alt={branding.name} style={{ 
                             height: isConsulting ? (isMobile ? '70%' : '90%') : (isMobile ? (tenantId === 'deltacore' ? '35%' : '45%') : (tenantId === 'deltacore' ? '55%' : '65%')), 
                             width: 'auto', 
                             objectFit: 'contain', 
-                            filter: isConsulting || tenantId === 'deltacore' ? 'none' : 'brightness(0) invert(1)'
+                            filter: branding.logoFilter
                         }} />
                         {isConsulting && !isMobile && (
                             <div style={{ height: '35px', width: '1px', background: '#ddd' }}></div>
@@ -363,6 +362,7 @@ const Navbar = ({ isConsulting, isMobile }) => {
 
 const Footer = ({ isConsulting, isMobile, contact }) => {
     const { tenantId } = useBusiness();
+    const branding = getTenantBranding(tenantId, isConsulting);
     
     return (
         <footer style={{ 
@@ -378,11 +378,11 @@ const Footer = ({ isConsulting, isMobile, contact }) => {
                 textAlign: isMobile ? 'center' : 'left' 
             }}>
                 <div style={{ maxWidth: '350px', margin: isMobile ? '0 auto' : '0' }}>
-                    <img src={isConsulting ? logoCZ : (tenantId === 'deltacore' ? logoDelta : logoZeticas)} alt={tenantId === 'deltacore' ? "Delta CoreTech" : "Zeticas"} style={{ 
+                    <img src={branding.logo} alt={branding.name} style={{ 
                         height: isConsulting ? '50px' : (tenantId === 'deltacore' ? '30px' : '40px'), 
                         margin: isMobile ? '0 auto 1.2rem' : '0 0 1.5rem',
                         display: 'block',
-                        filter: isConsulting || tenantId === 'deltacore' ? 'none' : 'brightness(0) invert(1)' 
+                        filter: branding.logoFilter
                     }} />
                     {isConsulting && (
                         <div style={{ fontSize: '1.1rem', color: deepTeal, fontWeight: '800', marginBottom: '1.2rem', letterSpacing: '1px' }}>
