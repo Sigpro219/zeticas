@@ -357,59 +357,63 @@ const Navbar = ({ isConsulting, isMobile }) => {
     );
 };
 
-const Footer = ({ isConsulting, isMobile, contact }) => (
-    <footer style={{ 
-        padding: isMobile ? '2.5rem 1.5rem 1.5rem' : '6rem 5% 3rem', 
-        backgroundColor: isConsulting ? institutionOcre : 'var(--color-primary)', 
-        color: isConsulting ? deepTeal : '#fff',
-        borderTop: isConsulting ? `1px solid rgba(2, 83, 87, 0.1)` : 'none'
-    }}>
-        <div className="container" style={{ 
-            display: 'grid', 
-            gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(250px, 1fr))', 
-            gap: isMobile ? '1.8rem' : '4rem', 
-            textAlign: isMobile ? 'center' : 'left' 
+const Footer = ({ isConsulting, isMobile, contact }) => {
+    const { tenantId } = useBusiness();
+    
+    return (
+        <footer style={{ 
+            padding: isMobile ? '2.5rem 1.5rem 1.5rem' : '6rem 5% 3rem', 
+            backgroundColor: isConsulting ? institutionOcre : 'var(--color-primary)', 
+            color: isConsulting ? deepTeal : '#fff',
+            borderTop: isConsulting ? `1px solid rgba(2, 83, 87, 0.1)` : 'none'
         }}>
-            <div style={{ maxWidth: '350px', margin: isMobile ? '0 auto' : '0' }}>
-                <img src={isConsulting ? logoCZ : logo} alt="Zeticas" style={{ 
-                    height: isConsulting ? '50px' : '40px', 
-                    margin: isMobile ? '0 auto 1.2rem' : '0 0 1.5rem',
-                    display: 'block',
-                    filter: isConsulting ? 'none' : 'brightness(0) invert(1)' 
-                }} />
-                {isConsulting && (
-                    <div style={{ fontSize: '1.1rem', color: deepTeal, fontWeight: '800', marginBottom: '1.2rem', letterSpacing: '1px' }}>
-                        Consultoría
+            <div className="container" style={{ 
+                display: 'grid', 
+                gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(250px, 1fr))', 
+                gap: isMobile ? '1.8rem' : '4rem', 
+                textAlign: isMobile ? 'center' : 'left' 
+            }}>
+                <div style={{ maxWidth: '350px', margin: isMobile ? '0 auto' : '0' }}>
+                    <img src={isConsulting ? logoCZ : (tenantId === 'deltacore' ? logoDelta : logoZeticas)} alt={tenantId === 'deltacore' ? "Delta CoreTech" : "Zeticas"} style={{ 
+                        height: isConsulting ? '50px' : (tenantId === 'deltacore' ? '30px' : '40px'), 
+                        margin: isMobile ? '0 auto 1.2rem' : '0 0 1.5rem',
+                        display: 'block',
+                        filter: isConsulting || tenantId === 'deltacore' ? 'none' : 'brightness(0) invert(1)' 
+                    }} />
+                    {isConsulting && (
+                        <div style={{ fontSize: '1.1rem', color: deepTeal, fontWeight: '800', marginBottom: '1.2rem', letterSpacing: '1px' }}>
+                            Consultoría
+                        </div>
+                    )}
+                    <p style={{ fontSize: '0.85rem', color: isConsulting ? '#555' : 'rgba(255,255,255,0.7)', lineHeight: '1.8' }}>Exaltando los ecosistemas colombianos a través de productos agroecológicos de alta calidad.</p>
+                </div>
+                <div>
+                    <h4 className="font-serif" style={{ fontSize: '1.1rem', marginBottom: isMobile ? '1rem' : '1.5rem', color: isConsulting ? deepTeal : '#fff' }}>Navegación</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                        <Link to="/tienda" style={{ color: isConsulting ? `${deepTeal}aa` : 'rgba(255,255,255,0.8)', textDecoration: 'none', fontSize: '0.85rem' }}>Tienda</Link>
+                        <Link to="/nosotros" style={{ color: isConsulting ? `${deepTeal}aa` : 'rgba(255,255,255,0.8)', textDecoration: 'none', fontSize: '0.85rem' }}>Nuestra Historia</Link>
+                        <Link to="/catering" style={{ color: isConsulting ? `${deepTeal}aa` : 'rgba(255,255,255,0.8)', textDecoration: 'none', fontSize: '0.85rem' }}>Catering</Link>
+                        <Link to="/consultoria" style={{ color: isConsulting ? `${deepTeal}aa` : 'rgba(255,255,255,0.8)', textDecoration: 'none', fontSize: '0.85rem' }}>Consultoría</Link>
                     </div>
-                )}
-                <p style={{ fontSize: '0.85rem', color: isConsulting ? '#555' : 'rgba(255,255,255,0.7)', lineHeight: '1.8' }}>Exaltando los ecosistemas colombianos a través de productos agroecológicos de alta calidad.</p>
-            </div>
-            <div>
-                <h4 className="font-serif" style={{ fontSize: '1.1rem', marginBottom: isMobile ? '1rem' : '1.5rem', color: isConsulting ? deepTeal : '#fff' }}>Navegación</h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                    <Link to="/tienda" style={{ color: isConsulting ? `${deepTeal}aa` : 'rgba(255,255,255,0.8)', textDecoration: 'none', fontSize: '0.85rem' }}>Tienda</Link>
-                    <Link to="/nosotros" style={{ color: isConsulting ? `${deepTeal}aa` : 'rgba(255,255,255,0.8)', textDecoration: 'none', fontSize: '0.85rem' }}>Nuestra Historia</Link>
-                    <Link to="/catering" style={{ color: isConsulting ? `${deepTeal}aa` : 'rgba(255,255,255,0.8)', textDecoration: 'none', fontSize: '0.85rem' }}>Catering</Link>
-                    <Link to="/consultoria" style={{ color: isConsulting ? `${deepTeal}aa` : 'rgba(255,255,255,0.8)', textDecoration: 'none', fontSize: '0.85rem' }}>Consultoría</Link>
+                </div>
+                <div>
+                    <h4 className="font-serif" style={{ fontSize: '1.1rem', marginBottom: isMobile ? '1rem' : '1.5rem', color: isConsulting ? deepTeal : '#fff' }}>Ubicación</h4>
+                    <p style={{ fontSize: '0.85rem', color: isConsulting ? `${deepTeal}99` : 'rgba(255,255,255,0.7)', marginBottom: '0.4rem' }}>Guasca, Cundinamarca</p>
+                    <p style={{ fontSize: '0.85rem', color: isConsulting ? `${deepTeal}99` : 'rgba(255,255,255,0.7)', marginBottom: isMobile ? '1rem' : '1.5rem' }}>Finca Mingalaba</p>
+                    <div style={{ display: 'flex', gap: '1.5rem', justifyContent: isMobile ? 'center' : 'flex-start' }}>
+                        {contact?.instagram && <a href={ensureAbsoluteUrl(contact.instagram, 'instagram')} target="_blank" rel="noreferrer" style={{ color: isConsulting ? deepTeal : '#fff', opacity: 0.8 }}><Instagram size={18} /></a>}
+                        {contact?.email && <a href={`mailto:${contact.email}`} style={{ color: isConsulting ? deepTeal : '#fff', opacity: 0.8 }}><Mail size={18} /></a>}
+                        {contact?.phone && <a href={`https://wa.me/${contact.phone.replace(/\D/g, '').length === 10 ? '57' : ''}${contact.phone.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" style={{ color: isConsulting ? deepTeal : '#fff', opacity: 0.8 }}><Phone size={18} /></a>}
+                        {contact?.linkedin && <a href={ensureAbsoluteUrl(contact.linkedin)} target="_blank" rel="noreferrer" style={{ color: isConsulting ? deepTeal : '#fff', opacity: 0.8 }}><Linkedin size={18} /></a>}
+                    </div>
                 </div>
             </div>
-            <div>
-                <h4 className="font-serif" style={{ fontSize: '1.1rem', marginBottom: isMobile ? '1rem' : '1.5rem', color: isConsulting ? deepTeal : '#fff' }}>Ubicación</h4>
-                <p style={{ fontSize: '0.85rem', color: isConsulting ? `${deepTeal}99` : 'rgba(255,255,255,0.7)', marginBottom: '0.4rem' }}>Guasca, Cundinamarca</p>
-                <p style={{ fontSize: '0.85rem', color: isConsulting ? `${deepTeal}99` : 'rgba(255,255,255,0.7)', marginBottom: isMobile ? '1rem' : '1.5rem' }}>Finca Mingalaba</p>
-                <div style={{ display: 'flex', gap: '1.5rem', justifyContent: isMobile ? 'center' : 'flex-start' }}>
-                    {contact?.instagram && <a href={ensureAbsoluteUrl(contact.instagram, 'instagram')} target="_blank" rel="noreferrer" style={{ color: isConsulting ? deepTeal : '#fff', opacity: 0.8 }}><Instagram size={18} /></a>}
-                    {contact?.email && <a href={`mailto:${contact.email}`} style={{ color: isConsulting ? deepTeal : '#fff', opacity: 0.8 }}><Mail size={18} /></a>}
-                    {contact?.phone && <a href={`https://wa.me/${contact.phone.replace(/\D/g, '').length === 10 ? '57' : ''}${contact.phone.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" style={{ color: isConsulting ? deepTeal : '#fff', opacity: 0.8 }}><Phone size={18} /></a>}
-                    {contact?.linkedin && <a href={ensureAbsoluteUrl(contact.linkedin)} target="_blank" rel="noreferrer" style={{ color: isConsulting ? deepTeal : '#fff', opacity: 0.8 }}><Linkedin size={18} /></a>}
-                </div>
+            <div style={{ borderTop: isConsulting ? `1px solid rgba(2, 83, 87, 0.1)` : '1px solid rgba(255,255,255,0.1)', marginTop: isMobile ? '1.5rem' : '2.5rem', paddingTop: '1.2rem', textAlign: 'center' }}>
+                <p style={{ fontSize: '0.75rem', color: isConsulting ? deepTeal : 'rgba(255,255,255,0.5)', opacity: 0.6 }}>© 2026 {tenantId === 'deltacore' ? 'Delta CoreTech' : 'Zeticas'}. Sabana de Bogotá, Colombia.</p>
             </div>
-        </div>
-        <div style={{ borderTop: isConsulting ? `1px solid rgba(2, 83, 87, 0.1)` : '1px solid rgba(255,255,255,0.1)', marginTop: isMobile ? '1.5rem' : '2.5rem', paddingTop: '1.2rem', textAlign: 'center' }}>
-            <p style={{ fontSize: '0.75rem', color: isConsulting ? deepTeal : 'rgba(255,255,255,0.5)', opacity: 0.6 }}>© 2026 Zeticas. Sabana de Bogotá, Colombia.</p>
-        </div>
-    </footer>
-);
+        </footer>
+    );
+};
 
 export default function Layout({ children }) {
     const location = useLocation();
