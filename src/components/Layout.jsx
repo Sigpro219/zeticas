@@ -8,6 +8,10 @@ import { useBusiness } from '../context/BusinessContext';
 
 const logoZeticas = '/logo.png';
 const logoDelta = '/assets/logos/logo-dct.png';
+const logoCZ = '/assets/logos/logo-cz.png';
+
+// Fallback for legacy components/styles that might still reference a single 'logo' variable
+const logo = logoZeticas;
 
 const deepTeal = "#025357";
 const institutionOcre = "#D6BD98";
