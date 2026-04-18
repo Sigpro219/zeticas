@@ -52,7 +52,42 @@ const BusinessContext = createContext({});
 
 export const BusinessProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
+    const [lastUpdate, setLastUpdate] = useState(null);
+    
+    // ── MULTITENANT CORE ──────────────────────────────────────────────────────
+    const [tenantId, setTenantId] = useState(() => {
+        // 1. Detect from Hostname (Production mapping)
+        const host = window.location.hostname;
+        if (host.includes('deltacore')) return 'deltacore';
+        
+        // 2. Detect from URL parameter (?tenant=deltacore)
+        const params = new URLSearchParams(window.location.search);
+        const urlTenant = params.get('tenant');
+        if (urlTenant) {
+            localStorage.setItem('zeticas_current_tenant', urlTenant);
+            return urlTenant;
+        }
+        
+        // 3. Fallback to localStorage or default
+        return localStorage.getItem('zeticas_current_tenant') || 'zeticas';
+    });
+
+    /**
+     * getTenantPath: Returns the scoped collection path for the current tenant.
+     * Hierarchy: tenants/{tenantId}/[collectionName]
+     */
+    const getTenantPath = useCallback((colName) => {
+        return ['tenants', tenantId, colName];
+    }, [tenantId]);
+
+    // Helpers to create references easily
+    // Helpers to create references easily
+    const tCol = useCallback((name) => collection(db, 'tenants', tenantId, name), [tenantId]);
+    const tDoc = useCallback((name, id) => doc(db, 'tenants', tenantId, name, id), [tenantId]);
+    // ──────────────────────────────────────────────────────────────────────────
+
     const [items, setItems] = useState([]);
+
     const [recipes, setRecipes] = useState({});
     const [providers, setProviders] = useState([]);
     const [orders, setOrders] = useState([]);
@@ -69,7 +104,7 @@ export const BusinessProvider = ({ children }) => {
     const [users, setUsers] = useState([]);
     const [units, setUnits] = useState([]);
     const [subscriptions, setSubscriptions] = useState([]);
-    const [lastUpdate, setLastUpdate] = useState(null);
+    // Removed duplicate lastUpdate
     const [analytics, setAnalytics] = useState([]);
 
     // ── CORE BUSINESS LOGIC (Hoisted to prevent TDZ) ───────────────────
@@ -81,7 +116,7 @@ export const BusinessProvider = ({ children }) => {
         try {
             for (const mat of materials) {
                 // materials expected: { id, qtyToConsume }
-                const docRef = doc(db, 'products', mat.id);
+                const docRef = tDoc('products', mat.id);
                 await updateDoc(docRef, {
                     sales: increment(Math.abs(mat.qtyToConsume))
                 });
@@ -99,7 +134,7 @@ export const BusinessProvider = ({ children }) => {
     const loadFinishedGoods = useCallback(async (sku, quantity, alreadyConsumed = false) => {
         try {
             const searchName = String(sku || '').toLowerCase().trim();
-            const snapshot = await getDocs(collection(db, 'products'));
+            const snapshot = await getDocs(tCol('products'));
             const docSnap = snapshot.docs.find(d => {
                 const p = d.data();
                 return String(p.name || '').toLowerCase().trim() === searchName;
@@ -141,7 +176,7 @@ export const BusinessProvider = ({ children }) => {
      */
     const addAdminLog = useCallback(async (action, details, user = null) => {
         try {
-            await addDoc(collection(db, 'admin_logs'), {
+            await addDoc(tCol('admin_logs'), {
                 action,
                 details,
                 user_email: user?.email || 'System',
@@ -167,7 +202,7 @@ export const BusinessProvider = ({ children }) => {
                 throw new Error("Debes proporcionar un motivo detallado para el ajuste.");
             }
 
-            const productRef = doc(db, 'products', productId);
+            const productRef = tDoc('products', productId);
             const snap = await getDoc(productRef);
             if (!snap.exists()) throw new Error("Producto no encontrado.");
             
@@ -223,14 +258,14 @@ export const BusinessProvider = ({ children }) => {
             const newBalance = type === 'income' ? currentBal + val : currentBal - val;
             
             // 1. Update the Main balance
-            await updateDoc(doc(db, 'banks', bankId), { 
+            await updateDoc(tDoc('banks', bankId), { 
                 balance: newBalance,
                 real_time: newBalance,
                 updated_at: new Date().toISOString()
             });
 
             // 2. Log the Transaction (The "Fact")
-            await addDoc(collection(db, 'bank_transactions'), {
+            await addDoc(tCol('bank_transactions'), {
                 bank_id: bankId,
                 bank_name: bank.name,
                 type: type, // 'income' or 'expense'
@@ -290,7 +325,7 @@ export const BusinessProvider = ({ children }) => {
         setLoading(true);
 
         // Subscriptions to Firestore Collections
-        const unsubItems = onSnapshot(collection(db, 'products'), (snapshot) => {
+        const unsubItems = onSnapshot(tCol('products'), (snapshot) => {
             const synchronizedItems = snapshot.docs.map(doc => {
                 const p = doc.data();
                 let price = Number(p.price) || 0;
@@ -325,7 +360,7 @@ export const BusinessProvider = ({ children }) => {
             updateSyncTime();
         }, (error) => console.error("Snapshot Products Error:", error));
 
-        const unsubClients = onSnapshot(query(collection(db, 'clients'), orderBy('created_at', 'desc')), (snapshot) => {
+        const unsubClients = onSnapshot(query(tCol('clients'), orderBy('created_at', 'desc')), (snapshot) => {
             setClients(snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data(),
@@ -334,7 +369,7 @@ export const BusinessProvider = ({ children }) => {
             updateSyncTime();
         }, (error) => console.error("Snapshot Clients Error:", error));
 
-        const unsubOrders = onSnapshot(query(collection(db, 'orders'), orderBy('created_at', 'desc')), (snapshot) => {
+        const unsubOrders = onSnapshot(query(tCol('orders'), orderBy('created_at', 'desc')), (snapshot) => {
             setOrders(snapshot.docs.map(doc => {
                 const o = doc.data();
                 // Safe date parsing for Firestore Timestamps or ISO strings
@@ -361,7 +396,7 @@ export const BusinessProvider = ({ children }) => {
             updateSyncTime();
         }, (error) => console.error("Snapshot Orders Error:", error));
 
-        const unsubRecipes = onSnapshot(collection(db, 'recipes'), (snapshot) => {
+        const unsubRecipes = onSnapshot(tCol('recipes'), (snapshot) => {
             const groupedRecipes = {};
             snapshot.docs.forEach(doc => {
                 const r = doc.data();
@@ -393,7 +428,7 @@ export const BusinessProvider = ({ children }) => {
             updateSyncTime();
         }, (error) => console.error("Snapshot Recipes Error:", error));
 
-        const unsubSuppliers = onSnapshot(collection(db, 'suppliers'), (snapshot) => {
+        const unsubSuppliers = onSnapshot(tCol('suppliers'), (snapshot) => {
             setProviders(snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
@@ -401,7 +436,7 @@ export const BusinessProvider = ({ children }) => {
             updateSyncTime();
         }, (error) => console.error("Snapshot Suppliers Error:", error));
 
-        const unsubPurchases = onSnapshot(query(collection(db, 'purchase_orders'), orderBy('created_at', 'desc')), (snapshot) => {
+        const unsubPurchases = onSnapshot(query(tCol('purchase_orders'), orderBy('created_at', 'desc')), (snapshot) => {
             setPurchaseOrders(snapshot.docs.map(doc => {
                 const p = doc.data();
                 const rawCreatedAt = p.created_at;
@@ -423,21 +458,21 @@ export const BusinessProvider = ({ children }) => {
             updateSyncTime();
         }, (error) => console.error("Snapshot Purchases Error:", error));
 
-        const unsubExpenses = onSnapshot(query(collection(db, 'expenses'), orderBy('created_at', 'desc')), (snapshot) => {
+        const unsubExpenses = onSnapshot(query(tCol('expenses'), orderBy('created_at', 'desc')), (snapshot) => {
             setExpenses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             updateSyncTime();
         }, (error) => console.error("Snapshot Expenses Error:", error));
 
-        const unsubBanks = onSnapshot(collection(db, 'banks'), (snapshot) => {
+        const unsubBanks = onSnapshot(tCol('banks'), (snapshot) => {
             setBanks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             updateSyncTime();
         }, (error) => console.error("Snapshot Banks Error:", error));
 
-        const unsubBankTrans = onSnapshot(query(collection(db, 'bank_transactions'), orderBy('created_at', 'desc')), (snapshot) => {
+        const unsubBankTrans = onSnapshot(query(tCol('bank_transactions'), orderBy('created_at', 'desc')), (snapshot) => {
             setBankTransactions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         }, (error) => console.error("Snapshot Bank Transactions Error:", error));
 
-        const unsubCMS = onSnapshot(collection(db, 'site_content'), (snapshot) => {
+        const unsubCMS = onSnapshot(tCol('site_content'), (snapshot) => {
             const formattedContent = {};
             snapshot.docs.forEach(doc => {
                 const c = doc.data();
@@ -447,41 +482,41 @@ export const BusinessProvider = ({ children }) => {
             setSiteContent(formattedContent);
         }, (error) => console.error("Snapshot CMS Error:", error));
 
-        const unsubProd = onSnapshot(collection(db, 'production_orders'), (snapshot) => {
+        const unsubProd = onSnapshot(tCol('production_orders'), (snapshot) => {
             setProductionOrders(snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
             })));
         }, (error) => console.error("Snapshot Production Error:", error));
 
-        const unsubAnalytics = onSnapshot(query(collection(db, 'analytics'), orderBy('date', 'asc')), (snapshot) => {
+        const unsubAnalytics = onSnapshot(query(tCol('analytics'), orderBy('date', 'asc')), (snapshot) => {
             setAnalytics(snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
             })));
         }, (error) => console.error("Snapshot Analytics Error:", error));
 
-        const unsubLeads = onSnapshot(query(collection(db, 'leads'), orderBy('created_at', 'desc')), (snapshot) => {
+        const unsubLeads = onSnapshot(query(tCol('leads'), orderBy('created_at', 'desc')), (snapshot) => {
             setLeads(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         }, (error) => console.error("Snapshot Leads Error:", error));
 
-        const unsubSubscriptions = onSnapshot(collection(db, 'subscriptions'), (snapshot) => {
+        const unsubSubscriptions = onSnapshot(tCol('subscriptions'), (snapshot) => {
             setSubscriptions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         }, (error) => console.error("Snapshot Subscriptions Error:", error));
 
-        const unsubQuotes = onSnapshot(query(collection(db, 'quotations'), orderBy('createdAt', 'desc')), (snapshot) => {
+        const unsubQuotes = onSnapshot(query(tCol('quotations'), orderBy('createdAt', 'desc')), (snapshot) => {
             setQuotations(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         }, (error) => console.error("Snapshot Quotations Error:", error));
 
-        const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+        const unsubUsers = onSnapshot(tCol('users'), (snapshot) => {
             setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         }, (error) => console.error("Snapshot Users Error:", error));
 
-        const unsubUnits = onSnapshot(collection(db, 'units'), (snapshot) => {
+        const unsubUnits = onSnapshot(tCol('units'), (snapshot) => {
             setUnits(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         }, (error) => console.error("Snapshot Units Error:", error));
 
-        const unsubProdAnalytics = onSnapshot(query(collection(db, 'production_analytics'), orderBy('timestamp', 'desc')), (snapshot) => {
+        const unsubProdAnalytics = onSnapshot(query(tCol('production_analytics'), orderBy('timestamp', 'desc')), (snapshot) => {
             setProductionAnalytics(snapshot.docs.map(doc => ({ 
                 id: doc.id, 
                 ...doc.data(),
@@ -510,7 +545,7 @@ export const BusinessProvider = ({ children }) => {
             unsubProdAnalytics();
             unsubBankTrans();
         };
-    }, [updateSyncTime]);
+    }, [updateSyncTime, tenantId, tCol, masterProducts]);
 
     // ── MOTOR DE RECONCILIACIÓN DE ODPS (Semáforo Industrial) ──
     useEffect(() => {
@@ -587,7 +622,7 @@ export const BusinessProvider = ({ children }) => {
 
     const addClient = useCallback(async (clientData) => {
         try {
-            const docRef = await addDoc(collection(db, 'clients'), {
+            const docRef = await addDoc(tCol('clients'), {
                 ...clientData,
                 status: clientData.status || 'Active',
                 created_at: new Date().toISOString()
@@ -608,11 +643,11 @@ export const BusinessProvider = ({ children }) => {
             if (!email) throw new Error("El Correo Electrónico es requerido para el registro.");
             
             // 1. Verificar existencia por NIT
-            const qNit = query(collection(db, 'clients'), where('nit', '==', nit));
+            const qNit = query(tCol('clients'), where('nit', '==', nit));
             const snapNit = await getDocs(qNit);
             
             // 2. Verificar existencia por Email
-            const qEmail = query(collection(db, 'clients'), where('email', '==', email));
+            const qEmail = query(tCol('clients'), where('email', '==', email));
             const snapEmail = await getDocs(qEmail);
 
             const existingByNit = !snapNit.empty ? snapNit.docs[0].data() : null;
@@ -635,7 +670,7 @@ export const BusinessProvider = ({ children }) => {
                     status: 'Active',
                     updated_at: new Date().toISOString()
                 };
-                await updateDoc(doc(db, 'clients', finalId), finalData);
+                await updateDoc(tDoc('clients', finalId), finalData);
                 return { success: true, id: finalId, mode: 'updated', data: finalData };
             } else {
                 // Crear nuevo socio desde cero
@@ -646,7 +681,7 @@ export const BusinessProvider = ({ children }) => {
                     status: 'Active',
                     created_at: new Date().toISOString()
                 };
-                const docRef = await addDoc(collection(db, 'clients'), finalData);
+                const docRef = await addDoc(tCol('clients'), finalData);
                 return { success: true, id: docRef.id, mode: 'created', data: finalData };
             }
         } catch (err) {
@@ -703,7 +738,7 @@ export const BusinessProvider = ({ children }) => {
                 type: 'welcome_subscription'
             };
 
-            await addDoc(collection(db, 'mail'), emailData);
+            await addDoc(tCol('mail'), emailData);
             console.log("✅ Welcome email queued for:", memberData.email);
             return { success: true };
         } catch (err) {
@@ -714,7 +749,7 @@ export const BusinessProvider = ({ children }) => {
 
     const addOrder = useCallback(async (orderData) => {
         try {
-            const counterRef = doc(db, 'metadata', 'counters');
+            const counterRef = tDoc('metadata', 'counters');
             let finalNumber;
 
             // Transacción para obtener el siguiente número y aumentarlo
@@ -751,7 +786,7 @@ export const BusinessProvider = ({ children }) => {
                 );
             }
 
-            const docRef = await addDoc(collection(db, 'orders'), {
+            const docRef = await addDoc(tCol('orders'), {
                 ...orderData,
                 id: displayId,
                 order_number: displayId,
@@ -767,7 +802,7 @@ export const BusinessProvider = ({ children }) => {
 
     const deleteClient = useCallback(async (clientId) => {
         try {
-            await deleteDoc(doc(db, 'clients', clientId));
+            await deleteDoc(tDoc('clients', clientId));
             return { success: true };
         } catch (err) {
             console.error("Error deleting client:", err);
@@ -777,7 +812,7 @@ export const BusinessProvider = ({ children }) => {
 
     const updateClient = useCallback(async (clientId, payload) => {
         try {
-            await updateDoc(doc(db, 'clients', clientId), payload);
+            await updateDoc(tDoc('clients', clientId), payload);
             return { success: true };
         } catch (err) {
             console.error("Error updating client:", err);
@@ -791,7 +826,7 @@ export const BusinessProvider = ({ children }) => {
             const finalStatuses = ['finalizado', 'entregado', 'cobrado'];
 
             for (const id of idArray) {
-                const orderRef = doc(db, 'orders', id);
+                const orderRef = tDoc('orders', id);
                 const snap = await getDoc(orderRef);
                 
                 if (snap.exists()) {
@@ -803,7 +838,7 @@ export const BusinessProvider = ({ children }) => {
                             for (const item of data.items) {
                                 if (item.id) {
                                     try {
-                                        await updateDoc(doc(db, 'products', item.id), {
+                                        await updateDoc(tDoc('products', item.id), {
                                             sales: increment(-(Number(item.quantity) || 0))
                                         });
                                     } catch (e) {
@@ -838,12 +873,12 @@ export const BusinessProvider = ({ children }) => {
             return { success: false, error: "Datos de contenido inválidos (undefined)" };
         }
         try {
-            const q = query(collection(db, 'site_content'), where('section', '==', section), where('key', '==', key));
+            const q = query(tCol('site_content'), where('section', '==', section), where('key', '==', key));
             const snapshot = await getDocs(q);
             if (snapshot.empty) {
-                await addDoc(collection(db, 'site_content'), { section, key, content });
+                await addDoc(tCol('site_content'), { section, key, content });
             } else {
-                await updateDoc(doc(db, 'site_content', snapshot.docs[0].id), { content });
+                await updateDoc(tDoc('site_content', snapshot.docs[0].id), { content });
             }
             return { success: true };
         } catch (err) {
@@ -885,7 +920,7 @@ export const BusinessProvider = ({ children }) => {
                 production_status: 'scheduled'
             };
 
-            const docRef = await addDoc(collection(db, 'orders'), orderData);
+            const docRef = await addDoc(tCol('orders'), orderData);
             setOrders(prev => [{ id: docRef.id, ...orderData }, ...prev]);
             return { success: true, id: docRef.id };
         } catch (err) {
@@ -939,7 +974,7 @@ export const BusinessProvider = ({ children }) => {
 
             if (unitCost > 0) {
                 try {
-                    const docRef = doc(db, 'products', pt.id);
+                    const docRef = tDoc('products', pt.id);
                     await updateDoc(docRef, {
                         recipe_cost: unitCost,
                         automated_cost: unitCost,
@@ -960,42 +995,42 @@ export const BusinessProvider = ({ children }) => {
 
     const addItem = useCallback(async (data) => {
         try {
-            const docRef = await addDoc(collection(db, 'products'), { ...data, created_at: new Date().toISOString() });
+            const docRef = await addDoc(tCol('products'), { ...data, created_at: new Date().toISOString() });
             return { success: true, id: docRef.id };
         } catch (err) { return { success: false, error: err.message }; }
     }, []);
 
     const updateItem = useCallback(async (id, data) => {
         try {
-            await updateDoc(doc(db, 'products', id), data);
+            await updateDoc(tDoc('products', id), data);
             return { success: true };
         } catch (err) { return { success: false, error: err.message }; }
     }, []);
 
     const deleteItem = useCallback(async (id) => {
         try {
-            await deleteDoc(doc(db, 'products', id));
+            await deleteDoc(tDoc('products', id));
             return { success: true };
         } catch (err) { return { success: false, error: err.message }; }
     }, []);
 
     const addSupplier = useCallback(async (data) => {
         try {
-            const docRef = await addDoc(collection(db, 'suppliers'), { ...data, created_at: new Date().toISOString() });
+            const docRef = await addDoc(tCol('suppliers'), { ...data, created_at: new Date().toISOString() });
             return { success: true, id: docRef.id };
         } catch (err) { return { success: false, error: err.message }; }
     }, []);
 
     const updateSupplier = useCallback(async (id, data) => {
         try {
-            await updateDoc(doc(db, 'suppliers', id), data);
+            await updateDoc(tDoc('suppliers', id), data);
             return { success: true };
         } catch (err) { return { success: false, error: err.message }; }
     }, []);
 
     const deleteSupplier = useCallback(async (id) => {
         try {
-            await deleteDoc(doc(db, 'suppliers', id));
+            await deleteDoc(tDoc('suppliers', id));
             return { success: true };
         } catch (err) { return { success: false, error: err.message }; }
     }, []);
@@ -1013,7 +1048,7 @@ export const BusinessProvider = ({ children }) => {
             }
 
             // A. Increment Sales for the item (Finished Good or Kit)
-            await updateDoc(doc(db, 'products', itemId), {
+            await updateDoc(tDoc('products', itemId), {
                 sales: increment(Number(quantity) || 0)
             });
 
@@ -1045,7 +1080,7 @@ export const BusinessProvider = ({ children }) => {
 
     const updateOrder = useCallback(async (id, data) => {
         try {
-            const orderRef = doc(db, 'orders', id);
+            const orderRef = tDoc('orders', id);
             const snap = await getDoc(orderRef);
             const oldData = snap.exists() ? snap.data() : {};
 
@@ -1101,7 +1136,7 @@ export const BusinessProvider = ({ children }) => {
 
     const addPurchase = useCallback(async (purchaseData) => {
         try {
-            const counterRef = doc(db, 'metadata', 'counters');
+            const counterRef = tDoc('metadata', 'counters');
             let finalId;
 
             await runTransaction(db, async (transaction) => {
@@ -1118,7 +1153,7 @@ export const BusinessProvider = ({ children }) => {
                 finalId = `OC-${String(nextVal).padStart(4, '0')}`;
             });
 
-            const docRef = await addDoc(collection(db, 'purchase_orders'), {
+            const docRef = await addDoc(tCol('purchase_orders'), {
                 ...purchaseData,
                 id: finalId,
                 order_number: finalId,
@@ -1139,7 +1174,7 @@ export const BusinessProvider = ({ children }) => {
                 date: data.date || data.expense_date || new Date().toLocaleDateString('en-CA'),
                 created_at: new Date().toISOString()
             };
-            const docRef = await addDoc(collection(db, 'expenses'), expenseData);
+            const docRef = await addDoc(tCol('expenses'), expenseData);
 
             // AUTO-BANK MOVEMENT
             if (expenseData.bank_id || expenseData.bankId) {
@@ -1172,7 +1207,7 @@ export const BusinessProvider = ({ children }) => {
 
     const updateExpense = useCallback(async (id, data) => {
         try {
-            await updateDoc(doc(db, 'expenses', id), { 
+            await updateDoc(tDoc('expenses', id), { 
                 ...data, 
                 date: data.date || data.expense_date,
                 updated_at: new Date().toISOString() 
@@ -1183,7 +1218,7 @@ export const BusinessProvider = ({ children }) => {
 
     const deleteExpense = useCallback(async (id, user = null) => {
         try {
-            const expenseRef = doc(db, 'expenses', id);
+            const expenseRef = tDoc('expenses', id);
             const snap = await getDoc(expenseRef);
             if (!snap.exists()) throw new Error("Gasto no encontrado");
             const data = snap.data();
@@ -1214,27 +1249,27 @@ export const BusinessProvider = ({ children }) => {
 
     const addBank = useCallback(async (data) => {
         try {
-            const docRef = await addDoc(collection(db, 'banks'), { ...data, created_at: new Date().toISOString() });
+            const docRef = await addDoc(tCol('banks'), { ...data, created_at: new Date().toISOString() });
             return { success: true, id: docRef.id };
         } catch (err) { return { success: false, error: err.message }; }
     }, []);
 
     const updateBank = useCallback(async (id, data) => {
         try {
-            await updateDoc(doc(db, 'banks', id), { ...data, updated_at: new Date().toISOString() });
+            await updateDoc(tDoc('banks', id), { ...data, updated_at: new Date().toISOString() });
             return { success: true };
         } catch (err) { return { success: false, error: err.message }; }
     }, []);
 
     const deleteBank = useCallback(async (id) => {
         try {
-            await deleteDoc(doc(db, 'banks', id));
+            await deleteDoc(tDoc('banks', id));
             return { success: true };
         } catch (err) { return { success: false, error: err.message }; }
     }, []);
 
     const addQuotation = useCallback(async (quoteData) => {
-        try { await addDoc(collection(db, 'quotations'), quoteData); return { success: true }; }
+        try { await addDoc(tCol('quotations'), quoteData); return { success: true }; }
         catch (err) { console.error("Error adding quote:", err); return { success: false, error: err.message }; }
     }, []);
 
@@ -1245,7 +1280,7 @@ export const BusinessProvider = ({ children }) => {
             
             // For backward compatibility, also delete in Firebase if it's still there
             try {
-                await deleteDoc(doc(db, 'quotations', id));
+                await deleteDoc(tDoc('quotations', id));
             } catch (firebaseErr) {
                 console.warn("Firebase delete failed (expected if migrating):", firebaseErr.message);
             }
@@ -1264,7 +1299,7 @@ export const BusinessProvider = ({ children }) => {
 
     const updateLead = useCallback(async (id, data) => {
         try {
-            await updateDoc(doc(db, 'leads', id), { ...data, updated_at: new Date().toISOString() });
+            await updateDoc(tDoc('leads', id), { ...data, updated_at: new Date().toISOString() });
             return { success: true };
         } catch (err) { return { success: false, error: err.message }; }
     }, []);
@@ -1281,7 +1316,7 @@ export const BusinessProvider = ({ children }) => {
                 // Find product in Firestore
                 let docSnap = null;
                 let docRef = null;
-                const directRef = doc(db, 'products', item.id || 'none');
+                const directRef = tDoc('products', item.id || 'none');
                 try {
                     const ds = await getDoc(directRef);
                     if (ds.exists()) {
@@ -1294,7 +1329,7 @@ export const BusinessProvider = ({ children }) => {
 
 
                 if (!docSnap) {
-                    const qName = query(collection(db, 'products'), where('name', '==', String(item.name || '')));
+                    const qName = query(tCol('products'), where('name', '==', String(item.name || '')));
                     const snapName = await getDocs(qName);
                     if (!snapName.empty) {
                         docSnap = snapName.docs[0];
@@ -1337,7 +1372,7 @@ export const BusinessProvider = ({ children }) => {
             }
 
             // 2. Update OC status - Search for the doc to be safe (it might be poId or dbId)
-            let poDocRef = doc(db, 'purchase_orders', poId);
+            let poDocRef = tDoc('purchase_orders', poId);
             let poSnapExists = false;
             try {
                 const poSnap = await getDoc(poDocRef);
@@ -1346,7 +1381,7 @@ export const BusinessProvider = ({ children }) => {
 
             if (!poSnapExists) {
                 // If ID doesn't match a doc ID, search by custom 'id' field
-                const qPo = query(collection(db, 'purchase_orders'), where('id', '==', poId));
+                const qPo = query(tCol('purchase_orders'), where('id', '==', poId));
                 const poSnaps = await getDocs(qPo);
                 if (!poSnaps.empty) {
                     poDocRef = poSnaps.docs[0].ref;
@@ -1365,24 +1400,24 @@ export const BusinessProvider = ({ children }) => {
                 for (const orderId of relatedOrders) {
                     if (!orderId) continue;
                     // Búsqueda inteligente: intentar por order_number o por el campo id (manuales)
-                    let qOrd = query(collection(db, 'orders'), where('order_number', '==', orderId));
+                    let qOrd = query(tCol('orders'), where('order_number', '==', orderId));
                     let ordSnaps = await getDocs(qOrd);
                     
                     if (ordSnaps.empty) {
-                        qOrd = query(collection(db, 'orders'), where('id', '==', orderId));
+                        qOrd = query(tCol('orders'), where('id', '==', orderId));
                         ordSnaps = await getDocs(qOrd);
                     }
 
-                    const targetOrderDoc = ordSnaps.empty ? doc(db, 'orders', String(orderId)) : ordSnaps.docs[0].ref;
+                    const targetOrderDoc = ordSnaps.empty ? tDoc('orders', String(orderId)) : ordSnaps.docs[0].ref;
 
                     // Check all POs related to this order
-                    const qPoRelated = query(collection(db, 'purchase_orders'), where('related_orders', 'array-contains', orderId));
+                    const qPoRelated = query(tCol('purchase_orders'), where('related_orders', 'array-contains', orderId));
                     const poSnapsRelated = await getDocs(qPoRelated);
 
                     // If no POs found by related_orders array, check for simple relatedOrders field (migration compatibility)
                     let docsToCheck = poSnapsRelated.docs;
                     if (docsToCheck.length === 0) {
-                        const qPoFallback = query(collection(db, 'purchase_orders'), where('relatedOrders', 'array-contains', orderId));
+                        const qPoFallback = query(tCol('purchase_orders'), where('relatedOrders', 'array-contains', orderId));
                         const poSnapsFallback = await getDocs(qPoFallback);
                         docsToCheck = poSnapsFallback.docs;
                     }
@@ -1416,11 +1451,11 @@ export const BusinessProvider = ({ children }) => {
             let finalProvider = providerName;
 
             // Search by order_number/id field if document doesn't exist directly
-            const directRef = doc(db, 'purchase_orders', poId);
+            const directRef = tDoc('purchase_orders', poId);
             const directSnap = await getDoc(directRef).catch(() => null);
 
             if (!directSnap || !directSnap.exists()) {
-                const q = query(collection(db, 'purchase_orders'), where('id', '==', poId));
+                const q = query(tCol('purchase_orders'), where('id', '==', poId));
                 const snap = await getDocs(q);
                 if (!snap.empty) {
                     docId = snap.docs[0].id;
@@ -1429,7 +1464,7 @@ export const BusinessProvider = ({ children }) => {
                     if (!finalProvider) finalProvider = data.provider_name || data.providerName || 'Proveedor';
                 } else {
                     // One last try searching by order_number
-                    const q2 = query(collection(db, 'purchase_orders'), where('order_number', '==', poId));
+                    const q2 = query(tCol('purchase_orders'), where('order_number', '==', poId));
                     const snap2 = await getDocs(q2);
                     if (!snap2.empty) {
                         docId = snap2.docs[0].id;
@@ -1445,7 +1480,7 @@ export const BusinessProvider = ({ children }) => {
             }
 
             // 2. Update OC payment status
-            await updateDoc(doc(db, 'purchase_orders', docId), {
+            await updateDoc(tDoc('purchase_orders', docId), {
                 payment_status: 'Pagado',
                 paymentStatus: 'Pagado',
                 bank_id: bankId,
@@ -1454,7 +1489,7 @@ export const BusinessProvider = ({ children }) => {
             });
 
             // 3. Create Expense Record (PyG module)
-            await addDoc(collection(db, 'expenses'), {
+            await addDoc(tCol('expenses'), {
                 date: new Date().toLocaleDateString('en-CA'),
                 category: 'Materia Prima / Compras',
                 description: `Pago OC ${poId} - ${finalProvider}`,
@@ -1529,7 +1564,7 @@ export const BusinessProvider = ({ children }) => {
                 quality: qualityPercent
             };
 
-            await addDoc(collection(db, 'production_analytics'), snapshot);
+            await addDoc(tCol('production_analytics'), snapshot);
         } catch (err) {
             console.error("Error saving production snapshot:", err);
         }
@@ -1537,14 +1572,14 @@ export const BusinessProvider = ({ children }) => {
 
     const saveOdp = useCallback(async (sku, payload) => {
         try {
-            const q = query(collection(db, 'production_orders'), where('sku', '==', sku));
+            const q = query(tCol('production_orders'), where('sku', '==', sku));
             const snapshot = await getDocs(q);
-            const counterRef = doc(db, 'metadata', 'counters');
+            const counterRef = tDoc('metadata', 'counters');
             
             if (!snapshot.empty) {
                 // UPDATE existing ODP
                 const docId = snapshot.docs[0].id;
-                await updateDoc(doc(db, 'production_orders', docId), { ...payload, updated_at: new Date().toISOString() });
+                await updateDoc(tDoc('production_orders', docId), { ...payload, updated_at: new Date().toISOString() });
             } else {
                 // CREATE new ODP with sequential numbering
                 let finalOdpId = payload.odp_number;
@@ -1569,7 +1604,7 @@ export const BusinessProvider = ({ children }) => {
                     odp_number: finalOdpId,
                     created_at: new Date().toISOString() 
                 };
-                const newDoc = await addDoc(collection(db, 'production_orders'), finalizedOdp);
+                const newDoc = await addDoc(tCol('production_orders'), finalizedOdp);
 
                 // CREAR SNAPSHOT DE ANALÍTICAS SI ESTÁ FINALIZADA
                 if (payload.status === 'DONE' || payload.status === 'Finalizada' || payload.status === 'Finalizado') {
@@ -1586,7 +1621,7 @@ export const BusinessProvider = ({ children }) => {
     const deleteOdp = useCallback(async (dbId, user = null) => {
         try {
             if (!dbId) throw new Error("ID de documento no definido.");
-            const odpRef = doc(db, 'production_orders', dbId);
+            const odpRef = tDoc('production_orders', dbId);
             const snap = await getDoc(odpRef);
             
             if (snap.exists()) {
@@ -1596,7 +1631,7 @@ export const BusinessProvider = ({ children }) => {
                 // REVERSAL LOGIC: If ODP was already adding to inventory, subtract it
                 if (data.status && finalStatuses.includes(data.status)) {
                     // Find product by SKU/Name to reverse 'purchases'
-                    const q = query(collection(db, 'products'), where('name', '==', data.sku));
+                    const q = query(tCol('products'), where('name', '==', data.sku));
                     const prodSnap = await getDocs(q);
                     if (!prodSnap.empty) {
                         try {
@@ -1628,28 +1663,28 @@ export const BusinessProvider = ({ children }) => {
 
     const addRecipe = useCallback(async (data) => {
         try {
-            const docRef = await addDoc(collection(db, 'recipes'), { ...data, created_at: new Date().toISOString() });
+            const docRef = await addDoc(tCol('recipes'), { ...data, created_at: new Date().toISOString() });
             return { success: true, id: docRef.id };
         } catch (err) { return { success: false, error: err.message }; }
     }, []);
 
     const addLead = useCallback(async (data) => {
         try {
-            const docRef = await addDoc(collection(db, 'leads'), { ...data, created_at: new Date().toISOString() });
+            const docRef = await addDoc(tCol('leads'), { ...data, created_at: new Date().toISOString() });
             return { success: true, id: docRef.id };
         } catch (err) { return { success: false, error: err.message }; }
     }, []);
 
     const deleteLead = useCallback(async (id) => {
         try {
-            await deleteDoc(doc(db, 'leads', id));
+            await deleteDoc(tDoc('leads', id));
             return { success: true };
         } catch (err) { return { success: false, error: err.message }; }
     }, []);
 
     const addUser = useCallback(async (data) => {
         try {
-            const docRef = await addDoc(collection(db, 'users'), {
+            const docRef = await addDoc(tCol('users'), {
                 ...data,
                 created_at: new Date().toISOString(),
                 status: data.status || 'Active'
@@ -1660,23 +1695,23 @@ export const BusinessProvider = ({ children }) => {
 
     const updateUser = useCallback(async (id, data) => {
         try {
-            await updateDoc(doc(db, 'users', id), { ...data, updated_at: new Date().toISOString() });
+            await updateDoc(tDoc('users', id), { ...data, updated_at: new Date().toISOString() });
             return { success: true };
         } catch (err) { return { success: false, error: err.message }; }
     }, []);
 
     const deleteUser = useCallback(async (id) => {
         try {
-            await deleteDoc(doc(db, 'users', id));
+            await deleteDoc(tDoc('users', id));
             return { success: true };
         } catch (err) { return { success: false, error: err.message }; }
     }, []);
 
     const deleteRecipeByProduct = useCallback(async (productId) => {
         try {
-            const q = query(collection(db, 'recipes'), where('finished_good_id', '==', productId));
+            const q = query(tCol('recipes'), where('finished_good_id', '==', productId));
             const snapshot = await getDocs(q);
-            const promises = snapshot.docs.map(d => deleteDoc(doc(db, 'recipes', d.id)));
+            const promises = snapshot.docs.map(d => deleteDoc(tDoc('recipes', d.id)));
             await Promise.all(promises);
             return { success: true };
         } catch (err) { return { success: false, error: err.message }; }
@@ -1687,7 +1722,7 @@ export const BusinessProvider = ({ children }) => {
 
     const saveWebCheckout = useCallback(async (data) => {
         try {
-            const docRef = await addDoc(collection(db, 'web_checkouts'), {
+            const docRef = await addDoc(tCol('web_checkouts'), {
                 ...data,
                 created_at: new Date().toISOString(),
                 status: 'pending'
@@ -1701,7 +1736,7 @@ export const BusinessProvider = ({ children }) => {
 
     const getWebCheckout = useCallback(async (checkoutId) => {
         try {
-            const snapshot = await getDocs(query(collection(db, 'web_checkouts'), where('__name__', '==', checkoutId)));
+            const snapshot = await getDocs(query(tCol('web_checkouts'), where('__name__', '==', checkoutId)));
             if (snapshot.empty) return { success: false, error: "Checkout no encontrado" };
             return { success: true, data: snapshot.docs[0].data() };
         } catch (err) {
@@ -1712,7 +1747,7 @@ export const BusinessProvider = ({ children }) => {
 
     const updateWebCheckoutStatus = useCallback(async (checkoutId, status) => {
         try {
-            const docRef = doc(db, 'web_checkouts', checkoutId);
+            const docRef = tDoc('web_checkouts', checkoutId);
             await updateDoc(docRef, { status: status, updated_at: new Date().toISOString() });
             return { success: true };
         } catch (err) {
@@ -1723,7 +1758,7 @@ export const BusinessProvider = ({ children }) => {
 
     const addRejectedProduct = useCallback(async (data) => {
         try {
-            const docRef = await addDoc(collection(db, 'rejected_products'), { 
+            const docRef = await addDoc(tCol('rejected_products'), { 
                 ...data, 
                 created_at: new Date().toISOString() 
             });
@@ -1734,7 +1769,7 @@ export const BusinessProvider = ({ children }) => {
     const saveConversion = useCallback(async (from, to, factor) => {
         try {
             const id = `${from}_${to}`;
-            await setDoc(doc(db, 'unit_conversions', id), { from, to, factor: Number(factor) });
+            await setDoc(tDoc('unit_conversions', id), { from, to, factor: Number(factor) });
             return { success: true };
         } catch (err) { return { success: false, error: err.message }; }
     }, []);
@@ -1749,7 +1784,7 @@ export const BusinessProvider = ({ children }) => {
 
         try {
             const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
-            const analyticsRef = doc(db, 'analytics', today);
+            const analyticsRef = tDoc('analytics', today);
             
             await setDoc(analyticsRef, {
                 date: today,
@@ -1801,13 +1836,13 @@ export const BusinessProvider = ({ children }) => {
 
 
     const value = useMemo(() => ({
-        loading, items, recipes, providers, orders: enrichedOrders, expenses, purchaseOrders, banks, bankTransactions, taxSettings, clients, siteContent, lastUpdate, lastPublish: buildInfo.lastPublish, productionOrders: processedProductionOrders, rawProductionOrders: productionOrders, productionAnalytics, users, units, ownCompany, leads, subscriptions, quotations, analytics,
+        loading, tenantId, setTenantId, items, recipes, providers, orders: enrichedOrders, expenses, purchaseOrders, banks, bankTransactions, taxSettings, clients, siteContent, lastUpdate, lastPublish: buildInfo.lastPublish, productionOrders: processedProductionOrders, rawProductionOrders: productionOrders, productionAnalytics, users, units, ownCompany, leads, subscriptions, quotations, analytics,
         setItems, setOrders, setExpenses, setPurchaseOrders, setBanks, setBankTransactions, setClients, setSiteContent, setProductionOrders, setLeads, setSubscriptions, setUsers, setUnits, setTaxSettings, setAnalytics,
         refreshData, addClient, upsertMember, addOrder, deleteOrders, updateSiteContent, recalculatePTCosts, updateBankBalance, updateClient, deleteClient,
         addItem, updateItem, deleteItem, addSupplier, updateSupplier, deleteSupplier, updateOrder, addPurchase, addRecipe, deleteRecipeByProduct, saveOdp, deleteOdp, addExpense, updateExpense, deleteExpense, addBank, updateBank, deleteBank, receivePurchase, payPurchase, updateLead, addLead, deleteLead, addQuotation, deleteQuotation,
         addUser, updateUser, deleteUser, consumeMaterials, loadFinishedGoods, saveConversion, convertUnit, saveWebCheckout, getWebCheckout, updateWebCheckoutStatus, addRejectedProduct, createInternalOrder, updateInventoryConfig, logVisit, addAdminLog, auditStockAdjustment, sendWelcomeEmail
     }), [
-        loading, items, recipes, providers, enrichedOrders, expenses, purchaseOrders, banks, bankTransactions, taxSettings, clients, siteContent, lastUpdate, processedProductionOrders, productionOrders, productionAnalytics, leads, subscriptions, quotations, users, units, ownCompany, analytics,
+        loading, tenantId, items, recipes, providers, enrichedOrders, expenses, purchaseOrders, banks, bankTransactions, taxSettings, clients, siteContent, lastUpdate, processedProductionOrders, productionOrders, productionAnalytics, leads, subscriptions, quotations, users, units, ownCompany, analytics,
         setItems, setOrders, setExpenses, setPurchaseOrders, setBanks, setBankTransactions, setClients, setSiteContent, setProductionOrders, setLeads, setSubscriptions, setUsers, setUnits, setTaxSettings, setAnalytics,
         refreshData, addClient, upsertMember, addOrder, deleteOrders, updateSiteContent, recalculatePTCosts, updateBankBalance, updateClient, deleteClient,
         addItem, updateItem, deleteItem, addSupplier, updateSupplier, deleteSupplier, updateOrder, addPurchase, addRecipe, deleteRecipeByProduct, saveOdp, deleteOdp, addExpense, updateExpense, deleteExpense, addBank, updateBank, deleteBank, receivePurchase, payPurchase, updateLead, addLead, deleteLead, addQuotation, deleteQuotation,

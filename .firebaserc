@@ -1,5 +1,18 @@
 {
   "projects": {
     "default": "delta-core-cloud-45ea0"
-  }
+  },
+  "targets": {
+    "delta-core-cloud-45ea0": {
+      "hosting": {
+        "zeticas": [
+          "delta-core-cloud-45ea0"
+        ],
+        "deltacore": [
+          "delta-coretech-test"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

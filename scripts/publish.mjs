@@ -2,41 +2,56 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 
 async function publish() {
-    console.log('🚀 Iniciando proceso de PUBLICACIÓN DIRECTA...');
+    const args = process.argv.slice(2);
+    const isAll = args.includes('--all');
+    const isDeltacore = args.includes('--deltacore');
+    const isZeticas = args.includes('--zeticas');
+
+    console.log('🚀 Iniciando proceso de PUBLICACIÓN MULTISITIO...');
+    
     try {
-        // 0. Registrar fecha del publish (Primero para incluirlo en el commit y build)
+        // 0. Registrar fecha del publish
         const timestamp = new Date().toLocaleString('es-CO', {
             day: '2-digit', month: '2-digit', year: 'numeric',
             hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
         });
         
-        // Write to BOTH locations: src/data/ for local imports and public/ for static access
         fs.writeFileSync('src/data/build_info.json', JSON.stringify({ lastPublish: timestamp }, null, 4));
         fs.writeFileSync('public/build_info.json', JSON.stringify({ lastPublish: timestamp }, null, 4));
         
         console.log(`🕒 Registrada fecha de publicación: ${timestamp}`);
 
-        // 1. Guardar cambios locales (Auto-publish)
-        console.log('📦 Guardando cambios locales (Git)...');
-
+        // 1. Git Push (Opcional, pero bueno para mantener sincronía)
+        console.log('📦 Sincronizando repositorio local...');
         execSync('git add .', { stdio: 'inherit' });
         try {
-            execSync('git commit -m "Auto-publish from Antigravity"', { stdio: 'inherit' });
+            execSync('git commit -m "Multisite publish: ' + timestamp + '"', { stdio: 'inherit' });
         } catch (e) {
-            console.log('ℹ️ No hay cambios nuevos que commitear.');
+            console.log('ℹ️ No hay cambios nuevos.');
         }
 
         // 2. Compilar (Build)
-        console.log('🏽 Compilando aplicación (Vite)...');
+        console.log('🏽 Compilando aplicación...');
         execSync('npm run build', { stdio: 'inherit' });
 
-        // 3. Desplegar (Firebase Hosting)
-        console.log('🔥 Desplegando en Google Cloud (Firebase Hosting)...');
-        execSync('npx firebase deploy --only hosting', { stdio: 'inherit' });
+        // 3. Desplegar según Target
+        if (isAll || (!isDeltacore && !isZeticas)) {
+            console.log('🔥 Desplegando en AMBOS sitios (Zeticas y Delta CoreTech)...');
+            execSync('cmd /c npx firebase deploy --only hosting', { stdio: 'inherit' });
+        } else {
+            if (isZeticas) {
+                console.log('🔥 Desplegando solo en ZETICAS...');
+                execSync('cmd /c npx firebase deploy --only hosting:zeticas', { stdio: 'inherit' });
+            }
+            if (isDeltacore) {
+                console.log('🔥 Desplegando solo en DELTA CORETECH...');
+                execSync('cmd /c npx firebase deploy --only hosting:deltacore', { stdio: 'inherit' });
+            }
+        }
 
-        console.log('🔥 ¡SITIO ACTUALIZADO EN VIVO CON ÉXITO! 🔥');
+        console.log('✅ ¡SITIO(S) ACTUALIZADO(S) CON ÉXITO! ✅');
     } catch (error) {
-        console.error('❌ Error durante el proceso de publicación:', error.message);
+        console.error('❌ Error en el proceso de publicación:', error.message);
         process.exit(1);
     }
 }

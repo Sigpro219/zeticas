@@ -70,7 +70,8 @@ const Gestion = () => {
     const navigate = useNavigate();
     const { tab } = useParams();
     const { logout } = useAuth();
-    const {
+    const { 
+        tenantId,
         items, setItems,
         orders, setOrders,
         expenses, setExpenses,
@@ -88,7 +89,7 @@ const Gestion = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [isKanbanModalOpen, setIsKanbanModalOpen] = useState(false);
 
-    let activeTab = tab || localStorage.getItem('zeticas_last_tab');
+    let activeTab = tab || localStorage.getItem(`${tenantId}_last_tab`);
     if (!allTabs.includes(activeTab)) {
         activeTab = 'kanban';
     }
@@ -100,12 +101,12 @@ const Gestion = () => {
 
     const isMasterDataTab = ['products', 'recipes', 'suppliers', 'clients', 'costs', 'banks', 'web_cms', 'web_shipping', 'users_admin'].includes(activeTab);
     const [isMasterDataOpen, setIsMasterDataOpen] = useState(() => {
-        const savedState = localStorage.getItem('zeticas_master_data_open');
-        return savedState !== null ? JSON.parse(savedState) : isMasterDataTab;
+        const savedState = localStorage.getItem(`${tenantId}_master_data_open`);
+        return savedState !== null ? JSON.parse(savedState) : isMasterDataOpen;
     });
 
     const [isWebAdminOpen, setIsWebAdminOpen] = useState(() => {
-        const savedState = localStorage.getItem('zeticas_web_admin_open');
+        const savedState = localStorage.getItem(`${tenantId}_web_admin_open`);
         return savedState !== null ? JSON.parse(savedState) : ['web_cms', 'web_shipping'].includes(activeTab);
     });
 
@@ -113,20 +114,20 @@ const Gestion = () => {
         if (!tab || !allTabs.includes(tab)) {
             navigate(`/gestion/${activeTab}`, { replace: true });
         } else {
-            localStorage.setItem('zeticas_last_tab', tab);
+            localStorage.setItem(`${tenantId}_last_tab`, tab);
         }
-    }, [tab, activeTab, navigate]);
+    }, [tab, activeTab, navigate, tenantId]);
 
     React.useEffect(() => {
         if (['products', 'recipes', 'suppliers', 'clients', 'costs', 'banks', 'web_cms', 'web_shipping', 'users_admin'].includes(activeTab)) {
             setIsMasterDataOpen(true);
-            localStorage.setItem('zeticas_master_data_open', 'true');
+            localStorage.setItem(`${tenantId}_master_data_open`, 'true');
         }
         if (['web_cms', 'web_shipping', 'users_admin'].includes(activeTab)) {
             setIsWebAdminOpen(true);
-            localStorage.setItem('zeticas_web_admin_open', 'true');
+            localStorage.setItem(`${tenantId}_web_admin_open`, 'true');
         }
-    }, [activeTab]);
+    }, [activeTab, tenantId]);
 
     const setActiveTab = (tabId) => {
         navigate(`/gestion/${tabId}`);
@@ -196,7 +197,7 @@ const Gestion = () => {
                         <Menu size={24} />
                     </button>
                     <span style={{ fontWeight: '800', color: deepTeal, fontSize: '1.1rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        Zeticas OS
+                        {tenantId === 'deltacore' ? 'Delta CoreTech' : 'Zeticas OS'}
                     </span>
                 </div>
             )}

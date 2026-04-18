@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import DocumentBuilder from '../components/DocumentBuilder';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { RefreshCw, FileText, Download, TrendingUp, Calendar, Plus, Trash2, Filter, ShoppingCart, Globe, Users, Briefcase, Search, ChevronDown, X, Save, AlertTriangle, ArrowRight, Mail, Phone, MapPin, Hash, Sparkles, CheckCircle, ChefHat, DollarSign, PenTool, CheckCircle2, AlertCircle } from 'lucide-react';
+import { RefreshCw, FileText, Download, TrendingUp, Calendar, Plus, Trash2, Filter, ShoppingCart, Globe, Users, Briefcase, Search, ChevronDown, X, Save, AlertTriangle, ArrowRight, Mail, Phone, MapPin, Hash, Sparkles, CheckCircle, ChefHat, DollarSign, PenTool, CheckCircle2, AlertCircle, Tags } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { collection, addDoc } from 'firebase/firestore';
 import { colombia_cities } from '../data/colombia_cities';
@@ -454,30 +454,52 @@ const Orders = ({ orders }) => {
                 return;
             }
 
-            setDownloadedIds([]); // Reset for safety check on each explosion batch
+            setDownloadedIds([]);
 
             const selectedOrderObjects = (orders || []).filter(o => selectedOrders.includes(o.id));
             const missingRecipes = [];
 
             // ── Paso 1: Agrupar demanda total por PT en todos los pedidos ──────────────
             const demandByProduct = {};
+            
             selectedOrderObjects.forEach(order => {
-                order.items.forEach(item => {
-                    const pt = items.find(i =>
-                        i.name === item.name ||
-                        i.name?.toLowerCase() === item.name?.toLowerCase()
+                const orderItems = order.items || [];
+                orderItems.forEach(item => {
+                    if (!item) return;
+                    
+                    const itemName = item.name || item.product_name || 'Desconocido';
+                    // Lookup PT in master items
+                    const pt = items.find(i => 
+                        i.id === item.id || 
+                        String(i.name || '').toLowerCase().trim() === String(itemName).toLowerCase().trim()
                     );
+
                     if (!pt) {
-                        if (!missingRecipes.includes(item.name)) missingRecipes.push(item.name);
+                        if (!missingRecipes.includes(itemName)) missingRecipes.push(itemName);
                         return;
                     }
-                    const recipe = recipes[pt.id];
+
+                    // Recipe Lookup: Try ID first, then name
+                    let recipe = recipes[pt.id] || recipes[String(pt.name || '').toLowerCase().trim()];
+                    
+                    // KIT Support: If no recipe found in the 'recipes' collection, check if it is a Kit with components
+                    if ((!recipe || recipe.length === 0) && pt.product_type === 'Kit' && pt.components) {
+                        recipe = pt.components.map(comp => ({
+                            rm_id: comp.id,
+                            name: comp.name,
+                            qty: comp.qty,
+                            unit: comp.unit || 'und',
+                            yield_quantity: 1
+                        }));
+                    }
+
                     if (!recipe || recipe.length === 0) {
-                        if (!missingRecipes.includes(item.name)) missingRecipes.push(item.name);
+                        if (!missingRecipes.includes(itemName)) missingRecipes.push(itemName);
                         return;
                     }
+
                     if (!demandByProduct[pt.id]) {
-                        demandByProduct[pt.id] = { pt, recipe, totalDemand: 0, label: item.name };
+                        demandByProduct[pt.id] = { pt, recipe, totalDemand: 0, label: itemName };
                     }
                     demandByProduct[pt.id].totalDemand += Number(item.quantity) || 0;
                 });
@@ -485,18 +507,20 @@ const Orders = ({ orders }) => {
 
             const uniqueMissing = [...new Set(missingRecipes)].filter(Boolean);
             if (uniqueMissing.length > 0) {
-                alert(`⚠️ Atención: No se han configurado las recetas para los siguientes productos: ${uniqueMissing.join(', ')}. No es posible realizar la explosión de materia prima sin estas fórmulas. Por favor, diríjase al módulo de Recetas y regístrelas para continuar.`);
+                alert(`⚠️ Atención: No se han configurado las recetas o componentes para los siguientes productos: ${uniqueMissing.join(', ')}. No es posible realizar la explosión de materia prima sin estas fórmulas.`);
                 if (Object.keys(demandByProduct).length === 0) return;
             }
 
             const ptData = Object.values(demandByProduct).map(({ pt, recipe, totalDemand, label }) => {
-                const initialVal = pt.initial !== undefined ? Number(pt.initial) : (Number(pt.stock) || 0);
-                const inventoryPT = initialVal; // Use exact initial stock mapping
+                const stockVal = pt.initial !== undefined ? Number(pt.initial) : (Number(pt.stock) || 0);
+                const purchasesVal = Number(pt.purchases) || 0;
+                const salesVal = Number(pt.sales) || 0;
+                const inventoryPT = stockVal + purchasesVal - salesVal;
+                
                 const safety = Number(pt.min_stock_level) || Number(pt.safety) || 0;
-                const batchSize = pt.batch_size || 1;
+                const batchSize = Number(pt.batch_size) || 1;
 
                 // FÓRMULA: Necesidad de Fabricación = (Pedido - Existencia) + Nivel de Seguridad
-                // Esto asegura que tras producir, quedemos exactamente en el Nivel de Seguridad.
                 const neededToReachSafety = (totalDemand - inventoryPT) + safety;
                 const suggestedProduce = Math.max(0, neededToReachSafety);
 
@@ -518,116 +542,118 @@ const Orders = ({ orders }) => {
             runBOMExplosion(ptData);
             setIsExplosionModalOpen(true);
         } catch (error) {
-            console.error("Error during explosion calculation:", error);
-            alert("Ocurrió un error al calcular la explosión. Por favor revisa los datos de los pedidos.");
+            console.error("Critical error during explosion calculation:", error);
+            alert("Ocurrió un error al calcular la explosión. Por favor revisa los datos de los pedidos o consulta la consola para más detalles.");
         }
     };
 
     const runBOMExplosion = (pts) => {
-        const requiredRawMaterials = {};
+        try {
+            const requiredRawMaterials = {};
 
-        // ── Paso 2: Por cada PT, aplicar multiplicador exacto y explosionar ingredientes ──
-        pts.forEach(p => {
-            if (p.manualProduce <= 0) return;
+            // ── Paso 2: Por cada PT, aplicar multiplicador exacto y explosionar ingredientes ──
+            pts.forEach(p => {
+                if (!p.recipe || !Array.isArray(p.recipe) || p.manualProduce <= 0) return;
 
-            // LÓGICA DE BATCHES ENTEROS (n): 
-            // n = redondeo.arriba( Unidades a Fabricar / Tamaño del Batch )
-            const nBatches = Math.ceil(p.manualProduce / p.batchSize);
-            const multiplier = nBatches;
+                const nBatches = Math.ceil(Number(p.manualProduce) / (Number(p.batchSize) || 1));
+                const multiplier = nBatches;
 
-            p.recipe.forEach(ing => {
-                const matInfo = items.find(i => i.id === ing.rm_id || i.id === ing.id || i.name === ing.name);
-                const matId = matInfo?.id || ing.rm_id || ing.id || `temp-${ing.name}`;
+                p.recipe.forEach(ing => {
+                    const matInfo = items.find(i => i.id === ing.rm_id || i.id === ing.id || (i.name && i.name === ing.name));
+                    const matId = matInfo?.id || ing.rm_id || ing.id || `temp-${ing.name}`;
 
-                if (!requiredRawMaterials[matId]) {
-                    const convFactor = matInfo?.conversion_factor ? Number(matInfo.conversion_factor) : 1;
-                    const initialUsageVal = matInfo?.initial !== undefined ? Number(matInfo.initial) : (Number(matInfo?.stock) || 0);
-                    requiredRawMaterials[matId] = {
-                        id: matId,
-                        name: matInfo?.name || ing.name,
-                        requiredQtyUsage: 0, // En unidad de uso
-                        bomBreakdown: [],
-                        currentInvUsage: matInfo ? initialUsageVal : 0, // Use exact initial stock mapping
-                        safetyUsage: Number(matInfo?.min_stock_level) || Number(matInfo?.safety) || 0,
-                        unitUse: matInfo?.unit_measure || matInfo?.unit || ing.unit || 'und', // Unidad de uso
-                        unitPurchase: matInfo?.purchase_unit || matInfo?.unit_measure || 'und', // Unidad de compra
-                        conversionFactor: convFactor,
-                        isMissing: !matInfo
-                    };
-                }
+                    if (!requiredRawMaterials[matId]) {
+                        const convFactor = matInfo?.conversion_factor ? Number(matInfo.conversion_factor) : 1;
+                        const stockBase = matInfo?.initial !== undefined ? Number(matInfo.initial) : (Number(matInfo?.stock) || 0);
+                        const currentInvUsage = stockBase + (Number(matInfo?.purchases) || 0) - (Number(matInfo?.sales) || 0);
+                        
+                        requiredRawMaterials[matId] = {
+                            id: matId,
+                            name: matInfo?.name || ing.name,
+                            requiredQtyUsage: 0,
+                            bomBreakdown: [],
+                            currentInvUsage: currentInvUsage,
+                            safetyUsage: Number(matInfo?.min_stock_level) || Number(matInfo?.safety) || 0,
+                            unitUse: matInfo?.unit_measure || matInfo?.unit || ing.unit || 'und',
+                            unitPurchase: matInfo?.purchase_unit || matInfo?.unit_measure || 'und',
+                            conversionFactor: convFactor,
+                            isMissing: !matInfo
+                        };
+                    }
 
-                // La receta define la cantidad por lote de PT.
-                let qtyForTotal = Math.round((Number(ing.qty) || 0) * multiplier * 1e6) / 1e6;
-                
-                // --- Normalización Inteligente de Unidades ---
-                // Si la unidad de la receta (ing.unit) es diferente a la del inventario (matInfo.unit_measure), convertimos.
-                const ingUnit = (ing.unit || '').toLowerCase().trim();
-                const matUnit = (requiredRawMaterials[matId].unitUse || '').toLowerCase().trim();
+                    // Receta define cantidad por lote de PT
+                    let qtyForTotal = Math.round((Number(ing.qty) || 0) * multiplier * 1e6) / 1e6;
+                    
+                    // Normalización de Unidades
+                    const ingUnit = String(ing.unit || '').toLowerCase().trim();
+                    const matUnit = String(requiredRawMaterials[matId].unitUse || '').toLowerCase().trim();
 
-                if (ingUnit !== matUnit) {
-                    if (ingUnit === 'gr' && matUnit === 'lb') qtyForTotal = qtyForTotal / 453.6;
-                    else if (ingUnit === 'gr' && matUnit === 'kg') qtyForTotal = qtyForTotal / 1000;
-                    else if (ingUnit === 'kg' && matUnit === 'gr') qtyForTotal = qtyForTotal * 1000;
-                    else if (ingUnit === 'lb' && matUnit === 'gr') qtyForTotal = qtyForTotal * 453.6;
-                    else if (ingUnit === 'lb' && matUnit === 'kg') qtyForTotal = qtyForTotal / 2.2046;
-                    else if (ingUnit === 'kg' && matUnit === 'lb') qtyForTotal = qtyForTotal * 2.2046;
-                }
+                    if (ingUnit !== matUnit && ingUnit && matUnit) {
+                        const standardFactors = {
+                            'gr_lb': 1 / 453.6,
+                            'gr_kg': 1 / 1000,
+                            'kg_gr': 1000,
+                            'lb_gr': 453.6,
+                            'lb_kg': 1 / 2.2046,
+                            'kg_lb': 2.2046,
+                            'ml_lt': 1 / 1000,
+                            'lt_ml': 1000
+                        };
+                        const factorKey = `${ingUnit}_${matUnit}`;
+                        if (standardFactors[factorKey]) {
+                            qtyForTotal = qtyForTotal * standardFactors[factorKey];
+                        }
+                    }
 
-                requiredRawMaterials[matId].requiredQtyUsage += qtyForTotal;
-
-                requiredRawMaterials[matId].bomBreakdown.push(
-                    `${p.label}: prod=${p.manualProduce} → n=${nBatches} batches (lote ${p.batchSize}) → req: ${qtyForTotal.toFixed(4).replace(/\.?0+$/, '')} ${matUnit}`
-                );
+                    requiredRawMaterials[matId].requiredQtyUsage += qtyForTotal;
+                    requiredRawMaterials[matId].bomBreakdown.push(
+                        `${p.label}: prod=${p.manualProduce} → n=${nBatches} batches → req: ${qtyForTotal.toFixed(4).replace(/\.?0+$/, '')} ${matUnit}`
+                    );
+                });
             });
-        });
 
-        // ── Paso 3: Aplicar fórmula para materia prima y convertir a Unidad de Compra ──
-        const previewItems = Object.values(requiredRawMaterials).map(mat => {
-            // Lógica de Reorden Kanban:
-            // 1. Calculamos cómo quedará el stock físico al terminar la producción de estos lotes.
-            const projectedStockAfterProd = mat.currentInvUsage - mat.requiredQtyUsage;
-            
-            // 2. Umbral Dinámico: Usamos el configurado en el Dashboard (siteContent.inventory.config.redThreshold)
-            // Si el stock cae por debajo de este % de la meta, se dispara la OC.
-            const configThreshold = siteContent?.inventory?.config?.redThreshold !== undefined 
-                ? Number(siteContent.inventory.config.redThreshold) 
-                : 0.5; // default 50%
-            
-            const reorderThreshold = mat.safetyUsage * configThreshold;
-            
-            // 3. REPOSICIÓN TOTAL: Si cruzamos el umbral, compramos para volver al 100% de la Meta.
-            let netUsageNeeds = 0;
-            if (projectedStockAfterProd <= reorderThreshold) {
-                // Compramos para cubrir el hueco y quedar en el Nivel de Seguridad exacto
-                netUsageNeeds = Math.max(0, mat.safetyUsage - projectedStockAfterProd);
-            }
+            // ── Paso 3: Aplicar fórmula para materia prima y convertir a Unidad de Compra ──
+            const previewItems = Object.values(requiredRawMaterials).map(mat => {
+                const projectedStockAfterProd = mat.currentInvUsage - mat.requiredQtyUsage;
+                const configThreshold = siteContent?.inventory?.config?.redThreshold !== undefined 
+                    ? Number(siteContent.inventory.config.redThreshold) 
+                    : 0.5;
+                
+                const reorderThreshold = mat.safetyUsage * configThreshold;
+                
+                let netUsageNeeds = 0;
+                if (projectedStockAfterProd <= reorderThreshold) {
+                    netUsageNeeds = Math.max(0, mat.safetyUsage - projectedStockAfterProd);
+                }
 
-            // Convertir de unidades de USO a unidades de COMPRA usando el factor de conversión
-            const toBuyExact = netUsageNeeds / mat.conversionFactor;
-            const suggestedBuy = Math.ceil(toBuyExact);
+                const toBuyExact = netUsageNeeds / (Number(mat.conversionFactor) || 1);
+                const suggestedBuy = Math.ceil(toBuyExact);
 
-            const matInfo = items.find(i => i.id === mat.id || i.name === mat.name);
-            return {
-                ...mat,
-                requiredQty: parseFloat(mat.requiredQtyUsage.toFixed(4)), // fallback visual compatibility
-                currentInv: parseFloat(mat.currentInvUsage.toFixed(4)), // fallback visual compatibility
-                safety: mat.safetyUsage,
-                unit: mat.unitPurchase,
-                bomBreakdown: mat.bomBreakdown.join(' | '),
-                quantityToBuy: suggestedBuy,
-                exactQuantityToBuy: parseFloat(toBuyExact.toFixed(4)),
-                unitCost: matInfo?.purchase_cost || matInfo?.avgCost || 0, // ensure using purchase_cost
-                providerId: '',
-                providerName: '',
-                providerPhone: '',
-                providerEmail: '',
-            };
-        });
+                const matInfo = items.find(i => i.id === mat.id || i.name === mat.name);
+                return {
+                    ...mat,
+                    requiredQty: parseFloat(Number(mat.requiredQtyUsage).toFixed(4)),
+                    currentInv: parseFloat(Number(mat.currentInvUsage).toFixed(4)),
+                    safety: mat.safetyUsage,
+                    unit: mat.unitPurchase,
+                    bomBreakdown: mat.bomBreakdown.join(' | '),
+                    quantityToBuy: suggestedBuy,
+                    exactQuantityToBuy: parseFloat(Number(toBuyExact).toFixed(4)),
+                    unitCost: matInfo?.purchase_cost || matInfo?.avgCost || 0,
+                    providerId: '',
+                    providerName: '',
+                    providerPhone: '',
+                    providerEmail: '',
+                };
+            });
 
-        // Ordenar por cantidad a comprar (los que necesitan compra arriba)
-        const sortedPreview = [...previewItems].sort((a, b) => b.quantityToBuy - a.quantityToBuy);
-        setExplosionPreview(sortedPreview);
+            const sortedPreview = [...previewItems].sort((a, b) => (Number(b.quantityToBuy) || 0) - (Number(a.quantityToBuy) || 0));
+            setExplosionPreview(sortedPreview);
+        } catch (error) {
+            console.error("Error in runBOMExplosion:", error);
+        }
     };
+
 
     const handleUpdatePtProduction = (ptId, newValue) => {
         const updatedPts = ptExplosionData.map(pt =>

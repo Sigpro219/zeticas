@@ -8,7 +8,10 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "publish": "node scripts/publish.mjs"
+    "publish": "node scripts/publish.mjs",
+    "deploy:all": "node scripts/publish.mjs --all",
+    "deploy:zeticas": "node scripts/publish.mjs --zeticas",
+    "deploy:deltacore": "node scripts/publish.mjs --deltacore"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.95.1",
