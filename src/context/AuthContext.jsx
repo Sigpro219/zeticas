@@ -1,12 +1,16 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc } from 'firebase/firestore';
+import { detectTenantId } from '../lib/tenant';
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [tenantId] = useState(() => detectTenantId());
+
+    const tCol = (name) => collection(db, 'tenants', tenantId, name);
 
     useEffect(() => {
         // Restaurar sesión persistente para una experiencia fluida
@@ -39,9 +43,9 @@ export const AuthProvider = ({ children }) => {
         try {
             // Opción 2: Autenticación Multicapa (Administradores primero, luego Miembros)
             
-            // 2.1 Buscar en colección 'users' (Admin/Staff)
+            // 2.1 Buscar en colección 'users' del Tenant correspondientes
             const qUser = query(
-                collection(db, 'users'), 
+                tCol('users'), 
                 where('email', '==', email.toLowerCase()),
                 where('status', '==', 'Active')
             );
@@ -59,9 +63,9 @@ export const AuthProvider = ({ children }) => {
                 }
             }
 
-            // 2.2 Buscar en colección 'clients' (Miembros del Círculo)
+            // 2.2 Buscar en colección 'clients' del Tenant (Miembros del Círculo)
             const qClient = query(
-                collection(db, 'clients'),
+                tCol('clients'),
                 where('email', '==', email.toLowerCase()),
                 where('is_member', '==', true)
             );
@@ -101,7 +105,7 @@ export const AuthProvider = ({ children }) => {
             const userEmail = result.user.email.toLowerCase();
 
             // Verificar si es Admin
-            const qUser = query(collection(db, 'users'), where('email', '==', userEmail), where('status', '==', 'Active'));
+            const qUser = query(tCol('users'), where('email', '==', userEmail), where('status', '==', 'Active'));
             const snapUser = await getDocs(qUser);
             if (!snapUser.empty) {
                 const authenticatedUser = { id: snapUser.docs[0].id, role: 'admin', ...snapUser.docs[0].data() };
@@ -111,7 +115,7 @@ export const AuthProvider = ({ children }) => {
             }
 
             // Verificar si es Miembro
-            const qClient = query(collection(db, 'clients'), where('email', '==', userEmail), where('is_member', '==', true));
+            const qClient = query(tCol('clients'), where('email', '==', userEmail), where('is_member', '==', true));
             const snapClient = await getDocs(qClient);
             if (!snapClient.empty) {
                 const clientData = snapClient.docs[0].data();

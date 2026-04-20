@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { collection, query, orderBy, onSnapshot, doc, getDocs, getDoc, updateDoc, deleteDoc, addDoc, where, increment, setDoc, runTransaction } from 'firebase/firestore';
 import { products as masterProducts } from '../data/products';
 import buildInfo from '../data/build_info.json';
+import { detectTenantId } from '../lib/tenant';
 
 export const CAMPAIGN_PRESETS = {
     'madre': {
@@ -55,25 +56,7 @@ export const BusinessProvider = ({ children }) => {
     const [lastUpdate, setLastUpdate] = useState(null);
     
     // ── MULTITENANT CORE ──────────────────────────────────────────────────────
-    const [tenantId, setTenantId] = useState(() => {
-        // 1. Detect from URL parameter (?tenant=deltacore) - Highest priority for testing
-        const params = new URLSearchParams(window.location.search);
-        const urlTenant = params.get('tenant');
-        if (urlTenant) {
-            localStorage.setItem('zeticas_current_tenant', urlTenant);
-            return urlTenant;
-        }
-
-        // 2. Detect from Hostname (Production mapping)
-        const host = window.location.hostname;
-        if (host.includes('deltacore') || host.includes('deltacoretech')) {
-            localStorage.setItem('zeticas_current_tenant', 'delta');
-            return 'delta';
-        }
-        
-        // 3. Fallback to localStorage or default
-        return localStorage.getItem('zeticas_current_tenant') || 'zeticas';
-    });
+    const [tenantId, setTenantId] = useState(() => detectTenantId());
 
     /**
      * getTenantPath: Returns the scoped collection path for the current tenant.
@@ -84,9 +67,15 @@ export const BusinessProvider = ({ children }) => {
     }, [tenantId]);
 
     // Helpers to create references easily
-    // Helpers to create references easily
-    const tCol = useCallback((name) => collection(db, 'tenants', tenantId, name), [tenantId]);
-    const tDoc = useCallback((name, id) => doc(db, 'tenants', tenantId, name, id), [tenantId]);
+    const tCol = useCallback((name) => {
+        if (!tenantId) throw new Error("Tenant ID no detectado. Operación de base de datos bloqueada por seguridad.");
+        return collection(db, 'tenants', tenantId, name);
+    }, [tenantId]);
+
+    const tDoc = useCallback((name, id) => {
+        if (!tenantId) throw new Error("Tenant ID no detectado. Operación de base de datos bloqueada por seguridad.");
+        return doc(db, 'tenants', tenantId, name, id);
+    }, [tenantId]);
     // ──────────────────────────────────────────────────────────────────────────
 
     const [items, setItems] = useState([]);
