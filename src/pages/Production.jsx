@@ -26,11 +26,13 @@ import {
     Zap,
     Trash2,
     List,
-    LayoutGrid as GridIcon
+    LayoutGrid as GridIcon,
+    AlertCircle
 } from 'lucide-react';
 
 const STATUS_ALL = 'Todos';
 const STATUS_PROGRAMADA = 'Programada';
+const STATUS_PENDIENTE_MATERIALES = 'Pendiente por Materiales';
 const STATUS_EN_PRODUCCION = 'En Producción';
 const STATUS_FINALIZADA = 'Finalizada';
 
@@ -235,10 +237,32 @@ const Production = () => {
                 // Prioridad: 1. Ajuste manual local, 2. Valor en Firestore, 3. Fallback
                 const finalQty = settings.customQty !== undefined ? settings.customQty : (odpDoc.qty || 0);
 
+                // ── NUEVO: Validación de Disponibilidad de Materiales ──
+                let missingMaterials = [];
+                if (!settings.start && !settings.end) {
+                    recipeList.forEach(ri => {
+                        const mp = items.find(i => i.id === ri.rm_id || (i.name && i.name.toLowerCase().trim() === (ri.name || '').toLowerCase().trim()));
+                        const currentMPStock = mp ? ((mp.initial || 0) + (mp.purchases || 0) - (mp.sales || 0)) : 0;
+                        const yieldQty = Number(ri.yield_quantity) || 1;
+                        const qtyNeeded = (Number(ri.qty) / yieldQty) * finalQty;
+                        
+                        if (currentMPStock < qtyNeeded) {
+                            missingMaterials.push({
+                                name: ri.name || ri.raw_material_name,
+                                missing: qtyNeeded - currentMPStock
+                            });
+                        }
+                    });
+                }
+
                 let status = { text: STATUS_PROGRAMADA, color: 'rgba(239, 68, 68, 0.1)', textColor: '#ef4444' };
-                if (odpDoc.status === 'IN_PROGRESS' || settings.start) {
+                
+                if (missingMaterials.length > 0) {
+                    status = { text: STATUS_PENDIENTE_MATERIALES, color: 'rgba(245, 158, 11, 0.1)', textColor: '#f59e0b' };
+                } else if (odpDoc.status === 'IN_PROGRESS' || settings.start) {
                     status = { text: STATUS_EN_PRODUCCION, color: 'rgba(212, 120, 90, 0.1)', textColor: '#D4785A' };
                 }
+                
                 if (odpDoc.status === 'DONE' || (settings.end && settings.inventorySynced)) {
                     status = { text: STATUS_FINALIZADA, color: 'rgba(16, 185, 129, 0.1)', textColor: '#10b981' };
                 }
@@ -273,7 +297,9 @@ const Production = () => {
                     efficiency,
                     wasteQty: waste || 0,
                     waste_percent: waste_percent || '0.0',
-                    relatedOrders: groups[odpDoc.sku]?.relatedOrders || [], 
+                    relatedOrders: groups[odpDoc.sku]?.relatedOrders || [],
+                    isBlocked: status.text === STATUS_PENDIENTE_MATERIALES,
+                    missingMaterials
                 };
             });
         }
@@ -1157,8 +1183,8 @@ const Production = () => {
                                         <div style={{ width: `${materialReadiness}%`, height: '100%', background: progressColor, transition: 'width 1s ease-in-out', boxShadow: `0 0 10px ${progressColor}40` }}></div>
                                     </div>
                                     {missingDetails.length > 0 && (
-                                        <div style={{ marginTop: '10px', fontSize: '0.65rem', color: '#94a3b8', fontWeight: '700' }}>
-                                            Faltan: {missingDetails.slice(0, 2).join(', ')}{missingDetails.length > 2 ? '...' : ''}
+                                        <div style={{ marginTop: '10px', fontSize: '0.65rem', color: '#f59e0b', fontWeight: '950', background: 'rgba(245, 158, 11, 0.05)', padding: '5px 10px', borderRadius: '8px', border: '1px solid rgba(245, 158, 11, 0.1)' }}>
+                                            🚨 FALTAN: {missingDetails.join(', ').toUpperCase()}
                                         </div>
                                     )}
                                 </div>
@@ -1223,17 +1249,18 @@ const Production = () => {
                                     <div style={{ flex: 1, display: 'flex', gap: '0.8rem' }}>
                                         <button
                                             onClick={() => updateOdp(odp.sku, 'start', new Date().toISOString())}
-                                            disabled={!!odp.settings.start}
+                                            disabled={!!odp.settings.start || odp.isBlocked}
                                             style={{
                                                 flex: 1, padding: '1.2rem', borderRadius: '18px', border: 'none',
-                                                background: odp.settings.start ? '#f1f5f9' : deepTeal,
-                                                color: odp.settings.start ? '#cbd5e1' : '#fff',
-                                                fontWeight: '950', fontSize: '0.8rem', cursor: odp.settings.start ? 'not-allowed' : 'pointer',
-                                                boxShadow: !odp.settings.start ? `0 10px 20px ${deepTeal}30` : 'none',
-                                                transition: 'all 0.3s'
+                                                background: (odp.settings.start || odp.isBlocked) ? '#f1f5f9' : deepTeal,
+                                                color: (odp.settings.start || odp.isBlocked) ? '#cbd5e1' : '#fff',
+                                                fontWeight: '950', fontSize: '0.8rem', cursor: (odp.settings.start || odp.isBlocked) ? 'not-allowed' : 'pointer',
+                                                boxShadow: (!odp.settings.start && !odp.isBlocked) ? `0 10px 20px ${deepTeal}30` : 'none',
+                                                transition: 'all 0.3s',
+                                                position: 'relative'
                                             }}
                                         >
-                                            INICIAR
+                                            {odp.isBlocked ? 'STOCK INSUFICIENTE' : 'INICIAR'}
                                         </button>
                                         <button
                                             onClick={() => updateOdp(odp.sku, 'end', new Date().toISOString())}

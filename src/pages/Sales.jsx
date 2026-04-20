@@ -479,8 +479,9 @@ const Orders = ({ orders }) => {
                         return;
                     }
 
-                    // Recipe Lookup: Try ID first, then name
-                    let recipe = recipes[pt.id] || recipes[String(pt.name || '').toLowerCase().trim()];
+                    // Recipe Lookup: Try ID first, then name (normalized)
+                    const normalizedPtName = String(pt.name || '').toLowerCase().trim();
+                    let recipe = recipes[pt.id] || recipes[normalizedPtName];
                     
                     // KIT Support: If no recipe found in the 'recipes' collection, check if it is a Kit with components
                     if ((!recipe || recipe.length === 0) && pt.product_type === 'Kit' && pt.components) {
@@ -515,14 +516,15 @@ const Orders = ({ orders }) => {
                 const stockVal = pt.initial !== undefined ? Number(pt.initial) : (Number(pt.stock) || 0);
                 const purchasesVal = Number(pt.purchases) || 0;
                 const salesVal = Number(pt.sales) || 0;
-                const inventoryPT = stockVal + purchasesVal - salesVal;
+                const inventoryPT = Math.max(0, stockVal + purchasesVal - salesVal);
                 
-                const safety = Number(pt.min_stock_level) || Number(pt.safety) || 0;
-                const batchSize = Number(pt.batch_size) || 1;
+                const batchSize = Number(pt.batch_size) || Number(pt.batchSize) || 14;
+                const safetyUnits = Number(pt.min_stock_level) || Number(pt.safety) || 2; // "Meta de Seguridad" en Unidades
 
-                // FÓRMULA: Necesidad de Fabricación = (Pedido - Existencia) + Nivel de Seguridad
-                const neededToReachSafety = (totalDemand - inventoryPT) + safety;
-                const suggestedProduce = Math.max(0, neededToReachSafety);
+                // FÓRMULA ZETICAS: Batches = Ceil( (Demanda - Stock + Seguridad) / BatchSize )
+                const netToProduce = (totalDemand - inventoryPT) + safetyUnits;
+                const totalBatches = Math.ceil(Math.max(0, netToProduce) / batchSize);
+                const suggestedProduce = totalBatches * batchSize;
 
                 return {
                     ptId: pt.id,
@@ -531,9 +533,9 @@ const Orders = ({ orders }) => {
                     recipe,
                     totalDemand,
                     inventoryPT,
-                    safety,
+                    safetyUnits,
                     batchSize,
-                    suggestedProduce,
+                    suggestedBatches: totalBatches,
                     manualProduce: suggestedProduce
                 };
             });
@@ -559,7 +561,11 @@ const Orders = ({ orders }) => {
                 const multiplier = nBatches;
 
                 p.recipe.forEach(ing => {
-                    const matInfo = items.find(i => i.id === ing.rm_id || i.id === ing.id || (i.name && i.name === ing.name));
+                    const matInfo = items.find(i => 
+                        i.id === ing.rm_id || 
+                        i.id === ing.id || 
+                        (i.name && i.name.toLowerCase().trim() === (ing.name || '').toLowerCase().trim())
+                    );
                     const matId = matInfo?.id || ing.rm_id || ing.id || `temp-${ing.name}`;
 
                     if (!requiredRawMaterials[matId]) {
@@ -615,23 +621,22 @@ const Orders = ({ orders }) => {
             // ── Paso 3: Aplicar fórmula para materia prima y convertir a Unidad de Compra ──
             const previewItems = Object.values(requiredRawMaterials).map(mat => {
                 const projectedStockAfterProd = mat.currentInvUsage - mat.requiredQtyUsage;
-                const configThreshold = siteContent?.inventory?.config?.redThreshold !== undefined 
-                    ? Number(siteContent.inventory.config.redThreshold) 
-                    : 0.5;
                 
-                const reorderThreshold = mat.safetyUsage * configThreshold;
-                
+                // Si el stock proyectado es insuficiente para cubrir la producción + seguridad, compramos
+                // En Zeticas, buscamos cubrir al menos la Meta de Seguridad (safetyUsage)
                 let netUsageNeeds = 0;
-                if (projectedStockAfterProd <= reorderThreshold) {
+                if (projectedStockAfterProd < mat.safetyUsage) {
                     netUsageNeeds = Math.max(0, mat.safetyUsage - projectedStockAfterProd);
                 }
 
                 const toBuyExact = netUsageNeeds / (Number(mat.conversionFactor) || 1);
+                // Redondear hacia arriba para unidades de compra
                 const suggestedBuy = Math.ceil(toBuyExact);
 
                 const matInfo = items.find(i => i.id === mat.id || i.name === mat.name);
                 return {
                     ...mat,
+                    id: mat.id,
                     requiredQty: parseFloat(Number(mat.requiredQtyUsage).toFixed(4)),
                     currentInv: parseFloat(Number(mat.currentInvUsage).toFixed(4)),
                     safety: mat.safetyUsage,
@@ -640,7 +645,7 @@ const Orders = ({ orders }) => {
                     quantityToBuy: suggestedBuy,
                     exactQuantityToBuy: parseFloat(Number(toBuyExact).toFixed(4)),
                     unitCost: matInfo?.purchase_cost || matInfo?.avgCost || 0,
-                    providerId: '',
+                    providerId: matInfo?.provider_id || '',
                     providerName: '',
                     providerPhone: '',
                     providerEmail: '',
@@ -701,7 +706,7 @@ const Orders = ({ orders }) => {
             const totalOC = subtotal + iva;
 
             newPurchaseOrders.push({
-                id: `(Borrador OC-${idx + 1})`,
+                id: `OC-00${idx + 1}`,
                 providerId: provider.id,
                 providerName: provider.name,
                 providerPhone: provider.phone || '3000000000',
@@ -2581,22 +2586,47 @@ const Orders = ({ orders }) => {
                                     <div style={{ color: '#b45309' }}><ShoppingCart size={18} /></div>
                                     <h4 style={{ margin: 0, color: '#9a3412', fontSize: '0.9rem', fontWeight: '900' }}>PRODUCTOS A FABRICAR</h4>
                                 </div>
-                                <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                                    {/* Table Header for PT */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px 100px 120px', gap: '1rem', padding: '0 1rem', fontSize: '0.65rem', fontWeight: '950', color: '#94a3b8', textTransform: 'uppercase' }}>
+                                        <span>Producto Terminado</span>
+                                        <span style={{ textAlign: 'center' }}>Demanda</span>
+                                        <span style={{ textAlign: 'center' }}>Stock PT</span>
+                                        <span style={{ textAlign: 'center' }}>Batches</span>
+                                        <span style={{ textAlign: 'center' }}>Meta (Und)</span>
+                                        <span style={{ textAlign: 'right' }}>Prod. Total</span>
+                                    </div>
+
                                     {ptExplosionData.map(pt => (
-                                        <div key={pt.ptId} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '2rem', alignItems: 'center', paddingBottom: '1rem', borderBottom: '1px dashed #e2e8f0' }}>
+                                        <div key={pt.ptId} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px 100px 120px', gap: '1rem', alignItems: 'center', padding: '1rem', background: '#fff', borderRadius: '14px', border: '1px solid #f1f5f9' }}>
                                             <div>
-                                                <div style={{ fontWeight: '800', color: '#1e293b', fontSize: '1rem' }}>{pt.label}</div>
-                                                <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600' }}>
-                                                    Demanda: {pt.totalDemand} | Stock Actual: {pt.inventoryPT} | Stock de Seguridad: {pt.safety}
-                                                </div>
+                                                <div style={{ fontWeight: '800', color: '#1e293b', fontSize: '0.9rem' }}>{pt.label.toUpperCase()}</div>
+                                                <div style={{ fontSize: '0.65rem', color: '#94a3b8' }}>Batch Size: {pt.batchSize} un.</div>
                                             </div>
-                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                                                <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#025357' }}>PRODUCCIÓN AJUSTADA</label>
+                                            <div style={{ textAlign: 'center', fontWeight: '900', color: '#64748b' }}>{pt.totalDemand}</div>
+                                            <div style={{ textAlign: 'center', fontWeight: '900', color: pt.inventoryPT > 0 ? '#10b981' : '#fca5a5' }}>{pt.inventoryPT}</div>
+                                            <div style={{ textAlign: 'center', fontWeight: '900', color: institutionOcre }}>{Math.ceil(pt.manualProduce / pt.batchSize)}</div>
+                                            <div style={{ textAlign: 'center' }}>
+                                                <input 
+                                                    type="number"
+                                                    value={pt.safetyUnits}
+                                                    onChange={(e) => {
+                                                        const sUnits = Number(e.target.value);
+                                                        const net = (pt.totalDemand - pt.inventoryPT) + sUnits;
+                                                        const nBatches = Math.ceil(Math.max(0, net) / pt.batchSize);
+                                                        const newTotal = nBatches * pt.batchSize;
+                                                        handleUpdatePtProduction(pt.ptId, newTotal);
+                                                        setPtExplosionData(prev => prev.map(item => item.ptId === pt.ptId ? { ...item, safetyUnits: sUnits, manualProduce: newTotal } : item));
+                                                    }}
+                                                    style={{ width: '60px', padding: '4px', textAlign: 'center', border: '1px solid #fed7aa', borderRadius: '8px', fontWeight: '900', fontSize: '0.85rem' }}
+                                                />
+                                            </div>
+                                            <div style={{ textAlign: 'right' }}>
                                                 <input
                                                     type="number"
                                                     value={pt.manualProduce}
                                                     onChange={(e) => handleUpdatePtProduction(pt.ptId, Number(e.target.value))}
-                                                    style={{ width: '100px', padding: '0.6rem', borderRadius: '10px', border: '2px solid #e2e8f0', textAlign: 'center', fontWeight: '900', fontSize: '1rem', outline: 'none' }}
+                                                    style={{ width: '90px', padding: '0.5rem', borderRadius: '10px', border: '2px solid #e2e8f0', textAlign: 'right', fontWeight: '950', fontSize: '1rem', color: deepTeal, outline: 'none' }}
                                                 />
                                             </div>
                                         </div>
@@ -2645,8 +2675,8 @@ const Orders = ({ orders }) => {
                                                         }} />
                                                     </div>
                                                     <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
-                                                        <span style={{ fontSize: '0.55rem', fontWeight: '950', color: item.currentInv >= item.requiredQtyUsage ? '#10b981' : '#94a3b8' }}>
-                                                            {Math.round((item.currentInv / (item.requiredQtyUsage || 1)) * 100)}% COBERTURA
+                                                        <span style={{ fontSize: '0.55rem', fontWeight: '950', color: (item.currentInv >= item.requiredQtyUsage && item.requiredQtyUsage > 0) ? '#10b981' : (item.currentInv === 0 ? '#ef4444' : '#94a3b8') }}>
+                                                            {item.requiredQtyUsage > 0 ? Math.round((item.currentInv / item.requiredQtyUsage) * 100) : 100}% COBERTURA
                                                         </span>
                                                     </div>
                                                 </div>

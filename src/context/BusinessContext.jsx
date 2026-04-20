@@ -118,7 +118,7 @@ export const BusinessProvider = ({ children }) => {
             console.error("Error consuming materials:", err);
             return { success: false, error: err.message };
         }
-    }, []);
+    }, [tDoc]);
 
     /**
      * loadFinishedGoods: Updates inventory for produced items and optionally consumes BOM materials.
@@ -156,7 +156,7 @@ export const BusinessProvider = ({ children }) => {
             console.error("Error loading finished goods:", err);
             return { success: false, error: err.message };
         }
-    }, [recipes, consumeMaterials]);
+    }, [recipes, consumeMaterials, tCol]);
 
     // ── AUDIT LOGS SYSTEM ──────────────────────────────────────────────
     
@@ -624,7 +624,7 @@ export const BusinessProvider = ({ children }) => {
             console.error("Error adding client:", err);
             return { success: false, error: err.message };
         }
-    }, []);
+    }, [tCol]);
 
     const upsertMember = useCallback(async (memberData) => {
         try {
@@ -790,7 +790,7 @@ export const BusinessProvider = ({ children }) => {
             console.error("Error adding order:", err);
             return { success: false, error: err.message };
         }
-    }, [updateBankBalance]);
+    }, [updateBankBalance, tDoc, tCol]);
 
     const deleteClient = useCallback(async (clientId) => {
         try {
@@ -990,7 +990,7 @@ export const BusinessProvider = ({ children }) => {
             const docRef = await addDoc(tCol('products'), { ...data, created_at: new Date().toISOString() });
             return { success: true, id: docRef.id };
         } catch (err) { return { success: false, error: err.message }; }
-    }, []);
+    }, [tCol]);
 
     const updateItem = useCallback(async (id, data) => {
         try {
@@ -1157,7 +1157,7 @@ export const BusinessProvider = ({ children }) => {
             console.error("Error adding purchase order:", err);
             return { success: false, error: err.message };
         }
-    }, []);
+    }, [tCol, tDoc]);
 
     const addExpense = useCallback(async (data) => {
         try {
@@ -1608,7 +1608,7 @@ export const BusinessProvider = ({ children }) => {
             console.error("Error saving ODP:", err);
             return { success: false, error: err.message }; 
         }
-    }, [saveProductionSnapshot]);
+    }, [saveProductionSnapshot, tCol, tDoc]);
 
     const deleteOdp = useCallback(async (dbId, user = null) => {
         try {
