@@ -24,7 +24,9 @@ import {
     ChevronDown,
     ChevronUp,
     Zap,
-    Trash2
+    Trash2,
+    List,
+    LayoutGrid as GridIcon
 } from 'lucide-react';
 
 const STATUS_ALL = 'Todos';
@@ -123,6 +125,13 @@ const Production = () => {
     const [showWasteList, setShowWasteList] = useState(false);
     const [dateFilter, setDateFilter] = useState('month');
     const [customRange] = useState({ from: '', to: '' });
+    const [viewMode, setViewMode] = useState(() => {
+        return localStorage.getItem('zeticas_production_view_mode') || 'list';
+    });
+
+    useEffect(() => {
+        localStorage.setItem('zeticas_production_view_mode', viewMode);
+    }, [viewMode]);
 
     // ── Sync from Context to local state ──────────────────────────────────────
     useEffect(() => {
@@ -203,7 +212,9 @@ const Production = () => {
             order.items?.forEach(item => {
                 const sku = item.name;
                 if (!groups[sku]) groups[sku] = { sku, relatedOrders: [], totalRequested: 0 };
-                groups[sku].relatedOrders.push(order);
+                if (!groups[sku].relatedOrders.find(o => o.id === order.id)) {
+                    groups[sku].relatedOrders.push(order);
+                }
                 groups[sku].totalRequested += (Number(item.quantity) || 0);
             });
         });
@@ -262,7 +273,7 @@ const Production = () => {
                     efficiency,
                     wasteQty: waste || 0,
                     waste_percent: waste_percent || '0.0',
-                    relatedOrders: [], 
+                    relatedOrders: groups[odpDoc.sku]?.relatedOrders || [], 
                 };
             });
         }
@@ -270,6 +281,50 @@ const Production = () => {
         // Fallback for legacy (empty DB)
         return [];
     }, [productionOrders, items, odpSettings, recipes, pendingOrders]);
+
+    // --- NUEVO: Cálculo de Necesidades (Deficit de Producción) ---
+    const productionNeeds = useMemo(() => {
+        const needs = [];
+        const groups = {};
+        
+        // 1. Agrupar necesidades de pedidos (Excluyendo lo que ya está en despacho)
+        pendingOrders.forEach(order => {
+            const statusLow = (order.status || '').toLowerCase();
+            if (['finalizado', 'entregado', 'cobrado', 'en despacho'].includes(statusLow)) return;
+            
+            order.items?.forEach(item => {
+                const sku = item.name;
+                if (!groups[sku]) groups[sku] = { sku, totalNeeded: 0, orders: [] };
+                groups[sku].totalNeeded += (Number(item.quantity) || 0);
+                groups[sku].orders.push(order.id);
+            });
+        });
+
+        // 2. Evaluar contra Stock Físico y ODPs Existentes
+        Object.values(groups).forEach(need => {
+            const product = items.find(p => p.name === need.sku || p.sku === need.sku);
+            const currentStock = product ? ((product.initial || 0) + (product.purchases || 0) - (product.sales || 0)) : 0;
+            
+            // Cantidad ya "en camino" (ODPs activas)
+            const activeProduction = odpQueue
+                .filter(odp => odp.sku === need.sku && odp.status.text !== STATUS_FINALIZADA)
+                .reduce((acc, current) => acc + Number(current.finalQty || 0), 0);
+
+            const deficit = need.totalNeeded - (currentStock + activeProduction);
+
+            if (deficit > 0) {
+                needs.push({
+                    ...need,
+                    currentStock,
+                    activeProduction,
+                    deficit,
+                    productId: product?.id
+                });
+            }
+        });
+
+        return needs.sort((a, b) => b.deficit - a.deficit);
+    }, [pendingOrders, items, odpQueue]);
 
     // ── KPIs ──────────────────────────────────────────────────────────────────
     const kpis = useMemo(() => ({
@@ -635,66 +690,62 @@ const Production = () => {
 
                 // 3. AUTO-MOVE ORDERS TO LOGISTICS (Fulfillment-based)
                 const ordersToUpdate = [];
-                // Refresh context items to get latest stock if possible, or use current + newly added
-                for (const order of odp.relatedOrders) {
-                    const orderItems = order.items || [];
-                    let totalNeeded = 0;
-                    let totalReady = 0;
-
-                    for (const item of orderItems) {
-                        const qtyNeeded = Number(item.quantity) || 0;
-                        totalNeeded += qtyNeeded;
-                        
-                        // Find current stock in context - Normalizing search
-                        const searchItemName = String(item.name || '').toLowerCase().trim();
-                        const inventoryItem = items.find(i => 
-                            String(i.name || '').toLowerCase().trim() === searchItemName || 
-                            i.id === item.id
-                        );
-                        
-                        let currentStock = inventoryItem ? ((inventoryItem.initial || 0) + (inventoryItem.purchases || 0) - (inventoryItem.sales || 0)) : 0;
-                        
-                        // If this is the SKU we just finished, it might not be in the context yet
-                        // so we add the NEW netQty to the count - Normalizing search
-                        if (searchItemName === String(odp.sku || '').toLowerCase().trim()) {
-                            currentStock += netQty;
-                        }
-
-                        totalReady += Math.min(qtyNeeded, Math.max(0, currentStock));
-                    }
-
-                    const fulfillment = totalNeeded > 0 ? (totalReady / totalNeeded) * 100 : 0;
-                    
-                    // If fulfillment reached 100%, it's ready for shipping
-                    if (fulfillment >= 100) {
+                const targetOrders = odp.relatedOrders || [];
+                for (const order of targetOrders) {
+                    const { percentage } = getStockFulfillment(order.items || []);
+                    if (percentage >= 100) {
                         ordersToUpdate.push(order);
                     }
                 }
 
-                if (ordersToUpdate.length > 0) {
-                    let movedCount = 0;
-                    for (const o of ordersToUpdate) {
-                        // Find the database ID of the original order
-                        const orderDbId = o.dbId || (orders.find(ord => ord.id === o.id)?.dbId);
-                        if (orderDbId) {
-                            await updateOrder(orderDbId, { 
-                                status: 'En Despacho',
-                                last_status_at: new Date().toISOString()
-                            });
-                            movedCount++;
-                        }
+                for (const ord of ordersToUpdate) {
+                    try {
+                        const newStatus = 'En Despacho';
+                        await updateOrder(ord.dbId, { 
+                            status: newStatus,
+                            production_ready_at: new Date().toISOString()
+                        });
+                        console.log(`Order ${ord.id} moved to ${newStatus} due to inventory fulfillment.`);
+                    } catch (e) {
+                        console.error(`Failed to auto-move order ${ord.id}:`, e);
                     }
-                    if (movedCount > 0) {
-                        alert(`¡Correcto! Se han ingresado ${netQty} unidades netas a inventario. ${movedCount} pedido(s) han pasado automáticamente a Logística.`);
-                    }
-                } else {
-                    alert(`¡Stock Cargado! Se ingresaron ${netQty} unidades netas de ${odp.sku}. El pedido permanece en procesamiento en planta.`);
                 }
+
+                setConfModal({ show: false, odp: null, endTime: null });
+                alert("¡Producción finalizada e inventario actualizado!");
+                refreshData();
+            } else {
+                alert(`Error al sincronizar inventario: ${result.error}`);
             }
-            setConfModal({ show: false, odp: null, endTime: null });
-        } catch (err) { 
-            console.error("Error finalizing ODP:", err);
-            alert("No se pudo finalizar la ODP: " + err.message); 
+        } catch (err) {
+            console.error("Critical error in inventory sync:", err);
+            alert("Error crítico: " + err.message);
+        }
+    };
+
+    // --- NUEVO: Lanzamiento Rápido de ODP desde Necesidades ---
+    const handleLaunchOdp = async (need) => {
+        try {
+            const qty = Math.ceil(need.deficit);
+            const confirmed = window.confirm(`¿Lanzar prioritariamente un lote de ${qty} unidades de ${need.sku}?`);
+            if (!confirmed) return;
+
+            const res = await saveOdp(need.sku, {
+                status: 'SCHEDULED',
+                qty: qty,
+                waste_qty: 0,
+                created_at: new Date().toISOString(),
+                is_priority: true
+            });
+
+            if (res.success) {
+                alert(`Lote para ${need.sku} programado con éxito.`);
+                refreshData();
+            } else {
+                throw new Error(res.error);
+            }
+        } catch (err) {
+            alert("Error al lanzar ODP: " + err.message);
         }
     };
 
@@ -703,72 +754,126 @@ const Production = () => {
 
             {/* HEADER removed as it's redundant with the main layout */}
 
-            {/* Filter Bar */}
+            {/* Toolbar Unificada y Esbelta */}
             <div style={{
                 display: 'flex',
-                gap: '1.5rem',
+                gap: '0.8rem',
                 marginBottom: '1.5rem',
                 alignItems: 'center',
-                background: glassWhite,
-                backdropFilter: 'blur(10px)',
-                padding: '1.2rem 2rem',
-                borderRadius: '24px',
-                border: '1px solid rgba(2, 83, 87, 0.05)',
-                boxShadow: '0 10px 25px rgba(0,0,0,0.02)',
-                animation: 'fadeUp 0.7s ease-out'
+                background: '#fff',
+                padding: '0.5rem 0.8rem',
+                borderRadius: '16px',
+                border: '1px solid #e2e8f0',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.02)',
+                animation: 'fadeUp 0.7s ease-out',
+                flexWrap: 'nowrap',
+                overflowX: 'auto',
+                scrollbarWidth: 'none'
             }}>
-                <div style={{ display: 'flex', background: 'rgba(2, 83, 87, 0.05)', padding: '4px', borderRadius: '16px', border: '1px solid rgba(2, 83, 87, 0.08)' }}>
-                    {[{ key: 'week', label: 'Semana' }, { key: 'month', label: 'Mes' }, { key: 'custom', label: 'Personalizado' }].map(({ key, label }) => (
+                {/* Filtro de Fecha Compacto */}
+                <div style={{ display: 'flex', background: '#f1f5f9', padding: '2px', borderRadius: '10px', flexShrink: 0 }}>
+                    {[{ key: 'week', label: 'Semana' }, { key: 'month', label: 'Mes' }, { key: 'custom', label: 'Pers.' }].map(({ key, label }) => (
                         <button
                             key={key}
                             onClick={() => setDateFilter(key)}
                             style={{
-                                padding: '0.7rem 1.5rem',
+                                padding: '0.4rem 0.7rem',
                                 border: 'none',
-                                borderRadius: '12px',
-                                fontSize: '0.75rem',
-                                fontWeight: '900',
+                                borderRadius: '8px',
+                                fontSize: '0.6rem',
+                                fontWeight: '800',
                                 cursor: 'pointer',
                                 background: dateFilter === key ? deepTeal : 'transparent',
                                 color: dateFilter === key ? '#fff' : '#64748b',
-                                transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-                                textTransform: 'uppercase',
-                                letterSpacing: '0.5px'
+                                transition: 'all 0.3s',
+                                textTransform: 'uppercase'
                             }}>
                             {label}
                         </button>
                     ))}
                 </div>
-                <div style={{ flex: 1, position: 'relative' }}>
-                    <Search size={18} style={{ position: 'absolute', left: '1.2rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', opacity: 0.6 }} />
+
+                {/* Buscador Integrado */}
+                <div style={{ flex: 1, minWidth: '150px', position: 'relative' }}>
+                    <Search size={14} style={{ position: 'absolute', left: '0.7rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                     <input
                         type="text"
-                        placeholder="Buscar por ODP, Pedido o Producto..."
+                        placeholder="Buscar ODP..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        style={{ width: '100%', padding: '1rem 1rem 1rem 3.5rem', borderRadius: '16px', border: '1px solid #f1f5f9', background: '#fff', outline: 'none', fontSize: '0.9rem', fontWeight: '900', color: '#1e293b' }}
+                        style={{ 
+                            width: '100%', 
+                            padding: '0.5rem 0.8rem 0.5rem 2rem', 
+                            borderRadius: '10px', 
+                            border: '1px solid #f1f5f9', 
+                            background: '#f8fafc', 
+                            outline: 'none', 
+                            fontSize: '0.75rem', 
+                            fontWeight: '700', 
+                            color: '#1e293b' 
+                        }}
                     />
                 </div>
-                <div style={{ display: 'flex', background: 'rgba(2, 83, 87, 0.05)', padding: '6px', borderRadius: '22px' }}>
+
+                {/* Filtro de Estado Compacto */}
+                <div style={{ display: 'flex', background: '#f1f5f9', padding: '2px', borderRadius: '10px', gap: '2px', flexShrink: 0 }}>
                     {[STATUS_ALL, STATUS_PROGRAMADA, STATUS_EN_PRODUCCION, STATUS_FINALIZADA].map(st => (
                         <button 
                             key={st} 
                             onClick={() => setStatusFilter(st)} 
                             style={{ 
-                                padding: '0.8rem 1.5rem', 
+                                padding: '0.4rem 0.7rem', 
                                 border: 'none', 
-                                borderRadius: '16px', 
-                                fontSize: '0.75rem', 
-                                fontWeight: '900', 
+                                borderRadius: '8px', 
+                                fontSize: '0.6rem', 
+                                fontWeight: '800', 
                                 cursor: 'pointer', 
                                 background: statusFilter === st ? institutionOcre : 'transparent', 
                                 color: statusFilter === st ? '#fff' : '#64748b', 
                                 transition: 'all 0.3s', 
                                 textTransform: 'uppercase' 
                             }}>
-                            {st}
+                            {st === STATUS_EN_PRODUCCION ? 'PROD.' : (st === STATUS_FINALIZADA ? 'FIN.' : (st === STATUS_ALL ? 'TODAS' : st.split(' ')[0].toUpperCase()))}
                         </button>
                     ))}
+                </div>
+
+                <div style={{ width: '1px', height: '20px', background: '#e2e8f0', margin: '0 4px', flexShrink: 0 }} />
+
+                {/* Selector de Vista Integrado */}
+                <div style={{ display: 'flex', background: '#f1f5f9', padding: '2px', borderRadius: '10px', gap: '2px', flexShrink: 0 }}>
+                    <button
+                        onClick={() => setViewMode('list')}
+                        style={{
+                            padding: '0.4rem 0.6rem',
+                            border: 'none',
+                            borderRadius: '8px',
+                            background: viewMode === 'list' ? deepTeal : 'transparent',
+                            color: viewMode === 'list' ? '#fff' : '#64748b',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            transition: 'all 0.3s'
+                        }}
+                    >
+                        <List size={14} />
+                    </button>
+                    <button
+                        onClick={() => setViewMode('cards')}
+                        style={{
+                            padding: '0.4rem 0.6rem',
+                            border: 'none',
+                            borderRadius: '8px',
+                            background: viewMode === 'cards' ? deepTeal : 'transparent',
+                            color: viewMode === 'cards' ? '#fff' : '#64748b',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            transition: 'all 0.3s'
+                        }}
+                    >
+                        <GridIcon size={14} />
+                    </button>
                 </div>
             </div>
 
@@ -900,6 +1005,65 @@ const Production = () => {
 
             {/* ODP Card Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: '2rem', animation: 'fadeUp 1.1s ease-out', minHeight: '300px' }}>
+                
+                {/* --- NUEVO: PANEL DE NECESIDADES / DÉFICIT --- */}
+                {productionNeeds.length > 0 && (
+                    <div style={{ 
+                        gridColumn: '1 / -1', 
+                        background: 'rgba(212, 120, 90, 0.05)', 
+                        padding: '2rem', 
+                        borderRadius: '35px', 
+                        border: '2px solid rgba(212, 120, 90, 0.1)',
+                        marginBottom: '1rem'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+                            <div style={{ width: '45px', height: '45px', borderRadius: '14px', background: institutionOcre, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+                                <AlertCircle size={24} />
+                            </div>
+                            <div>
+                                <h2 style={{ fontSize: '1.4rem', fontWeight: '950', color: deepTeal, margin: 0 }}>Necesidades de Producción</h2>
+                                <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: '700' }}>Productos con pedidos activos que no tienen suficiente stock o lotes en planta.</p>
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
+                            {productionNeeds.map(need => (
+                                <div key={need.sku} style={{ background: '#fff', padding: '1.5rem', borderRadius: '24px', boxShadow: '0 5px 15px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ fontWeight: '950', color: deepTeal, fontSize: '1rem' }}>{need.sku.toUpperCase()}</div>
+                                        <div style={{ display: 'flex', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
+                                            <span style={{ fontSize: '0.65rem', fontWeight: '900', color: premiumSalmon, background: `${premiumSalmon}10`, padding: '2px 8px', borderRadius: '6px' }}>DEUDA: {Math.ceil(need.deficit)} UDS</span>
+                                            <span style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8' }}>Pedidos: {need.orders.length}</span>
+                                        </div>
+                                    </div>
+                                    <button 
+                                        onClick={() => handleLaunchOdp(need)}
+                                        style={{ 
+                                            background: deepTeal, 
+                                            color: '#fff', 
+                                            border: 'none', 
+                                            padding: '0.8rem 1.2rem', 
+                                            borderRadius: '14px', 
+                                            fontWeight: '900', 
+                                            fontSize: '0.75rem', 
+                                            cursor: 'pointer',
+                                            boxShadow: `0 8px 15px ${deepTeal}30`,
+                                            transition: 'all 0.2s',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px'
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+                                        onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                                    >
+                                        <Zap size={14} /> LANZAR URGENTE
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {filteredOdpQueue.length > 0 ? (
                     filteredOdpQueue.map((odp) => {
                         const isStarted = !!odp.settings.start;
@@ -964,6 +1128,14 @@ const Production = () => {
                                             <FileText size={14} /> {odp.odpId}
                                         </button>
                                         <div style={{ fontWeight: '950', color: deepTeal, fontSize: '1.3rem', letterSpacing: '-0.5px' }}>{odp.sku.toUpperCase()}</div>
+                                        {/* --- NUEVO: LISTA DE PEDIDOS VINCULADOS --- */}
+                                        {odp.relatedOrders?.length > 0 && (
+                                            <div style={{ display: 'flex', gap: '5px', marginTop: '8px', flexWrap: 'wrap' }}>
+                                                {odp.relatedOrders.map(o => (
+                                                    <span key={o.id} style={{ fontSize: '0.6rem', fontWeight: '950', background: '#f1f5f9', color: '#64748b', padding: '2px 6px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>#{o.id}</span>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
                                         <span style={{ padding: '6px 14px', borderRadius: '12px', fontSize: '0.65rem', fontWeight: '900', background: odp.status.color, color: odp.status.textColor, textTransform: 'uppercase' }}>

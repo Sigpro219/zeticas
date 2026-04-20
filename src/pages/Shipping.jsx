@@ -29,7 +29,7 @@ const Shipping = () => {
     useEffect(() => {
         window.scrollTo(0, 0);
     }, []);
-    const { orders, items, refreshData, updateOrder, ownCompany, clients, banks, updateBankBalance } = useBusiness();
+    const { orders, items, refreshData, updateOrder, ownCompany, clients, banks, updateBankBalance, productionOrders } = useBusiness();
     const [downloadedDocs, setDownloadedDocs] = useState({}); // { [orderId]: { invoice: boolean, labels: boolean } }
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState('month');
@@ -957,8 +957,42 @@ const Shipping = () => {
                                         {(() => {
                                             const { percentage, ready, needed } = getStockFulfillment(order.items || []);
                                             const isDone = percentage >= 100;
+                                            
+                                            // ── NUEVA LÓGICA DE TRAZABILIDAD ──
+                                            const statusLower = (order.status || '').toLowerCase();
+                                            const isInProduction = statusLower.includes('producción');
+                                            
+                                            let productionLabel = '';
+                                            let labelColor = '#64748b';
+
+                                            if (isInProduction && !isDone) {
+                                                const orderSkus = (order.items || []).map(i => i.name);
+                                                const hasActiveOdp = (productionOrders || []).some(odp => 
+                                                    orderSkus.includes(odp.sku) && 
+                                                    !(odp.status === 'DONE' || odp.status === 'FINALIZADA')
+                                                );
+                                                productionLabel = hasActiveOdp ? 'EN PLANTA (LOTE ACTIVO)' : 'EN PLANTA (ESPERA)';
+                                                labelColor = hasActiveOdp ? institutionOcre : premiumSalmon;
+                                            }
+
                                             return (
                                                 <div style={{ padding: '0 1rem' }}>
+                                                    {productionLabel && (
+                                                        <div style={{ 
+                                                            fontSize: '0.6rem', 
+                                                            fontWeight: '950', 
+                                                            color: labelColor, 
+                                                            background: `${labelColor}10`, 
+                                                            padding: '2px 8px', 
+                                                            borderRadius: '6px', 
+                                                            display: 'inline-block',
+                                                            marginBottom: '6px',
+                                                            textTransform: 'uppercase',
+                                                            letterSpacing: '0.5px'
+                                                        }}>
+                                                            {productionLabel}
+                                                        </div>
+                                                    )}
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '0.85rem', fontWeight: '900', color: isDone ? '#10b981' : (percentage > 0 ? institutionOcre : premiumSalmon) }}>
                                                         <span>{isDone ? 'LISTO' : (percentage > 0 ? 'PARCIAL' : 'SIN STOCK')}</span>
                                                         <span>{Math.round(percentage)}%</span>

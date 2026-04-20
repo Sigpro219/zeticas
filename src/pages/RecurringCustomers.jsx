@@ -512,9 +512,15 @@ const RecurringCustomers = () => {
                 nit: activeMember.nit || activeMember.idNumber || activeMember.id,
                 email: activeMember.email,
                 status: 'Inactive',
-                is_member: false
+                is_member: false,
+                cancelled_at: new Date().toISOString(),
+                last_config_snapshot: {
+                    plan: subscriptionData.plan,
+                    frequency: subscriptionData.frequency,
+                    pantry: subscriptionData.products.map(p => ({ id: p.id, quantity: p.quantity, name: p.name }))
+                }
             });
-            alert("Lamentamos que te vayas. Tu suscripción ha sido cancelada.");
+            alert("Lamentamos que te vayas del Círculo. Tu historial ha sido guardado por si decides volver pronto.");
             setAuthData({ email: '', password: '', confirmPassword: '', name: '', phone: '', address: '', city: '', idNumber: '' });
             logout();
             setStep(1);
@@ -1015,23 +1021,78 @@ const RecurringCustomers = () => {
                                 <h2 style={{ color: institutionOcre, marginBottom: 0 }}>Total: ${totalAmount.toLocaleString()}</h2>
                                 {savings > 0 && <div style={{ color: '#4ade80', fontSize: '0.8rem', fontWeight: '800' }}>AHORRO: ${savings.toLocaleString()}</div>}
                                 
-                                <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '15px' }}>
-                                    <p style={{ fontSize: '0.65rem', color: institutionOcre, fontWeight: '900', marginBottom: '0.5rem' }}>ENTREGA: {subscriptionData.frequency}</p>
+                                 <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '15px' }}>
+                                    <p style={{ fontSize: '0.65rem', color: institutionOcre, fontWeight: '900', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                        {(!isChangingPlan && activeMember) && <Lock size={10} />} ENTREGA: {subscriptionData.frequency}
+                                        {(!isChangingPlan && activeMember) && <span style={{fontSize: '0.55rem', opacity: 0.6, fontWeight: 400}}>(Pulsa cambiar para editar)</span>}
+                                    </p>
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '5px' }}>
-                                        {['Semanal', 'Quincenal', 'Mensual'].map(f => (
-                                            <button key={f} onClick={() => (isChangingPlan || !activeMember) && setSubscriptionData({...subscriptionData, frequency: f})} style={{ 
-                                                background: subscriptionData.frequency === f ? institutionOcre : 'rgba(255,255,255,0.1)',
-                                                color: subscriptionData.frequency === f ? deepTeal : '#fff', border: 'none', padding: '5px', borderRadius: '5px', fontSize: '0.65rem', fontWeight: '900', cursor: 'pointer'
-                                            }}>{f}</button>
-                                        ))}
+                                        {['Semanal', 'Quincenal', 'Mensual'].map(f => {
+                                            const isLocked = !isChangingPlan && activeMember;
+                                            return (
+                                                <button 
+                                                    key={f} 
+                                                    disabled={isLocked}
+                                                    onClick={() => setSubscriptionData({...subscriptionData, frequency: f})} 
+                                                    style={{ 
+                                                        background: subscriptionData.frequency === f ? institutionOcre : 'rgba(255,255,255,0.1)',
+                                                        color: subscriptionData.frequency === f ? deepTeal : '#fff', 
+                                                        border: 'none', 
+                                                        padding: '5px', 
+                                                        borderRadius: '5px', 
+                                                        fontSize: '0.65rem', 
+                                                        fontWeight: '900', 
+                                                        cursor: isLocked ? 'not-allowed' : 'pointer',
+                                                        opacity: isLocked && subscriptionData.frequency !== f ? 0.3 : 1
+                                                    }}
+                                                >
+                                                    {f}
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                 </div>
 
-                                <button onClick={(isChangingPlan || hasPendingChanges) ? finalizeMembership : handleBoldPayment} disabled={isSaving} style={{ 
-                                    width: '100%', padding: '1.2rem', background: institutionOcre, color: deepTeal, border: 'none', borderRadius: '20px', fontWeight: '900', fontSize: '1.1rem', cursor: 'pointer', marginTop: '1rem' 
-                                }}>
-                                    {isSaving ? '...' : (isChangingPlan || hasPendingChanges ? 'GUARDAR CAMBIOS' : 'PAGAR AHORA')}
-                                </button>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', marginTop: '1rem' }}>
+                                    {hasPendingChanges && (
+                                        <button 
+                                            onClick={finalizeMembership} 
+                                            disabled={isSaving} 
+                                            style={{ 
+                                                width: '100%', 
+                                                padding: '1rem', 
+                                                background: 'transparent', 
+                                                color: '#fff', 
+                                                border: `1.5px solid ${institutionOcre}`, 
+                                                borderRadius: '20px', 
+                                                fontWeight: '900', 
+                                                fontSize: '0.85rem', 
+                                                cursor: 'pointer' 
+                                            }}
+                                        >
+                                            {isSaving ? 'GUARDANDO...' : 'ACTUALIZAR MI SUSCRIPCIÓN'}
+                                        </button>
+                                    )}
+                                    
+                                    <button 
+                                        onClick={handleBoldPayment} 
+                                        disabled={isSaving || (subscriptionData.products.length === 0)} 
+                                        style={{ 
+                                            width: '100%', 
+                                            padding: '1.2rem', 
+                                            background: institutionOcre, 
+                                            color: deepTeal, 
+                                            border: 'none', 
+                                            borderRadius: '20px', 
+                                            fontWeight: '900', 
+                                            fontSize: '1.1rem', 
+                                            cursor: 'pointer',
+                                            boxShadow: '0 10px 20px rgba(0,0,0,0.1)'
+                                        }}
+                                    >
+                                        {isSaving ? 'PROCESANDO...' : (hasPendingChanges ? 'PAGAR CON ESTOS CAMBIOS' : 'PAGAR MI PEDIDO')}
+                                    </button>
+                                </div>
                                 {user?.role === 'member' && (
                                     <button onClick={() => setIsCancelModalOpen(true)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', textDecoration: 'underline', cursor: 'pointer', fontSize: '0.7rem', marginTop: '1rem' }}>DEJAR DE SER MIEMBRO</button>
                                 )}
@@ -1048,9 +1109,12 @@ const RecurringCustomers = () => {
                             </div>
                             <h2 style={{ color: deepTeal, fontFamily: 'serif', fontSize: '1.8rem', marginBottom: '1rem' }}>Lamentamos mucho que nos dejes...</h2>
                             <p style={{ color: '#666', marginBottom: '2rem', lineHeight: '1.6' }}>
-                                Si te vas, perderás tus **descuentos del {currentPlanConfig.discount}%** y tus beneficios de **envío gratis**. Tu despensa artesanal siempre estará esperándote aquí.
-                                <br/><br/>
-                                ¿Estás completamente seguro de que quieres darte de baja?
+                                Al darte de baja, perderás inmediatamente tus beneficios exclusivos:
+                                <div style={{ background: '#f8fafc', padding: '1.2rem', borderRadius: '20px', margin: '1.5rem 0', textAlign: 'left', border: '1px solid #e2e8f0' }}>
+                                    <div style={{ color: deepTeal, fontWeight: 800, fontSize: '0.85rem', marginBottom: '8px' }}>❌ Descuentos del {currentPlanConfig.discount}% permanentemente</div>
+                                    <div style={{ color: deepTeal, fontWeight: 800, fontSize: '0.85rem' }}>❌ Envío Gratis en {currentPlanConfig.freeShipping ? 'todos tus pedidos' : `compras mayores a $${currentPlanConfig.threshold.toLocaleString()}`}</div>
+                                </div>
+                                <span style={{ fontWeight: 600 }}>¿Estás completamente seguro de que quieres dejar el Círculo Zeticas?</span>
                             </p>
                             
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>

@@ -557,14 +557,11 @@ const Inventory = () => {
                                                     <input
                                                         type="text"
                                                         value={currentInputVal}
-                                                        readOnly={historyWindow !== 'total'}
                                                         onChange={(e) => {
-                                                            if (historyWindow !== 'total') return;
-                                                            const val = e.target.value.replace(/[^0-9.]/g, '');
+                                                            const val = e.target.value.replace(/[^0-9.-]/g, ''); // Permitimos negativos para correcciones ácidas
                                                             setLocalInitialsMP(prev => ({ ...prev, [item.id]: val }));
                                                         }}
                                                         onBlur={async (e) => {
-                                                            if (historyWindow !== 'total') return;
                                                             const val = parseFloat(e.target.value) || 0;
                                                             setLocalInitialsMP(prev => ({ ...prev, [item.id]: val.toFixed(1) }));
                                                             await handleAuditAdjustment(item, val);
@@ -577,9 +574,8 @@ const Inventory = () => {
                                                             borderRadius: '10px', 
                                                             fontWeight: '900', 
                                                             color: deepTeal,
-                                                            background: historyWindow !== 'total' ? '#f8fafc' : '#fff',
-                                                            opacity: historyWindow !== 'total' ? 0.7 : 1,
-                                                            cursor: historyWindow !== 'total' ? 'not-allowed' : 'text'
+                                                            background: '#fff',
+                                                            cursor: 'text'
                                                         }}
                                                     />
                                                 </td>

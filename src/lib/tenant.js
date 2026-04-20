@@ -10,7 +10,13 @@ export const detectTenantId = () => {
         return urlTenant;
     }
 
-    // 2. Detect from Hostname (Production mapping)
+    // 2. Detect from Port (Testing override)
+    const port = window.location.port;
+    if (port === '5174') {
+        return 'delta';
+    }
+
+    // 3. Detect from Hostname (Production mapping)
     const host = window.location.hostname;
     if (host.includes('deltacore') || host.includes('deltacoretech') || host.includes('delta-coretech')) {
         return 'delta';
