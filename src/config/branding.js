@@ -7,7 +7,7 @@ export const BRANDING = {
     },
     delta: {
         name: 'Delta CoreTech',
-        logo: '/assets/logos/logo-dct.png',
+        logo: '/assets/logos/logo-delta-final.png',
         logoFilter: 'none',
         accentColor: '#025357'
     },
