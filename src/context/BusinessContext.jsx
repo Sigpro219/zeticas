@@ -67,8 +67,8 @@ export const BusinessProvider = ({ children }) => {
         // 2. Detect from Hostname (Production mapping)
         const host = window.location.hostname;
         if (host.includes('deltacore') || host.includes('deltacoretech')) {
-            localStorage.setItem('zeticas_current_tenant', 'deltacore');
-            return 'deltacore';
+            localStorage.setItem('zeticas_current_tenant', 'delta');
+            return 'delta';
         }
         
         // 3. Fallback to localStorage or default

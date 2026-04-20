@@ -102,7 +102,7 @@ const Gestion = () => {
     const isMasterDataTab = ['products', 'recipes', 'suppliers', 'clients', 'costs', 'banks', 'web_cms', 'web_shipping', 'users_admin'].includes(activeTab);
     const [isMasterDataOpen, setIsMasterDataOpen] = useState(() => {
         const savedState = localStorage.getItem(`${tenantId}_master_data_open`);
-        return savedState !== null ? JSON.parse(savedState) : isMasterDataOpen;
+        return savedState !== null ? JSON.parse(savedState) : isMasterDataTab;
     });
 
     const [isWebAdminOpen, setIsWebAdminOpen] = useState(() => {
