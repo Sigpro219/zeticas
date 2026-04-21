@@ -81,7 +81,7 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
 
     const getColumnStats = (column) => {
         if (column.id === 'produccion') {
-            const activeODPs = (productionOrders || []).filter(po => !po.completed_at).length;
+            const activeODPs = (productionOrders || []).filter(po => !po.isDone).length;
             return { inProcess: activeODPs, finished: 0 };
         }
         let inProcess = 0;
@@ -159,9 +159,7 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
                                     };
                                     if (col.id === 'produccion') {
                                         const plans = (productionOrders || []).filter(po => {
-                                            const status = (po.status?.text || '').toLowerCase().trim();
-                                            const isDone = status === 'finalizada' || !!po.completed_at;
-                                            if (isDone) return false;
+                                            if (po.isDone) return false;
 
                                             // ── NUEVA GUARDIA DE MATERIALES ──
                                             // Solo permitimos que el Plan de Producción aparezca en la columna si hay MP para ejecutarlo
@@ -221,8 +219,7 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
 
                                     if (col.id === 'compras') {
                                         const pendingInCompras = (productionOrders || []).filter(po => {
-                                            const status = (po.status?.text || '').toLowerCase().trim();
-                                            if (status === 'finalizada' || !!po.completed_at) return false;
+                                            if (po.isDone) return false;
                                             
                                             const productRec = recipes[po.sku] || [];
                                             if (productRec.length === 0) return false; 

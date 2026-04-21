@@ -263,7 +263,7 @@ const Production = () => {
                     status = { text: STATUS_EN_PRODUCCION, color: 'rgba(212, 120, 90, 0.1)', textColor: '#D4785A' };
                 }
                 
-                if (odpDoc.status === 'DONE' || (settings.end && settings.inventorySynced)) {
+                if (odpDoc.status === 'DONE' || (settings.end && settings.inventorySynced) || odpDoc.status === STATUS_FINALIZADA) {
                     status = { text: STATUS_FINALIZADA, color: 'rgba(16, 185, 129, 0.1)', textColor: '#10b981' };
                 }
 
@@ -463,12 +463,12 @@ const Production = () => {
 
             if (currentFilter === STATUS_ALL.toLowerCase().trim() || currentFilter === '') {
                 // 'Todos' ahora muestra todo EXCEPTO finalized por instrucción del usuario (Tablero Operativo)
-                matchStatus = odpStatusStr !== STATUS_FINALIZADA.toLowerCase().trim();
+                matchStatus = odpStatusStr !== STATUS_FINALIZADA.toLowerCase().trim() && odpStatusStr !== 'done';
             } else if (currentFilter === 'en marcha') {
                 // Filtro especial para ver todo lo que no ha terminado
-                matchStatus = odpStatusStr !== STATUS_FINALIZADA.toLowerCase().trim();
+                matchStatus = odpStatusStr !== STATUS_FINALIZADA.toLowerCase().trim() && odpStatusStr !== 'done';
             } else {
-                matchStatus = odpStatusStr === currentFilter;
+                matchStatus = odpStatusStr === currentFilter || (currentFilter === STATUS_FINALIZADA.toLowerCase().trim() && odpStatusStr === 'done');
             }
 
             const refDateStr = odp.settings.start || (odp.relatedOrders[0]?.date);

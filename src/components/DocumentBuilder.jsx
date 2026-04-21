@@ -121,7 +121,7 @@ const DocumentBuilder = ({
                     <tr style={{ borderTop: `1px solid ${primaryColor}20` }}>
                         <td colSpan="2"></td>
                         <td style={{ padding: '1rem 0.8rem', textAlign: 'right', fontSize: '1rem', fontWeight: '900', color: primaryColor }}>TOTAL ORDEN:</td>
-                        <td style={{ padding: '1rem 2.5rem 1rem 0.8rem', textAlign: 'right', fontSize: '1.4rem', fontWeight: '1000', color: primaryColor, background: '#f0fdf4', borderRadius: '4px' }}>${(totals.total || 0).toLocaleString('es-CO')}</td>
+                        <td style={{ padding: '1rem 0.8rem', textAlign: 'right', fontSize: '1.4rem', fontWeight: '1000', color: primaryColor, background: '#f0fdf4', borderRadius: '4px' }}>${(totals.total || 0).toLocaleString('es-CO')}</td>
                     </tr>
                 </tfoot>
             </table>

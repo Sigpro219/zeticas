@@ -67,10 +67,7 @@ const KanbanSummary = ({ orders = [], productionOrders = [], items = [], recipes
 
     const getColumnStats = (column) => {
         if (column.id === 'produccion') {
-            const activeODPs = (productionOrders || []).filter(po => {
-                const status = (po.status?.text || '').toLowerCase().trim();
-                return status !== 'finalizada' && !po.completed_at;
-            }).length;
+            const activeODPs = (productionOrders || []).filter(po => !po.isDone).length;
             return activeODPs;
         }
         let count = 0;

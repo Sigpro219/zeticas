@@ -879,19 +879,42 @@ export const BusinessProvider = ({ children }) => {
         }
     }, []);
 
-    const createInternalOrder = useCallback(async (selectedNames = []) => {
+    const createInternalOrder = useCallback(async (selectedMap = [], type = 'PT') => {
         try {
-            const batchNum = `INT-${Date.now().toString().slice(-6)}`;
+            const counterRef = tDoc('metadata', 'counters');
+            let finalNumber;
+
+            // Transacción para usar el mismo consecutivo maestro de 'orders'
+            await runTransaction(db, async (transaction) => {
+                const counterDoc = await transaction.get(counterRef);
+                const nextVal = (counterDoc?.exists() ? (counterDoc.data().last_order_number || 0) : 0) + 1;
+                transaction.set(counterRef, { last_order_number: nextVal }, { merge: true });
+                finalNumber = nextVal;
+            });
+
+            const paddedNumber = String(finalNumber).padStart(4, '0');
+            const prefix = type === 'MP' ? 'RMP' : 'RPT';
+            const displayId = `${prefix}-${paddedNumber}`;
             
-            const allItems = selectedNames.map(name => {
+            // selectedMap can be an array of names or a map of { name: quantity }
+            const isArray = Array.isArray(selectedMap);
+            const itemsToProcess = isArray ? selectedMap : Object.keys(selectedMap);
+
+            const allItems = itemsToProcess.map(name => {
                 const item = items.find(i => i.name === name);
                 const isPT = item?.type === 'product' || item?.category === 'Producto Terminado';
-                const batchSize = isPT ? Number(item?.batch_size || 1) : 1;
+                
+                let qty = 1;
+                if (!isArray) {
+                    qty = selectedMap[name];
+                } else {
+                    qty = isPT ? Number(item?.batch_size || 1) : 1;
+                }
                 
                 return {
                     name,
                     id: item?.id || null,
-                    quantity: batchSize,
+                    quantity: Number(qty) || 1,
                     unit: item?.unit || (item?.unit_measure || 'und'),
                     type: isPT ? 'product' : 'material'
                 };
@@ -900,26 +923,30 @@ export const BusinessProvider = ({ children }) => {
             if (allItems.length === 0) return { success: false, error: "No hay ítems seleccionados" };
 
             const orderData = {
-                order_number: batchNum,
+                order_number: displayId,
+                id: displayId,
                 client: 'Stock Interno',
                 client_id: 'INTERNAL_STOCK',
+                source: 'Interno',
                 items: allItems,
-                status: 'pending',
-                payment_status: 'paid',
+                status: 'Pendiente', 
+                payment_status: 'Pagado',
                 created_at: new Date().toISOString(),
+                amount: 0,
                 total_amount: 0,
                 is_internal: true,
-                production_status: 'scheduled'
+                production_status: 'scheduled',
+                internal_type: type
             };
 
             const docRef = await addDoc(tCol('orders'), orderData);
             setOrders(prev => [{ id: docRef.id, ...orderData }, ...prev]);
-            return { success: true, id: docRef.id };
+            return { success: true, id: docRef.id, displayId };
         } catch (err) {
             console.error("Error creating internal order:", err);
             return { success: false, error: err.message };
         }
-    }, [items, setOrders]);
+    }, [items, setOrders, tCol, tDoc]);
 
     const updateInventoryConfig = useCallback(async (threshold) => {
         try {
@@ -1417,9 +1444,26 @@ export const BusinessProvider = ({ children }) => {
                     const allReceived = docsToCheck.length > 0 && docsToCheck.every(d => d.data().status === 'Recibida');
                     if (allReceived) {
                         try {
-                            await updateDoc(targetOrderDoc, { status: 'En Producción' });
+                            const targetSnap = await getDoc(targetOrderDoc);
+                            const targetData = targetSnap.exists() ? targetSnap.data() : {};
+                            
+                            // Si es un pedido de stock de materia prima (RMP), lo marcamos como entregado directamente
+                            if (targetData.internal_type === 'MP' || (targetData.order_number || '').startsWith('RMP')) {
+                                await updateDoc(targetOrderDoc, { 
+                                    status: 'Entregado',
+                                    delivered_at: new Date().toISOString()
+                                });
+                            } else {
+                                // Si el pedido ya está entregado/finalizado, no lo devolvemos a Producción
+                                const finalStatuses = ['entregado', 'finalizado', 'cobrado', 'liquidado'];
+                                const currentStatus = (targetData.status || '').toLowerCase().trim();
+                                
+                                if (!finalStatuses.includes(currentStatus)) {
+                                    await updateDoc(targetOrderDoc, { status: 'En Producción' });
+                                }
+                            }
                         } catch (e) {
-                            console.error(`Error updating order ${orderId} to En Producción:`, e);
+                            console.error(`Error updating order ${orderId} status:`, e);
                         }
                     }
                 }
@@ -1599,8 +1643,32 @@ export const BusinessProvider = ({ children }) => {
                 const newDoc = await addDoc(tCol('production_orders'), finalizedOdp);
 
                 // CREAR SNAPSHOT DE ANALÍTICAS SI ESTÁ FINALIZADA
-                if (payload.status === 'DONE' || payload.status === 'Finalizada' || payload.status === 'Finalizado') {
+                const isFinalStatus = payload.status === 'DONE' || payload.status === 'Finalizada' || payload.status === 'Finalizado';
+                if (isFinalStatus) {
                     await saveProductionSnapshot({ ...finalizedOdp, id: newDoc.id });
+                    
+                    // LÓGICA DE CIERRE RPT: Si pertenece a un pedido de reabastecimiento PT, ver si podemos cerrarlo
+                    const relatedOrders = payload.related_orders || [];
+                    for (const orderId of relatedOrders) {
+                        if (orderId.startsWith('RPT')) {
+                            // Buscar todas las ODPs de este RPT
+                            const qRelated = query(tCol('production_orders'), where('related_orders', 'array-contains', orderId));
+                            const snaps = await getDocs(qRelated);
+                            const allDone = snaps.docs.every(d => ['DONE', 'Finalizada', 'Finalizado'].includes(d.data().status));
+                            
+                            if (allDone) {
+                                // Buscar el pedido RPT para marcarlo como entregado
+                                const qRpt = query(tCol('orders'), where('order_number', '==', orderId));
+                                const rptSnaps = await getDocs(qRpt);
+                                if (!rptSnaps.empty) {
+                                    await updateDoc(rptSnaps.docs[0].ref, {
+                                        status: 'Entregado',
+                                        delivered_at: new Date().toISOString()
+                                    });
+                                }
+                            }
+                        }
+                    }
                 }
             }
             return { success: true };

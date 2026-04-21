@@ -1360,7 +1360,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                 <div style={{ transform: 'scale(0.95)', transformOrigin: 'top center' }}>
                                     <DocumentBuilder
                                         type="ORDEN DE COMPRA MANUAL"
-                                        docId="BORRADOR-AUTO"
+                                        docId="OC-002"
                                         date={manualOCData.date}
                                         client={{
                                             name: ownCompany.name,

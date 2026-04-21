@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { AlertCircle, RefreshCw, Package, Save, X, ArrowUpRight, Search, Lightbulb, AlertTriangle, Calendar } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
 import { useAuth } from '../context/AuthContext';
@@ -14,8 +14,9 @@ const formatNum = (num) => {
 const Inventory = () => {
     const { user } = useAuth();
     const { 
-        items, updateItem, recipes, createInternalOrder, orders, purchaseOrders,
-        siteContent, updateInventoryConfig, auditStockAdjustment
+        items, updateItem, recipes, providers, createInternalOrder, orders, purchaseOrders,
+        siteContent, updateInventoryConfig, auditStockAdjustment,
+        addPurchase, saveOdp, refreshData, updateOrder
     } = useBusiness();
     const [searchMP, setSearchMP] = useState('');
     const [searchPT, setSearchPT] = useState('');
@@ -28,55 +29,114 @@ const Inventory = () => {
     const redThreshold = siteContent?.inventory?.config?.redThreshold || 0.5;
     const [isSimulated, setIsSimulated] = useState(false);
     const [neededMPForSelection, setNeededMPForSelection] = useState({});
+    const [isPoModalOpen, setIsPoModalOpen] = useState(false);
+    const [poPreviewList, setPoPreviewList] = useState([]);
+    const [ptExplosionData, setPtExplosionData] = useState([]);
+    const [isProcessingPOs, setIsProcessingPOs] = useState(false);
 
-    const getFinalStock = (item) => Math.round(((item.initial || 0) + (item.purchases || 0) - (item.sales || 0)) * 10) / 10;
+    const getFinalStock = useCallback((item) => {
+        if (!item) return 0;
+        return Math.round(((item.initial || 0) + (item.purchases || 0) - (item.sales || 0)) * 10) / 10;
+    }, []);
 
-    const pullSignals = (items || []).filter(item =>
-        getFinalStock(item) < (item.safety || 0)
-    );
+    const totals = useMemo(() => {
+        const demandMap = {};
+        const transitMap = {};
 
-    const getStatus = (item) => {
-        const stock = getFinalStock(item);
+        // 1. Calcular Demanda Activa (de pedidos que NO están entregados)
+        const finalStatuses = ['delivered', 'entregado', 'finalizado', 'cobrado', 'liquidado'];
+        orders.forEach(o => {
+            const statusLow = (o.status || '').toLowerCase().trim();
+            if (!finalStatuses.includes(statusLow)) {
+                (o.items || []).forEach(it => {
+                    const name = it.name?.toLowerCase().trim();
+                    if (name) demandMap[name] = (demandMap[name] || 0) + (Number(it.quantity) || 0);
+                });
+            }
+        });
+
+        // 2. Calcular Tránsito (OCs enviadas y ODPs en curso)
+        purchaseOrders.forEach(po => {
+            if (po.status === 'Enviada') {
+                (po.items || []).forEach(it => {
+                    const name = it.name?.toLowerCase().trim();
+                    if (name) transitMap[name] = (transitMap[name] || 0) + (Number(it.quantity) || 0);
+                });
+            }
+        });
+
+        // processedProductionOrders ya tiene 'isDone' calculado
+        const rawProductionOrders = useBusiness().rawProductionOrders || [];
+        (rawProductionOrders).forEach(odp => {
+            const isDone = odp.completed_at || ['DONE', 'Finalizada', 'Finalizado'].includes(odp.status);
+            if (!isDone) {
+                const name = odp.sku?.toLowerCase().trim();
+                if (name) transitMap[name] = (transitMap[name] || 0) + (Number(odp.custom_qty || odp.qty || 0));
+            }
+        });
+
+        return { demandMap, transitMap };
+    }, [orders, purchaseOrders, useBusiness().rawProductionOrders]);
+
+    const { demandMap, transitMap } = totals;
+
+    const getATP = useCallback((item) => {
+        if (!item) return 0;
+        const physical = getFinalStock(item);
+        const name = item.name?.toLowerCase().trim();
+        const transit = transitMap[name] || 0;
+        const demand = demandMap[name] || 0;
+        
+        // ATP = Stock Físico + Tránsito - Demanda Activa
+        return Math.round((physical + transit - demand) * 10) / 10;
+    }, [getFinalStock, transitMap, demandMap]);
+
+    const pullSignals = useMemo(() => (items || []).filter(item =>
+        getATP(item) < (Number(item.safety) || 0)
+    ), [items, getATP]);
+
+    const getStatus = useCallback((item) => {
+        const atp = getATP(item);
         const safety = Number(item.safety) || Number(item.min_stock_level) || 0;
-        if (stock < safety * redThreshold) return 'CRITICAL';
-        if (stock < safety) return 'LOW';
+        if (atp < safety * redThreshold) return 'CRITICAL';
+        if (atp < safety) return 'LOW';
         return 'OPTIMAL';
-    };
+    }, [getATP, redThreshold]);
 
     const getStatusColor = (status) => {
-        switch (status) {
-            case 'CRITICAL': return '#ef4444';
-            case 'LOW': return '#f59e0b'; // Amarillo/Ámbar claro para nivel de advertencia
-            default: return '#10b981';
-        }
+        if (status === 'CRITICAL') return '#ef4444';
+        if (status === 'LOW') return '#f97316';
+        return '#22c55e';
     };
 
-    const totalValueMP = items
-        .filter(i => i.type === 'material' || i.category === 'Materia Prima' || i.category === 'Insumo')
-        .reduce((acc, i) => acc + (getFinalStock(i) * (i.avgCost || 0)), 0);
-
-    const totalValuePT = items
-        .filter(i => i.type === 'product' || i.type === 'PT')
-        .reduce((acc, i) => acc + (getFinalStock(i) * (i.price || 0)), 0);
-
     const deepTeal = "#023636";
-    const institutionOcre = "#D4785A";
+    const institutionOcre = "#ad8a19";
+
+    const stockTotals = useMemo(() => {
+        let totalValueMP = 0;
+        let totalValuePT = 0;
+        (items || []).forEach(item => {
+            const stock = getFinalStock(item);
+            const value = stock * (Number(item.avgCost || item.cost || 0));
+            const isPT = item.type === 'product' || item.type === 'PT' || item.category === 'Producto Terminado';
+            if (isPT) totalValuePT += value;
+            else totalValueMP += value;
+        });
+        return { totalValueMP, totalValuePT };
+    }, [items, getFinalStock]);
+
+    const { totalValueMP, totalValuePT } = stockTotals;
 
     const windowMovements = useMemo(() => {
         const mv = {};
         const now = new Date();
         const cutoff = historyWindow === 'total' ? null : new Date(now.setDate(now.getDate() - historyWindow));
 
-        const isRecent = (dateStr) => {
-            if (!cutoff) return true;
-            if (!dateStr) return false;
-            return new Date(dateStr) >= cutoff;
-        };
-
-        // 1. Sales (From Orders)
-        orders.forEach(order => {
-            if (isRecent(order.date)) {
-                (order.items || []).forEach(it => {
+        orders.forEach(o => {
+            if (cutoff && new Date(o.created_at) < cutoff) return;
+            const statusLow = (o.status || '').toLowerCase().trim();
+            if (statusLow === 'delivered' || statusLow === 'entregado') {
+                (o.items || []).forEach(it => {
                     const sku = it.name;
                     if (!mv[sku]) mv[sku] = { purchases: 0, sales: 0 };
                     mv[sku].sales += Number(it.quantity) || 0;
@@ -84,9 +144,9 @@ const Inventory = () => {
             }
         });
 
-        // 2. Purchases (From POs)
-        (purchaseOrders || []).forEach(po => {
-            if (isRecent(po.date)) {
+        purchaseOrders.forEach(po => {
+            if (cutoff && new Date(po.order_date) < cutoff) return;
+            if (po.status === 'Recibida' || po.status === 'Completada') {
                 (po.items || []).forEach(it => {
                     const sku = it.name;
                     if (!mv[sku]) mv[sku] = { purchases: 0, sales: 0 };
@@ -121,6 +181,228 @@ const Inventory = () => {
             }
         }
     };
+
+    // ── REPLENISHMENT LOGIC (DRY) ───────────────────────────────────
+    const ptPulls = useMemo(() => pullSignals.filter(s => s.type === 'product' || s.type === 'PT' || s.category === 'Producto Terminado'), [pullSignals]);
+    const mpPulls = useMemo(() => pullSignals.filter(s => s.type === 'material' || s.type === 'MP' || s.category === 'Materia Prima'), [pullSignals]);
+
+    const hasActiveInternalOrder = useCallback((itemName) => {
+        return orders.some(o => {
+            const isInternal = o.client === 'Stock Interno' || o.client_id === 'INTERNAL_STOCK';
+            const statusLow = (o.status || '').toLowerCase().trim();
+            const isFinished = ['delivered', 'entregado', 'finalizado', 'cobrado'].includes(statusLow);
+            
+            return isInternal && !isFinished && 
+                (o.items || []).some(oi => oi.name?.toLowerCase().trim() === itemName.toLowerCase().trim());
+        });
+    }, [orders]);
+
+    const simulateRequirements = useCallback(() => {
+        const requirements = {};
+        const selectedPTItems = ptPulls.filter(p => selectedPulls.has(p.name));
+        
+        selectedPTItems.forEach(pt => {
+            const currentVal = getFinalStock(pt);
+            const goalVal = Number(pt.safety) || 0;
+            const deficit = Math.max(0, goalVal - currentVal);
+            const batchSize = Number(pt.batch_size) || 1;
+            const neededQty = deficit > 0 ? (Math.ceil(deficit / batchSize) * batchSize) : 0;
+
+            const recipe = recipes[pt.id] || recipes[pt.name?.toLowerCase().trim()] || [];
+            if (recipe.length > 0) {
+                const yieldQty = Number(recipe[0].yield_quantity) || 1;
+                recipe.forEach(ingredient => {
+                    const ingName = ingredient.name?.toLowerCase().trim();
+                    const qtyInRecipe = Number(ingredient.qty);
+                    if (ingName) {
+                        const proportionalQty = (neededQty / yieldQty) * qtyInRecipe;
+                        requirements[ingName] = (requirements[ingName] || 0) + proportionalQty;
+                    }
+                });
+            }
+        });
+        
+        setNeededMPForSelection(requirements);
+        setIsSimulated(Object.keys(requirements).length > 0);
+    }, [ptPulls, selectedPulls, recipes, getFinalStock]);
+
+    // Explosión automática al cambiar selección
+    useEffect(() => {
+        if (selectedPulls.size > 0) {
+            simulateRequirements();
+        } else {
+            setNeededMPForSelection({});
+            setIsSimulated(false);
+        }
+    }, [selectedPulls, simulateRequirements]);
+
+    const handleGenerateOrders = useCallback((mode = 'ALL') => {
+        // Combinamos seleccionados manuales + los detectados en la explosión automática
+        const explodedNames = mode === 'MP' ? Object.keys(neededMPForSelection).map(k => k.toLowerCase()) : [];
+        const manualNames = Array.from(selectedPulls).map(k => k.toLowerCase());
+        
+        // Unificar nombres únicos
+        const allNames = Array.from(new Set([...manualNames, ...explodedNames]));
+        if (allNames.length === 0) return;
+        
+        const poGroups = {};
+        const ptData = [];
+
+        allNames.forEach(rawName => {
+            // Buscar el item original (insensible a mayúsculas)
+            const item = items.find(i => (i.name || '').toLowerCase().trim() === rawName.trim());
+            if (!item) return;
+
+            const isPT = item.type === 'product' || item.type === 'PT' || item.category === 'Producto Terminado';
+            
+            // Filtro por modo
+            if (mode === 'PT' && !isPT) return;
+            if (mode === 'MP' && isPT) return;
+
+            const currentStock = getFinalStock(item);
+            const safety = Number(item.safety) || 0;
+            const deficit = Math.max(0, safety - currentStock);
+            const batchSize = Number(item.batch_size) || 1;
+
+            const prodRequirement = neededMPForSelection[item.name.toLowerCase().trim()] || 0;
+            const stockDeficit = Math.max(0, deficit);
+            
+            // Lógica de "Apilado": Sumamos lo que falta para el stock de seguridad + lo requerido para producir PT
+            const finalQty = isPT 
+                ? (deficit > 0 ? Math.ceil(deficit / batchSize) * batchSize : 0)
+                : (stockDeficit + prodRequirement);
+
+            // Incluso si es 0, lo incluimos en la data si fue seleccionado manualmente para que el modal abra
+            if (finalQty <= 0 && !selectedPulls.has(item.name)) return;
+
+            if (isPT) {
+                ptData.push({ label: item.name, qty: Math.max(0, finalQty) });
+            } else {
+                // Resolución de proveedor: 1. Campo en item, 2. Búsqueda inversa en lista de proveedores
+                let providerName = item.provider || item.provider_name;
+                let providerId = item.provider_id;
+
+                if (!providerId || providerId === 'no-id') {
+                    const linkedProvider = providers.find(p => (p.associated_items || p.associatedItems || []).includes(item.id));
+                    if (linkedProvider) {
+                        providerName = linkedProvider.name;
+                        providerId = linkedProvider.id;
+                    }
+                }
+
+                if (!providerName) providerName = 'Sin Proveedor';
+                if (!providerId) providerId = 'no-id';
+
+                if (!poGroups[providerName]) {
+                    poGroups[providerName] = { providerName, providerId, items: [], total: 0 };
+                }
+
+                const unitCost = Number(item.avgCost || item.cost || 0);
+                poGroups[providerName].items.push({
+                    id: item.id,
+                    name: item.name,
+                    toBuy: Math.max(0, finalQty),
+                    purchasePrice: unitCost,
+                    unit: item.unit || item.unit_measure || 'und'
+                });
+                poGroups[providerName].total += (Math.max(0, finalQty) * unitCost);
+            }
+        });
+
+        setPoPreviewList(Object.values(poGroups));
+        setPtExplosionData(ptData);
+        setIsPoModalOpen(true);
+    }, [selectedPulls, items, neededMPForSelection, getFinalStock, providers]);
+
+    const handleConfirmInternalOrder = useCallback(async () => {
+        setIsProcessingPOs(true);
+        try {
+            // 1. Crear las "Órdenes Maestras" de Reabastecimiento (RPT y RMP)
+            let rptId = null;
+            let rmpId = null;
+
+            if (ptExplosionData.length > 0) {
+                const ptMap = {};
+                ptExplosionData.forEach(p => ptMap[p.label] = p.qty);
+                const res = await createInternalOrder(ptMap, 'PT');
+                if (res.success) rptId = res.displayId;
+            }
+
+            if (poPreviewList.length > 0) {
+                const mpMap = {};
+                poPreviewList.forEach(po => {
+                    po.items.forEach(i => {
+                        mpMap[i.name] = (mpMap[i.name] || 0) + i.toBuy;
+                    });
+                });
+                const res = await createInternalOrder(mpMap, 'MP');
+                if (res.success) rmpId = res.displayId;
+            }
+
+            // 2. Generar las Órdenes de Compra (OC) vinculadas
+            let savedPoCount = 0;
+            for (const po of poPreviewList) {
+                const purchaseData = {
+                    provider_id: po.providerId,
+                    provider_name: po.providerName,
+                    status: 'Enviada',
+                    payment_status: 'Pendiente',
+                    total_amount: po.total,
+                    total_cost: po.total,
+                    order_date: new Date().toLocaleDateString('en-CA'),
+                    date: new Date().toLocaleDateString('en-CA'),
+                    related_orders: rmpId ? [rmpId] : ['REABASTECIMIENTO'],
+                    created_at: new Date().toISOString(),
+                    items: po.items.map(i => ({
+                        id: i.id,
+                        product_id: i.id,
+                        name: i.name,
+                        quantity: i.toBuy,
+                        qty: i.toBuy,
+                        unit_cost: i.purchasePrice,
+                        cost: i.purchasePrice,
+                        unit: i.unit,
+                        total_cost: i.purchasePrice * i.toBuy,
+                        total: i.purchasePrice * i.toBuy
+                    }))
+                };
+                const res = await addPurchase(purchaseData);
+                if (res.success) savedPoCount++;
+            }
+
+            // 3. Ya no generamos ODPs automáticamente aquí para evitar duplicidad en el Kanban.
+            // El pedido RPT en la primera columna ahora es la única fuente de verdad inicial.
+            let savedOdpCount = 0;
+
+            const summaryMsg = `🚀 ¡Éxito!
+- Pedido PT: ${rptId || 'N/A'}
+- Pedido MP: ${rmpId || 'N/A'}
+- OCs generadas: ${savedPoCount}
+- ODPs generadas: ${savedOdpCount}`;
+
+            alert(summaryMsg);
+            
+            setIsPoModalOpen(false);
+            setPoPreviewList([]);
+            setPtExplosionData([]);
+            setSelectedPulls(new Set());
+            setIsSimulated(false);
+            setNeededMPForSelection({});
+            if (refreshData) await refreshData();
+        } catch (err) {
+            alert("Error en la ejecución: " + err.message);
+        } finally {
+            setIsProcessingPOs(false);
+        }
+    }, [ptExplosionData, poPreviewList, createInternalOrder, addPurchase, saveOdp, refreshData]);
+
+    const toggleSelect = useCallback((name) => {
+        const next = new Set(selectedPulls);
+        if (next.has(name)) next.delete(name);
+        else next.add(name);
+        setSelectedPulls(next);
+    }, [selectedPulls]);
+    // ─────────────────────────────────────────────────────────────────
 
     return (
         <div style={{ padding: '2rem', minHeight: '100vh', background: '#fff', animation: 'fadeUp 0.6s ease-out' }}>
@@ -174,231 +456,180 @@ const Inventory = () => {
             </div>
 
             {/* LOGICA DE REABASTECIMIENTO ASISTIDO */}
-            {(() => {
-                const ptPulls = pullSignals.filter(s => s.type === 'product');
-                const mpPulls = pullSignals.filter(s => s.type === 'material');
-                
-                // Helper to check for active internal orders
-                const hasActiveInternalOrder = (itemName) => {
-                    return orders.some(o => 
-                        (o.client === 'Stock Interno' || o.client_id === 'INTERNAL_STOCK') && 
-                        o.status !== 'delivered' && 
-                        (o.items || []).some(oi => oi.name?.toLowerCase().trim() === itemName.toLowerCase().trim())
-                    );
-                };
-
-                const simulateRequirements = () => {
-                    const requirements = {};
-                    const selectedPTItems = ptPulls.filter(p => selectedPulls.has(p.name));
-                    
-                    selectedPTItems.forEach(pt => {
-                        const recipe = recipes[pt.id] || recipes[pt.name?.toLowerCase().trim()] || [];
-                        recipe.forEach(ingredient => {
-                            const ingName = ingredient.name?.toLowerCase().trim();
-                            const qtyNeeded = Number(ingredient.qty);
-                            if (ingName) {
-                                requirements[ingName] = (requirements[ingName] || 0) + qtyNeeded;
-                            }
-                        });
-                    });
-                    
-                    setNeededMPForSelection(requirements);
-                    setIsSimulated(true);
-                    
-                    const newSelection = new Set(selectedPulls);
-                    Object.keys(requirements).forEach(reqName => {
-                        const material = items.find(i => i.name?.toLowerCase().trim() === reqName);
-                        if (material) newSelection.add(material.name);
-                    });
-                    setSelectedPulls(newSelection);
-                };
-
-                const handleGenerateOrders = async () => {
-                    const selectedArr = Array.from(selectedPulls);
-                    if (selectedArr.length === 0) return;
-                    
-                    setIsGenerating(true);
-                    try {
-                        // All selected items go to the order. 
-                        // The backend will distinguish between PT and MP.
-                        const res = await createInternalOrder(selectedArr);
-                        if (res.success) {
-                            setSelectedPulls(new Set());
-                            setIsSimulated(false);
-                            setNeededMPForSelection({});
-                            alert(`🚀 Éxito: Se ha generado el Lote de Reabastecimiento para ${selectedArr.length} ítems.`);
-                        }
-                    } catch (err) {
-                        alert("Error al generar: " + err.message);
-                    } finally {
-                        setIsGenerating(false);
-                    }
-                };
-
-                const toggleSelect = (name) => {
-                    const next = new Set(selectedPulls);
-                    if (next.has(name)) next.delete(name);
-                    else next.add(name);
-                    setSelectedPulls(next);
-                };
-
-                return pullSignals.length > 0 && (
-                    <div style={{ padding: '2rem', background: '#fff', borderRadius: '32px', boxShadow: '0 10px 40px rgba(0,0,0,0.05)', marginBottom: '2.5rem', border: '1px solid rgba(0,0,0,0.05)', animation: 'fadeUp 0.6s ease-out' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem', marginBottom: '2rem' }}>
-                            <div style={{ width: '56px', height: '56px', borderRadius: '18px', background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ea580c', border: '1px solid #fed7aa' }}>
-                                <RefreshCw className={isGenerating ? 'animate-spin' : ''} size={28} />
-                            </div>
-                            <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: '1.2rem', fontWeight: '950', color: '#1e293b', letterSpacing: '-0.3px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                    PROTOCOLO DE REABASTECIMIENTO ASISTIDO
-                                    <span style={{ fontSize: '0.75rem', background: '#ea580c', color: '#fff', padding: '3px 10px', borderRadius: '20px', fontWeight: '900' }}>{pullSignals.length} ALERTAS</span>
-                                </div>
-                                <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Gestión inteligente de demanda interna. Define el umbral de prioridad roja abajo.</div>
-                            </div>
-                            
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                <div title="Define bajo qué % de la meta el producto se torna Rojo (Urgente)" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                    <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#64748b', textAlign: 'right' }}>UMBRAL CRÍTICO (ROJO)</label>
-                                    <select 
-                                        value={redThreshold}
-                                        onChange={async (e) => {
-                                            const val = parseFloat(e.target.value);
-                                            if (window.confirm(`⚠️ ¿Deseas establecer el UMBRAL INSTITUCIONAL de alerta roja al ${val * 100}%?\n\nEsto afectará la visibilidad del tablero para todos los usuarios.`)) {
-                                                await updateInventoryConfig(val);
-                                            }
-                                        }}
-                                        style={{ padding: '0.5rem', borderRadius: '10px', border: '2px solid #e2e8f0', background: '#fff', fontSize: '0.75rem', fontWeight: '800', outline: 'none', cursor: 'pointer', color: '#ea580c' }}
-                                    >
-                                        <option value={0.1}>10% (Muy Arriesgado)</option>
-                                        <option value={0.2}>20% (Agresivo)</option>
-                                        <option value={0.3}>30% (Moderado-Agresivo)</option>
-                                        <option value={0.5}>50% (Equilibrado)</option>
-                                        <option value={0.7}>70% (Conservador)</option>
-                                    </select>
-                                </div>
-                                <button onClick={() => { setSelectedPulls(new Set()); setIsSimulated(false); setNeededMPForSelection({}); }} style={{ padding: '0.8rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: '0.75rem', fontWeight: '900', cursor: 'pointer', marginTop: '14px' }}>
-                                    LIMPIAR SELECCIÓN
-                                </button>
-                            </div>
+            {pullSignals.length > 0 && (
+                <div style={{ padding: '2rem', background: '#fff', borderRadius: '32px', boxShadow: '0 10px 40px rgba(0,0,0,0.05)', marginBottom: '2.5rem', border: '1px solid rgba(0,0,0,0.05)', animation: 'fadeUp 0.6s ease-out' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem', marginBottom: '2rem' }}>
+                        <div style={{ width: '56px', height: '56px', borderRadius: '18px', background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ea580c', border: '1px solid #fed7aa' }}>
+                            <RefreshCw className={isGenerating ? 'animate-spin' : ''} size={28} />
                         </div>
-
-                        <div style={{ marginBottom: '2.5rem' }}>
-                            <div style={{ fontSize: '0.75rem', fontWeight: '950', color: '#94a3b8', letterSpacing: '1.5px', marginBottom: '1.2rem', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }}></div>
-                                1. PRODUCTO TERMINADO (DEMANDA DE VENTA)
-                                <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }}></div>
+                        <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: '1.2rem', fontWeight: '950', color: '#1e293b', letterSpacing: '-0.3px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                PROTOCOLO DE REABASTECIMIENTO ASISTIDO
+                                <span style={{ fontSize: '0.75rem', background: '#ea580c', color: '#fff', padding: '3px 10px', borderRadius: '20px', fontWeight: '900' }}>{pullSignals.length} ALERTAS</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1.2rem' }}>
-                                {ptPulls.map(sig => {
-                                    const status = getStatus(sig);
-                                    const color = getStatusColor(status);
-                                    const needsRecipe = !recipes[sig.id] && !recipes[sig.name?.toLowerCase().trim()];
-                                    const isSelected = selectedPulls.has(sig.name);
-                                    const inFlight = hasActiveInternalOrder(sig.name);
-
-                                    return (
-                                        <div key={sig.id} 
-                                            onClick={() => (!needsRecipe && !inFlight) && toggleSelect(sig.name)}
-                                            style={{ 
-                                                padding: '1.2rem', borderRadius: '20px', 
-                                                background: inFlight ? '#f1f5f9' : (isSelected ? '#fff7ed' : '#f8fafc'), 
-                                                border: `2px solid ${inFlight ? '#cbd5e1' : (isSelected ? '#ea580c' : 'rgba(0,0,0,0.02)')}`,
-                                                cursor: (needsRecipe || inFlight) ? 'default' : 'pointer', 
-                                                transition: 'all 0.2s', position: 'relative', 
-                                                opacity: (needsRecipe || (inFlight && !isSelected)) ? 0.6 : 1
-                                            }}
-                                        >
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.8rem' }}>
-                                                {!needsRecipe && !inFlight && (
-                                                    <div style={{ width: '22px', height: '22px', border: `2px solid ${isSelected ? '#ea580c' : '#cbd5e1'}`, borderRadius: '6px', background: isSelected ? '#ea580c' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                        {isSelected && <Package size={14} color="#fff" />}
-                                                    </div>
-                                                )}
-                                                {inFlight && <div style={{ fontSize: '0.65rem', fontWeight: '950', background: '#cbd5e1', color: '#64748b', padding: '3px 8px', borderRadius: '6px' }}>⚙️ EN PROCESO</div>}
-                                                <div style={{ padding: '3px 8px', borderRadius: '6px', background: color, color: '#fff', fontSize: '0.6rem', fontWeight: '950' }}>{status}</div>
-                                            </div>
-                                            <div style={{ fontWeight: '900', color: '#1e293b', fontSize: '0.9rem', marginBottom: '4px' }}>{sig.name.toUpperCase()}</div>
-                                            <div style={{ fontSize: '1rem', fontWeight: '950', color: inFlight ? '#64748b' : color }}>
-                                                {getFinalStock(sig)} <span style={{ opacity: 0.4, fontSize: '0.75rem' }}>/ {sig.safety} {sig.unit}</span>
-                                            </div>
-                                            {needsRecipe && (
-                                                <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px', color: '#ea580c', background: '#fff', padding: '4px 8px', borderRadius: '8px', border: '1px solid #fed7aa' }}>
-                                                    <AlertTriangle size={14} />
-                                                    <span style={{ fontSize: '0.65rem', fontWeight: '950' }}>SIN RECETA</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                            {selectedPulls.size > 0 && Array.from(selectedPulls).some(n => ptPulls.some(p => p.name === n)) && !isSimulated && (
-                                <button 
-                                    onClick={simulateRequirements}
-                                    disabled={isGenerating}
-                                    style={{ width: '100%', marginTop: '1.5rem', padding: '1rem', borderRadius: '16px', background: '#334155', color: '#fff', border: 'none', fontWeight: '950', fontSize: '0.9rem', cursor: 'pointer', boxShadow: '0 8px 25px rgba(51, 65, 85, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-                                >
-                                    <Search size={18} /> 🔍 SIMULAR REQUERIMIENTO (EXPLOSIÓN DE MATERIALES)
-                                </button>
-                            )}
+                            <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Gestión inteligente de demanda interna. Define el umbral de prioridad roja abajo.</div>
                         </div>
-
-                        <div style={{ marginTop: '2.5rem' }}>
-                            <div style={{ fontSize: '0.75rem', fontWeight: '950', color: '#94a3b8', letterSpacing: '1.5px', marginBottom: '1.2rem', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }}></div>
-                                2. MATERIA PRIMA (SUMINISTROS)
-                                <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }}></div>
-                            </div>
-                            
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1rem' }}>
-                                {mpPulls.map(sig => {
-                                    const status = getStatus(sig);
-                                    const color = getStatusColor(status);
-                                    const isSelected = selectedPulls.has(sig.name);
-                                    const isLinked = isSimulated && neededMPForSelection[sig.name?.toLowerCase().trim()];
-                                    const inFlight = hasActiveInternalOrder(sig.name);
-
-                                    return (
-                                        <div key={sig.id} 
-                                            onClick={() => !inFlight && toggleSelect(sig.name)}
-                                            style={{ 
-                                                padding: '1rem', borderRadius: '16px', 
-                                                background: inFlight ? '#f1f5f9' : (isLinked ? '#fff7ed' : (isSelected ? '#f0f9ff' : '#f8fafc')), 
-                                                border: `2px solid ${inFlight ? '#cbd5e1' : (isLinked ? '#ea580c' : (isSelected ? '#0ea5e9' : 'rgba(0,0,0,0.02)'))}`,
-                                                cursor: inFlight ? 'default' : 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '12px',
-                                                boxShadow: isLinked ? '0 4px 15px rgba(234, 88, 12, 0.15)' : 'none',
-                                                opacity: inFlight ? 0.6 : 1
-                                            }}
-                                        >
-                                            <div style={{ width: '18px', height: '18px', border: `2px solid ${isLinked ? '#ea580c' : (isSelected ? '#0ea5e9' : '#cbd5e1')}`, borderRadius: '6px', background: isLinked ? '#ea580c' : (isSelected ? '#0ea5e9' : '#fff'), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                {(isSelected || isLinked) && <Package size={12} color="#fff" />}
-                                            </div>
-                                            <div style={{ flex: 1 }}>
-                                                <div style={{ fontWeight: '800', color: '#1e293b', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>
-                                                    {sig.name.toUpperCase()}
-                                                    {inFlight && <span style={{ fontSize: '0.6rem', color: '#64748b' }}>⚙️ EN COLA</span>}
-                                                </div>
-                                                <div style={{ fontSize: '0.9rem', fontWeight: '950', color: isLinked ? '#ea580c' : color }}>
-                                                    {getFinalStock(sig)} <span style={{ opacity: 0.4, fontSize: '0.75rem' }}>/ {sig.safety}</span>
-                                                    {isLinked && <span style={{ marginLeft: '10px', fontSize: '0.65rem', color: '#ea580c', background: '#fff', padding: '2px 6px', borderRadius: '4px' }}>NECESARIO: {neededMPForSelection[sig.name?.toLowerCase().trim()]}</span>}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                            {selectedPulls.size > 0 && (
-                                <button 
-                                    onClick={handleGenerateOrders}
-                                    disabled={isGenerating}
-                                    style={{ width: '100%', marginTop: '2rem', padding: '1.2rem', borderRadius: '20px', background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)', color: '#fff', border: 'none', fontWeight: '950', fontSize: '1rem', cursor: 'pointer', boxShadow: '0 12px 30px rgba(30, 41, 59, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', animation: isSimulated ? 'pulse 2s infinite' : 'none' }}
+                        
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <div title="Define bajo qué % de la meta el producto se torna Rojo (Urgente)" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#64748b', textAlign: 'right' }}>UMBRAL CRÍTICO (ROJO)</label>
+                                <select 
+                                    value={redThreshold}
+                                    onChange={async (e) => {
+                                        const val = parseFloat(e.target.value);
+                                        if (window.confirm(`⚠️ ¿Deseas establecer el UMBRAL INSTITUCIONAL de alerta roja al ${val * 100}%?\n\nEsto afectará la visibilidad del tablero para todos los usuarios.`)) {
+                                            await updateInventoryConfig(val);
+                                        }
+                                    }}
+                                    style={{ padding: '0.5rem', borderRadius: '10px', border: '2px solid #e2e8f0', background: '#fff', fontSize: '0.75rem', fontWeight: '800', outline: 'none', cursor: 'pointer', color: '#ea580c' }}
                                 >
-                                    🚀 GENERAR ÓRDENES CONSOLIDADAS (REABASTECIMIENTO INVENTARIO)
-                                </button>
-                            )}
+                                    <option value={0.1}>10% (Muy Arriesgado)</option>
+                                    <option value={0.2}>20% (Agresivo)</option>
+                                    <option value={0.3}>30% (Moderado-Agresivo)</option>
+                                    <option value={0.5}>50% (Equilibrado)</option>
+                                    <option value={0.7}>70% (Conservador)</option>
+                                </select>
+                            </div>
+                            <button onClick={() => { setSelectedPulls(new Set()); setIsSimulated(false); setNeededMPForSelection({}); }} style={{ padding: '0.8rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: '0.75rem', fontWeight: '900', cursor: 'pointer', marginTop: '14px' }}>
+                                LIMPIAR SELECCIÓN
+                            </button>
                         </div>
                     </div>
-                );
-            })()}
+
+                    <div style={{ marginBottom: '2.5rem' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: '950', color: '#94a3b8', letterSpacing: '1.5px', marginBottom: '1.2rem', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }}></div>
+                            1. PRODUCTO TERMINADO (DEMANDA DE VENTA)
+                            <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }}></div>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1.2rem' }}>
+                            {ptPulls.map(sig => {
+                                const status = getStatus(sig);
+                                const color = getStatusColor(status);
+                                const needsRecipe = !recipes[sig.id] && !recipes[sig.name?.toLowerCase().trim()];
+                                const isSelected = selectedPulls.has(sig.name);
+                                const inFlight = hasActiveInternalOrder(sig.name);
+
+                                return (
+                                    <div key={sig.id} 
+                                        onClick={() => (!needsRecipe && !inFlight) && toggleSelect(sig.name)}
+                                        style={{ 
+                                            padding: '1.2rem', borderRadius: '20px', 
+                                            background: inFlight ? '#f1f5f9' : (isSelected ? '#fff7ed' : '#f8fafc'), 
+                                            border: `2px solid ${inFlight ? '#cbd5e1' : (isSelected ? '#ea580c' : 'rgba(0,0,0,0.02)')}`,
+                                            cursor: (needsRecipe || inFlight) ? 'default' : 'pointer', 
+                                            transition: 'all 0.2s', position: 'relative', 
+                                            opacity: (needsRecipe || (inFlight && !isSelected)) ? 0.6 : 1,
+                                            boxShadow: isSelected ? '0 8px 20px rgba(234, 88, 12, 0.1)' : 'none'
+                                        }}
+                                    >
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.8rem' }}>
+                                            {!needsRecipe && !inFlight && (
+                                                <div style={{ width: '22px', height: '22px', border: `2px solid ${isSelected ? '#ea580c' : '#cbd5e1'}`, borderRadius: '6px', background: isSelected ? '#ea580c' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    {isSelected && <Package size={14} color="#fff" />}
+                                                </div>
+                                            )}
+                                            {inFlight && <div style={{ fontSize: '0.65rem', fontWeight: '950', background: '#cbd5e1', color: '#64748b', padding: '3px 8px', borderRadius: '6px' }}>⚙️ EN PROCESO</div>}
+                                            <div style={{ padding: '3px 8px', borderRadius: '6px', background: color, color: '#fff', fontSize: '0.6rem', fontWeight: '950' }}>{status}</div>
+                                        </div>
+                                        <div style={{ fontWeight: '900', color: '#1e293b', fontSize: '0.9rem', marginBottom: '4px' }}>{sig.name.toUpperCase()}</div>
+                                        <div style={{ fontSize: '1rem', fontWeight: '950', color: inFlight ? '#64748b' : color }}>
+                                            {getFinalStock(sig)} <span style={{ opacity: 0.4, fontSize: '0.75rem' }}>/ {sig.safety} {sig.unit}</span>
+                                        </div>
+                                        {needsRecipe && (
+                                            <div 
+                                                onClick={(e) => { e.stopPropagation(); window.location.href = '/gestion/recipes'; }}
+                                                style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px', color: '#ea580c', background: '#fff', padding: '4px 8px', borderRadius: '8px', border: '1px solid #fed7aa', cursor: 'pointer' }}
+                                            >
+                                                <AlertTriangle size={14} />
+                                                <span style={{ fontSize: '0.65rem', fontWeight: '950' }}>SIN RECETA (CREAR AQUÍ)</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    <div style={{ marginTop: '2.5rem' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: '950', color: '#94a3b8', letterSpacing: '1.5px', marginBottom: '1.2rem', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }}></div>
+                            2. MATERIA PRIMA (SUMINISTROS)
+                            <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }}></div>
+                        </div>
+                        
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1rem' }}>
+                            {mpPulls.map(sig => {
+                                const status = getStatus(sig);
+                                const color = getStatusColor(status);
+                                const isSelected = selectedPulls.has(sig.name);
+                                const isLinked = isSimulated && neededMPForSelection[sig.name?.toLowerCase().trim()];
+                                const inFlight = hasActiveInternalOrder(sig.name);
+
+                                return (
+                                    <div key={sig.id} 
+                                        onClick={() => !inFlight && toggleSelect(sig.name)}
+                                        style={{ 
+                                            padding: '1rem', borderRadius: '16px', 
+                                            background: inFlight ? '#f1f5f9' : (isLinked ? '#fff7ed' : (isSelected ? '#f0f9ff' : '#f8fafc')), 
+                                            border: `2px solid ${inFlight ? '#cbd5e1' : (isLinked ? '#ea580c' : (isSelected ? '#0ea5e9' : 'rgba(0,0,0,0.02)'))}`,
+                                            cursor: inFlight ? 'default' : 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '12px',
+                                            boxShadow: isLinked ? '0 4px 15px rgba(234, 88, 12, 0.15)' : 'none',
+                                            opacity: inFlight ? 0.6 : 1
+                                        }}
+                                    >
+                                        <div style={{ width: '18px', height: '18px', border: `2px solid ${isLinked ? '#ea580c' : (isSelected ? '#0ea5e9' : '#cbd5e1')}`, borderRadius: '6px', background: isLinked ? '#ea580c' : (isSelected ? '#0ea5e9' : '#fff'), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            {(isSelected || isLinked) && <Package size={12} color="#fff" />}
+                                        </div>
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ fontWeight: '800', color: '#1e293b', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>
+                                                {sig.name.toUpperCase()}
+                                                {inFlight && <span style={{ fontSize: '0.6rem', color: '#64748b' }}>⚙️ EN COLA</span>}
+                                            </div>
+                                            <div style={{ fontSize: '0.9rem', fontWeight: '950', color: isLinked ? '#ea580c' : color }}>
+                                                {getFinalStock(sig)} <span style={{ opacity: 0.4, fontSize: '0.75rem' }}>/ {sig.safety}</span>
+                                                {isLinked && <span style={{ marginLeft: '10px', fontSize: '0.65rem', color: '#ea580c', background: '#fff', padding: '2px 6px', borderRadius: '4px' }}>NECESARIO: {neededMPForSelection[sig.name?.toLowerCase().trim()]}</span>}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        {selectedPulls.size > 0 && (
+                            <div style={{ display: 'flex', gap: '0.8rem', marginTop: '1.5rem', justifyContent: 'center' }}>
+                                <button 
+                                    onClick={() => handleGenerateOrders('PT')}
+                                    disabled={isGenerating || !Array.from(selectedPulls).some(n => ptPulls.some(p => p.name === n))}
+                                    style={{ 
+                                        padding: '0.8rem 1.4rem', borderRadius: '14px', 
+                                        background: 'linear-gradient(135deg, #ea580c 0%, #c2410c 100%)', 
+                                        color: '#fff', border: 'none', fontWeight: '900', fontSize: '0.75rem', 
+                                        cursor: 'pointer', boxShadow: '0 8px 20px rgba(234, 88, 12, 0.15)', 
+                                        display: 'flex', alignItems: 'center', gap: '8px',
+                                        opacity: Array.from(selectedPulls).some(n => ptPulls.some(p => p.name === n)) ? 1 : 0.5
+                                    }}
+                                >
+                                    <RefreshCw size={14} /> PEDIDO PT (RPT)
+                                </button>
+                                <button 
+                                    onClick={() => handleGenerateOrders('MP')}
+                                    disabled={isGenerating || !Array.from(selectedPulls).some(n => mpPulls.some(p => p.name === n))}
+                                    style={{ 
+                                        padding: '0.8rem 1.4rem', borderRadius: '14px', 
+                                        background: 'linear-gradient(135deg, #023636 0%, #037075 100%)', 
+                                        color: '#fff', border: 'none', fontWeight: '900', fontSize: '0.75rem', 
+                                        cursor: 'pointer', boxShadow: '0 8px 20px rgba(2, 54, 54, 0.15)', 
+                                        display: 'flex', alignItems: 'center', gap: '8px',
+                                        opacity: Array.from(selectedPulls).some(n => mpPulls.some(p => p.name === n)) ? 1 : 0.5
+                                    }}
+                                >
+                                    <Package size={14} /> PEDIDO MP (RMP)
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* Navigation Tabs for Management Gallery */}
             <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>
@@ -540,7 +771,6 @@ const Inventory = () => {
                                         const displaySales = historyWindow === 'total' ? (item.sales || 0) : win.sales;
 
                                         // Opening Stock logic
-                                        // If total: is the master initial. If window: is Final - WindowPurchases + WindowSales
                                         const masterInit = item.initial || 0;
                                         const calculatedOpening = historyWindow === 'total' ? masterInit : (trueFinal - win.purchases + win.sales);
                                         
@@ -896,7 +1126,95 @@ const Inventory = () => {
                 @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
                 input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
                 input[type=number] { -moz-appearance: textfield; }
+                @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
+                @keyframes scaleIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
             `}</style>
+
+            {/* PREVIEW MODAL FOR POs AND INTERNAL EXECUTION */}
+            {isPoModalOpen && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(2, 54, 54, 0.8)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '2rem' }}>
+                    <div style={{ background: '#fff', width: '100%', maxWidth: '900px', borderRadius: '32px', overflow: 'hidden', boxShadow: '0 25px 50px rgba(0,0,0,0.3)', animation: 'scaleIn 0.3s ease-out' }}>
+                        <div style={{ padding: '2rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                                <h3 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '950', color: deepTeal, letterSpacing: '-0.5px' }}>EJECUCIÓN DE REABASTECIMIENTO</h3>
+                                <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: '#64748b', fontWeight: '600' }}>Confirma las Órdenes de Compra y Producción a generar.</p>
+                            </div>
+                            <button onClick={() => setIsPoModalOpen(false)} style={{ padding: '0.6rem', background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', cursor: 'pointer', color: '#64748b' }}><X size={20} /></button>
+                        </div>
+
+                        <div style={{ padding: '2rem', maxHeight: '60vh', overflowY: 'auto' }}>
+                            {/* SECTION PT: PRODUCTION ORDERS */}
+                            {ptExplosionData.length > 0 && (
+                                <div style={{ marginBottom: '2.5rem' }}>
+                                    <div style={{ fontSize: '0.7rem', fontWeight: '900', color: '#ea580c', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <RefreshCw size={14} /> ÓRDENES DE PRODUCCIÓN (ODP)
+                                    </div>
+                                    <div style={{ display: 'grid', gap: '0.8rem' }}>
+                                        {ptExplosionData.map((pt, idx) => (
+                                            <div key={idx} style={{ padding: '1rem', background: 'rgba(234, 88, 12, 0.05)', borderRadius: '16px', border: '1px solid rgba(234, 88, 12, 0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <span style={{ fontWeight: '800', color: '#9a3412' }}>{pt.label.toUpperCase()}</span>
+                                                <span style={{ fontWeight: '950', color: '#ea580c' }}>REPOSICIÓN: {pt.qty} und</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* SECTION MP: PURCHASE ORDERS */}
+                            {poPreviewList.length > 0 && (
+                                <div>
+                                    <div style={{ fontSize: '0.7rem', fontWeight: '900', color: deepTeal, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <Package size={14} /> ÓRDENES DE COMPRA (OC) POR PROVEEDOR
+                                    </div>
+                                    <div style={{ display: 'grid', gap: '1.2rem' }}>
+                                        {poPreviewList.map((po, idx) => (
+                                            <div key={idx} style={{ background: '#f8fafc', borderRadius: '24px', border: '1px solid #e2e8f0', padding: '1.5rem' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                                                    <span style={{ fontWeight: '950', color: deepTeal }}>{po.providerName.toUpperCase()}</span>
+                                                    <span style={{ fontWeight: '950', color: '#16a34a' }}>TOTAL: $ {Math.round(po.total).toLocaleString()}</span>
+                                                </div>
+                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                                    {po.items.map((it, iIdx) => (
+                                                        <div key={iIdx} style={{ padding: '4px 12px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '0.75rem', fontWeight: '700', color: '#64748b' }}>
+                                                            {it.toBuy} {it.unit} - {it.name}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div style={{ padding: '2rem', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '1rem' }}>
+                            <button 
+                                onClick={() => setIsPoModalOpen(false)}
+                                style={{ flex: 1, padding: '1.2rem', borderRadius: '18px', border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontWeight: '900', cursor: 'pointer' }}
+                            >
+                                CANCELAR
+                            </button>
+                            <button 
+                                onClick={handleConfirmInternalOrder}
+                                disabled={isProcessingPOs}
+                                style={{ 
+                                    flex: 2, padding: '1.2rem', borderRadius: '18px', border: 'none', 
+                                    background: 'linear-gradient(135deg, #023636 0%, #037075 100%)', 
+                                    color: '#fff', fontWeight: '950', fontSize: '1rem', cursor: 'pointer',
+                                    boxShadow: '0 10px 25px rgba(2, 54, 54, 0.3)',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px'
+                                }}
+                            >
+                                {isProcessingPOs ? (
+                                    <> <RefreshCw size={20} className="animate-spin" /> PROCESANDO... </>
+                                ) : (
+                                    <> <Save size={20} /> CONFIRMAR Y EJECUTAR ORDEN </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
