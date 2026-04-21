@@ -495,8 +495,20 @@ const Orders = ({ orders }) => {
                     }
 
                     if (!recipe || recipe.length === 0) {
-                        if (!missingRecipes.includes(itemName)) missingRecipes.push(itemName);
-                        return;
+                        // EXCEPCIÓN: Si es una Materia Prima (ej: de un pedido RMP), su receta es el mismo insumo (1:1)
+                        const isMaterial = pt.type === 'material' || pt.category?.toLowerCase().includes('materia prima') || pt.category?.toLowerCase().includes('suministro');
+                        if (isMaterial) {
+                            recipe = [{
+                                rm_id: pt.id,
+                                name: pt.name,
+                                qty: 1,
+                                unit: pt.unit_measure || pt.unit || 'und',
+                                yield_quantity: 1
+                            }];
+                        } else {
+                            if (!missingRecipes.includes(itemName)) missingRecipes.push(itemName);
+                            return;
+                        }
                     }
 
                     if (!demandByProduct[pt.id]) {
@@ -513,13 +525,16 @@ const Orders = ({ orders }) => {
             }
 
             const ptData = Object.values(demandByProduct).map(({ pt, recipe, totalDemand, label }) => {
+                const isMaterial = pt.type === 'material' || pt.category?.toLowerCase().includes('materia prima') || pt.category?.toLowerCase().includes('suministro');
+                
                 const stockVal = pt.initial !== undefined ? Number(pt.initial) : (Number(pt.stock) || 0);
                 const purchasesVal = Number(pt.purchases) || 0;
                 const salesVal = Number(pt.sales) || 0;
-                const inventoryPT = Math.max(0, stockVal + purchasesVal - salesVal);
                 
-                const batchSize = Number(pt.batch_size) || Number(pt.batchSize) || 14;
-                const safetyUnits = Number(pt.min_stock_level) || Number(pt.safety) || 2; // "Meta de Seguridad" en Unidades
+                // Si es material, ignoramos stock y seguridad (ya fueron calculados en Inventario)
+                const inventoryPT = isMaterial ? 0 : Math.max(0, stockVal + purchasesVal - salesVal);
+                const safetyUnits = isMaterial ? 0 : (Number(pt.min_stock_level) || Number(pt.safety) || 2);
+                const batchSize = isMaterial ? 1 : (Number(pt.batch_size) || Number(pt.batchSize) || 14);
 
                 // FÓRMULA ZETICAS: Batches = Ceil( (Demanda - Stock + Seguridad) / BatchSize )
                 const netToProduce = (totalDemand - inventoryPT) + safetyUnits;
