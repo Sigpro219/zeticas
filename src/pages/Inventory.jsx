@@ -32,6 +32,13 @@ const Inventory = () => {
 
     const getFinalStock = useCallback((item) => {
         if (!item) return 0;
+        const balance = ((item.initial || 0) + (item.purchases || 0) - (item.sales || 0));
+        // El Stock FÍSICO real nunca es negativo en la bodega.
+        return Math.round(Math.max(0, balance) * 10) / 10;
+    }, []);
+
+    const getStockBalance = useCallback((item) => {
+        if (!item) return 0;
         return Math.round(((item.initial || 0) + (item.purchases || 0) - (item.sales || 0)) * 10) / 10;
     }, []);
 
@@ -78,14 +85,15 @@ const Inventory = () => {
 
     const getATP = useCallback((item) => {
         if (!item) return 0;
-        const physical = getFinalStock(item);
+        // El balance real puede ser negativo (indica deuda con el mercado)
+        const balance = getStockBalance(item);
         const name = item.name?.toLowerCase().trim();
         const transit = transitMap[name] || 0;
         const demand = demandMap[name] || 0;
         
-        // ATP = Stock Físico + Tránsito - Demanda Activa
-        return Math.round((physical + transit - demand) * 10) / 10;
-    }, [getFinalStock, transitMap, demandMap]);
+        // ATP = Saldo Real (pueden ser negativos por pedidos previos) + Tránsito - Demanda Activa
+        return Math.round((balance + transit - demand) * 10) / 10;
+    }, [getStockBalance, transitMap, demandMap]);
 
     const pullSignals = useMemo(() => (items || []).filter(item =>
         getATP(item) < (Number(item.safety) || 0)
@@ -274,6 +282,8 @@ const Inventory = () => {
             if (isPT) {
                 ptData.push({ label: item.name, qty: Math.max(0, finalQty) });
             } else {
+                // Bloqueo estricto: SI ES MATERIA PRIMA, NO PUEDE IR A PTDATA (Cero ODPs)
+                // Se procesa solo para poGroups
                 // Resolución de proveedor: 1. Campo en item, 2. Búsqueda inversa en lista de proveedores
                 let providerName = item.provider || item.provider_name;
                 let providerId = item.provider_id;
@@ -958,7 +968,14 @@ const Inventory = () => {
                                                 <td style={{ padding: '1rem', textAlign: 'center', color: '#c2410c', fontWeight: '700' }}>{formatNum(stockSeg)}</td>
                                                 <td style={{ padding: '1rem', textAlign: 'center', color: '#16a34a', fontWeight: '700' }}>+{formatNum(displayProd)}</td>
                                                 <td style={{ padding: '1rem', textAlign: 'center', color: '#ef4444', fontWeight: '700' }}>-{formatNum(displaySales)}</td>
-                                                <td style={{ padding: '1rem', textAlign: 'center', fontWeight: '950', color: '#ea580c', fontSize: '1.1rem' }}>{formatNum(trueFinal)}</td>
+                                                <td style={{ padding: '1rem', textAlign: 'center', fontWeight: '950', color: trueFinal < 0 ? '#ef4444' : '#ea580c', fontSize: '1.1rem' }}>
+                                                    {formatNum(Math.max(0, trueFinal))}
+                                                    {trueFinal < 0 && (
+                                                        <div style={{ fontSize: '0.6rem', color: '#ef4444', marginTop: '2px', fontWeight: '900' }}>
+                                                            PENDIENTE: {formatNum(Math.abs(trueFinal))}
+                                                        </div>
+                                                    )}
+                                                </td>
                                             </tr>
                                         );
                                     })}
