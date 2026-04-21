@@ -4,6 +4,7 @@ import { useBusiness } from '../context/BusinessContext';
 import Barcode from 'react-barcode';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../lib/firebase';
+import { formatQty, formatPrice } from '../utils/format';
 
 const Products = () => {
     const { items, refreshData, loading, recalculatePTCosts, addItem, updateItem, deleteItem } = useBusiness();
@@ -595,9 +596,9 @@ const Products = () => {
                                             <span style={{ padding: '4px 10px', borderRadius: '8px', fontSize: '0.7rem', fontWeight: '900', background: p.product_type === 'Sal' ? '#f1f5f9' : p.product_type === 'Dulce' ? '#fff7ed' : p.product_type === 'Kit' ? '#f0fdfa' : '#f8fafc', color: p.product_type === 'Sal' ? '#475569' : p.product_type === 'Dulce' ? '#c2410c' : p.product_type === 'Kit' ? '#0d9488' : '#94a3b8', border: '1px solid currentColor', opacity: p.product_type === 'Kit' ? 1 : 1 }}>{p.product_type}</span>
                                         </td>
                                         <td style={{ padding: '1rem', fontSize: '0.85rem' }}>{p.category}</td>
-                                        <td style={{ padding: '1rem', color: '#666' }}>${p.cost?.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 1 })}</td>
+                                        <td style={{ padding: '1rem', color: '#666' }}>${formatPrice(p.cost || 0)}</td>
                                         <td style={{ padding: '1rem', fontWeight: 'bold', color: 'var(--color-primary)' }}>
-                                            {p.category === 'Producto Terminado' ? `$${p.price?.toLocaleString()}` : <span style={{ color: '#cbd5e1', fontWeight: 'normal' }}>-</span>}
+                                            {p.category === 'Producto Terminado' ? `$${formatPrice(p.price || 0)}` : <span style={{ color: '#cbd5e1', fontWeight: 'normal' }}>-</span>}
                                         </td>
                                         <td style={{ padding: '1rem', textAlign: 'center' }}>
                                             <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>

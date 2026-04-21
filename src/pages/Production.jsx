@@ -4,6 +4,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useBusiness } from '../context/BusinessContext';
 import { useAuth } from '../context/AuthContext';
+import { formatQty, formatPrice } from '../utils/format';
 import {
     Search,
     CheckCircle2,
@@ -107,7 +108,8 @@ const Production = () => {
         loadFinishedGoods,
         ownCompany,
         updateOrder,
-        addRejectedProduct
+        addRejectedProduct,
+        refreshData
     } = useBusiness();
 
     // const [isLoading, setIsLoading] = useState(false); // Unused
@@ -277,7 +279,7 @@ const Production = () => {
                 const currentWaste = odpDoc.waste_qty !== undefined ? odpDoc.waste_qty : settings.wasteQty;
                 if (currentWaste !== undefined && Number(finalQty) > 0) {
                     waste = Number(currentWaste);
-                    waste_percent = ((waste / Number(finalQty)) * 100).toFixed(1);
+                    waste_percent = formatQty((waste / Number(finalQty)) * 100);
                 }
 
                 if (startTime && endTime) {
@@ -602,7 +604,7 @@ const Production = () => {
                         materials_consumed: materials.map(m => ({
                             id: m.id,
                             name: m.name,
-                            qty: Number(m.qtyToConsume.toFixed(2)),
+                            qty: Number(formatQty(m.qtyToConsume)),
                             unit: m.unit
                         }))
                     }
@@ -1032,63 +1034,6 @@ const Production = () => {
             {/* ODP Card Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: '2rem', animation: 'fadeUp 1.1s ease-out', minHeight: '300px' }}>
                 
-                {/* --- NUEVO: PANEL DE NECESIDADES / DÉFICIT --- */}
-                {productionNeeds.length > 0 && (
-                    <div style={{ 
-                        gridColumn: '1 / -1', 
-                        background: 'rgba(212, 120, 90, 0.05)', 
-                        padding: '2rem', 
-                        borderRadius: '35px', 
-                        border: '2px solid rgba(212, 120, 90, 0.1)',
-                        marginBottom: '1rem'
-                    }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
-                            <div style={{ width: '45px', height: '45px', borderRadius: '14px', background: institutionOcre, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
-                                <AlertCircle size={24} />
-                            </div>
-                            <div>
-                                <h2 style={{ fontSize: '1.4rem', fontWeight: '950', color: deepTeal, margin: 0 }}>Necesidades de Producción</h2>
-                                <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: '700' }}>Productos con pedidos activos que no tienen suficiente stock o lotes en planta.</p>
-                            </div>
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
-                            {productionNeeds.map(need => (
-                                <div key={need.sku} style={{ background: '#fff', padding: '1.5rem', borderRadius: '24px', boxShadow: '0 5px 15px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div style={{ flex: 1 }}>
-                                        <div style={{ fontWeight: '950', color: deepTeal, fontSize: '1rem' }}>{need.sku.toUpperCase()}</div>
-                                        <div style={{ display: 'flex', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
-                                            <span style={{ fontSize: '0.65rem', fontWeight: '900', color: premiumSalmon, background: `${premiumSalmon}10`, padding: '2px 8px', borderRadius: '6px' }}>DEUDA: {Math.ceil(need.deficit)} UDS</span>
-                                            <span style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8' }}>Pedidos: {need.orders.length}</span>
-                                        </div>
-                                    </div>
-                                    <button 
-                                        onClick={() => handleLaunchOdp(need)}
-                                        style={{ 
-                                            background: deepTeal, 
-                                            color: '#fff', 
-                                            border: 'none', 
-                                            padding: '0.8rem 1.2rem', 
-                                            borderRadius: '14px', 
-                                            fontWeight: '900', 
-                                            fontSize: '0.75rem', 
-                                            cursor: 'pointer',
-                                            boxShadow: `0 8px 15px ${deepTeal}30`,
-                                            transition: 'all 0.2s',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '8px'
-                                        }}
-                                        onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
-                                        onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-                                    >
-                                        <Zap size={14} /> LANZAR URGENTE
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
 
                 {filteredOdpQueue.length > 0 ? (
                     filteredOdpQueue.map((odp) => {

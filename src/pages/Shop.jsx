@@ -4,6 +4,7 @@ import { useBusiness } from '../context/BusinessContext';
 import { Search, ShoppingBag, ArrowRight, X } from 'lucide-react';
 
 import { useMediaQuery } from '../hooks/useMediaQuery';
+import { formatPrice } from '../utils/format';
 
 const OptimizedImage = ({ src, alt, className, style }) => {
     const [loaded, setLoaded] = useState(false);
@@ -279,7 +280,7 @@ const Shop = () => {
                                         <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--color-secondary)', fontWeight: '700' }}>{product.categoria}</span>
                                         <h3 className="font-serif" style={{ fontSize: '1.6rem', color: 'var(--color-primary)', margin: '0.2rem 0' }}>{product.nombre}</h3>
                                     </div>
-                                    <span style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--color-primary)' }}>${product.precio.toLocaleString('es-CO')}</span>
+                                    <span style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--color-primary)' }}>${formatPrice(product.precio)}</span>
                                 </div>
                                 <p style={{ fontSize: '0.85rem', color: 'rgba(0,0,0,0.6)', lineHeight: '1.6', marginBottom: '2rem', height: '2.8rem', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                                     {product.descripcion}
@@ -422,7 +423,7 @@ const Shop = () => {
                                 {selectedProduct.nombre}
                             </h2>
                             <div style={{ fontSize: '1.8rem', fontWeight: '800', color: 'var(--color-primary)', marginBottom: '2rem' }}>
-                                ${selectedProduct.precio.toLocaleString('es-CO')}
+                                ${formatPrice(selectedProduct.precio)}
                             </div>
 
                             <p style={{ color: '#555', lineHeight: 1.8, fontSize: '0.95rem', marginBottom: '2rem' }}>

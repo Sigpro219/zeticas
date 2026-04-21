@@ -3,13 +3,9 @@ import { AlertCircle, RefreshCw, Package, Save, X, ArrowUpRight, Search, Lightbu
 import { useBusiness } from '../context/BusinessContext';
 import { useAuth } from '../context/AuthContext';
 
-const formatNum = (num) => {
-    if (num === null || num === undefined || isNaN(num)) return '0';
-    return Number(num).toLocaleString('es-CO', {
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 1
-    });
-};
+import { formatQty, formatPrice } from '../utils/format';
+
+const formatNum = formatQty;
 
 const Inventory = () => {
     const { user } = useAuth();
@@ -430,7 +426,7 @@ const Inventory = () => {
                         <span style={{ fontSize: '0.75rem', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px', opacity: 0.7 }}>Valor de Materia Prima</span>
                         <div style={{ fontSize: '2.5rem', fontWeight: '900', letterSpacing: '-1.5px', lineHeight: 1, margin: '1rem 0' }}>
                             <span style={{ fontSize: '1.2rem', verticalAlign: 'top', marginRight: '4px', opacity: 0.4 }}>$</span>
-                            {Math.round(totalValueMP).toLocaleString()}
+                            {formatPrice(totalValueMP)}
                         </div>
                     </div>
                 </div>
@@ -449,7 +445,7 @@ const Inventory = () => {
                         <span style={{ fontSize: '0.75rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Valor de Producto Terminado</span>
                         <div style={{ fontSize: '2.5rem', fontWeight: '900', color: deepTeal, letterSpacing: '-1px', lineHeight: 1, margin: '1rem 0' }}>
                             <span style={{ fontSize: '1.2rem', verticalAlign: 'top', marginRight: '4px', opacity: 0.2 }}>$</span>
-                            {Math.round(totalValuePT).toLocaleString()}
+                            {formatPrice(totalValuePT)}
                         </div>
                     </div>
                 </div>
@@ -512,28 +508,27 @@ const Inventory = () => {
 
                                 return (
                                     <div key={sig.id} 
-                                        onClick={() => (!needsRecipe && !inFlight) && toggleSelect(sig.name)}
+                                        onClick={() => !needsRecipe && toggleSelect(sig.name)}
                                         style={{ 
                                             padding: '1.2rem', borderRadius: '20px', 
-                                            background: inFlight ? '#f1f5f9' : (isSelected ? '#fff7ed' : '#f8fafc'), 
-                                            border: `2px solid ${inFlight ? '#cbd5e1' : (isSelected ? '#ea580c' : 'rgba(0,0,0,0.02)')}`,
-                                            cursor: (needsRecipe || inFlight) ? 'default' : 'pointer', 
+                                            background: isSelected ? '#fff7ed' : '#f8fafc', 
+                                            border: `2px solid ${isSelected ? '#ea580c' : 'rgba(0,0,0,0.02)'}`,
+                                            cursor: needsRecipe ? 'default' : 'pointer', 
                                             transition: 'all 0.2s', position: 'relative', 
-                                            opacity: (needsRecipe || (inFlight && !isSelected)) ? 0.6 : 1,
+                                            opacity: needsRecipe ? 0.6 : 1,
                                             boxShadow: isSelected ? '0 8px 20px rgba(234, 88, 12, 0.1)' : 'none'
                                         }}
                                     >
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.8rem' }}>
-                                            {!needsRecipe && !inFlight && (
+                                            {!needsRecipe && (
                                                 <div style={{ width: '22px', height: '22px', border: `2px solid ${isSelected ? '#ea580c' : '#cbd5e1'}`, borderRadius: '6px', background: isSelected ? '#ea580c' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                                     {isSelected && <Package size={14} color="#fff" />}
                                                 </div>
                                             )}
-                                            {inFlight && <div style={{ fontSize: '0.65rem', fontWeight: '950', background: '#cbd5e1', color: '#64748b', padding: '3px 8px', borderRadius: '6px' }}>⚙️ EN PROCESO</div>}
                                             <div style={{ padding: '3px 8px', borderRadius: '6px', background: color, color: '#fff', fontSize: '0.6rem', fontWeight: '950' }}>{status}</div>
                                         </div>
                                         <div style={{ fontWeight: '900', color: '#1e293b', fontSize: '0.9rem', marginBottom: '4px' }}>{sig.name.toUpperCase()}</div>
-                                        <div style={{ fontSize: '1rem', fontWeight: '950', color: inFlight ? '#64748b' : color }}>
+                                        <div style={{ fontSize: '1rem', fontWeight: '950', color: color }}>
                                             {getFinalStock(sig)} <span style={{ opacity: 0.4, fontSize: '0.75rem' }}>/ {sig.safety} {sig.unit}</span>
                                         </div>
                                         {needsRecipe && (
@@ -571,11 +566,11 @@ const Inventory = () => {
                                         onClick={() => !inFlight && toggleSelect(sig.name)}
                                         style={{ 
                                             padding: '1rem', borderRadius: '16px', 
-                                            background: inFlight ? '#f1f5f9' : (isLinked ? '#fff7ed' : (isSelected ? '#f0f9ff' : '#f8fafc')), 
-                                            border: `2px solid ${inFlight ? '#cbd5e1' : (isLinked ? '#ea580c' : (isSelected ? '#0ea5e9' : 'rgba(0,0,0,0.02)'))}`,
-                                            cursor: inFlight ? 'default' : 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '12px',
+                                            background: isLinked ? '#fff7ed' : (isSelected ? '#f0f9ff' : '#f8fafc'), 
+                                            border: `2px solid ${isLinked ? '#ea580c' : (isSelected ? '#0ea5e9' : 'rgba(0,0,0,0.02)')}`,
+                                            cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '12px',
                                             boxShadow: isLinked ? '0 4px 15px rgba(234, 88, 12, 0.15)' : 'none',
-                                            opacity: inFlight ? 0.6 : 1
+                                            opacity: 1
                                         }}
                                     >
                                         <div style={{ width: '18px', height: '18px', border: `2px solid ${isLinked ? '#ea580c' : (isSelected ? '#0ea5e9' : '#cbd5e1')}`, borderRadius: '6px', background: isLinked ? '#ea580c' : (isSelected ? '#0ea5e9' : '#fff'), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -584,7 +579,6 @@ const Inventory = () => {
                                         <div style={{ flex: 1 }}>
                                             <div style={{ fontWeight: '800', color: '#1e293b', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>
                                                 {sig.name.toUpperCase()}
-                                                {inFlight && <span style={{ fontSize: '0.6rem', color: '#64748b' }}>⚙️ EN COLA</span>}
                                             </div>
                                             <div style={{ fontSize: '0.9rem', fontWeight: '950', color: isLinked ? '#ea580c' : color }}>
                                                 {getFinalStock(sig)} <span style={{ opacity: 0.4, fontSize: '0.75rem' }}>/ {sig.safety}</span>
@@ -774,7 +768,7 @@ const Inventory = () => {
                                         const masterInit = item.initial || 0;
                                         const calculatedOpening = historyWindow === 'total' ? masterInit : (trueFinal - win.purchases + win.sales);
                                         
-                                        const currentInputVal = localInitialsMP[item.id] !== undefined ? localInitialsMP[item.id] : calculatedOpening.toFixed(1);
+                                        const currentInputVal = localInitialsMP[item.id] !== undefined ? localInitialsMP[item.id] : formatQty(calculatedOpening);
                                         const stockSeg = item.min_stock_level || item.safety || 0;
 
                                         return (
@@ -792,8 +786,8 @@ const Inventory = () => {
                                                             setLocalInitialsMP(prev => ({ ...prev, [item.id]: val }));
                                                         }}
                                                         onBlur={async (e) => {
-                                                            const val = parseFloat(e.target.value) || 0;
-                                                            setLocalInitialsMP(prev => ({ ...prev, [item.id]: val.toFixed(1) }));
+                                                            const val = parseFloat(e.target.value.replace(',', '.')) || 0;
+                                                            setLocalInitialsMP(prev => ({ ...prev, [item.id]: formatQty(val) }));
                                                             await handleAuditAdjustment(item, val);
                                                         }}
                                                         style={{ 
@@ -911,7 +905,7 @@ const Inventory = () => {
                                         const masterInit = item.initial || 0;
                                         const calculatedOpening = historyWindow === 'total' ? masterInit : (trueFinal - win.purchases + win.sales);
                                         
-                                        const currentInputVal = localInitialsPT[item.id] !== undefined ? localInitialsPT[item.id] : calculatedOpening.toFixed(1);
+                                        const currentInputVal = localInitialsPT[item.id] !== undefined ? localInitialsPT[item.id] : formatQty(calculatedOpening);
                                         const stockSeg = item.min_stock_level || item.safety || 0;
 
                                         return (
@@ -943,8 +937,8 @@ const Inventory = () => {
                                                         }}
                                                         onBlur={async (e) => {
                                                             if (historyWindow !== 'total') return;
-                                                            const val = parseFloat(e.target.value) || 0;
-                                                            setLocalInitialsPT(prev => ({ ...prev, [item.id]: val.toFixed(1) }));
+                                                            const val = parseFloat(e.target.value.replace(',', '.')) || 0;
+                                                            setLocalInitialsPT(prev => ({ ...prev, [item.id]: formatQty(val) }));
                                                             await handleAuditAdjustment(item, val);
                                                         }}
                                                         style={{ 

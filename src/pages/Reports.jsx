@@ -11,6 +11,7 @@ import {
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { formatPrice } from '../utils/format';
 import logo from '../assets/logo.png';
 
 const Reports = ({ orders = [], productionAnalytics = [], taxSettings = {}, setTaxSettings, expenses = [], purchaseOrders = [], items = [], recipes = {}, analytics = [], ownCompany = {} }) => {
@@ -540,7 +541,7 @@ const Reports = ({ orders = [], productionAnalytics = [], taxSettings = {}, setT
                             <h3 style={{ margin: '0.8rem 0 0', fontSize: '1.8rem', color: deepTeal, fontWeight: '900' }}>Facturación Mensual</h3>
                         </div>
                         <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: '2.5rem', fontWeight: '900', color: deepTeal }}>${(carteraData?.total + (Array.isArray(orders) ? orders : []).filter(o => o.status === 'Pagado' && new Date(o.date).getFullYear() === selectedYear).reduce((acc, o) => acc + (o.amount || 0), 0)).toLocaleString()}</div>
+                            <div style={{ fontSize: '2.5rem', fontWeight: '900', color: deepTeal }}>${formatPrice(carteraData?.total + (Array.isArray(orders) ? orders : []).filter(o => o.status === 'Pagado' && new Date(o.date).getFullYear() === selectedYear).reduce((acc, o) => acc + (o.amount || 0), 0))}</div>
                         </div>
                     </div>
                     <div style={{ height: isMobile ? '200px' : '300px', width: '100%', marginBottom: '2.5rem' }}>
@@ -560,13 +561,13 @@ const Reports = ({ orders = [], productionAnalytics = [], taxSettings = {}, setT
                             {salesByClient.map((c, i) => (
                                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.6rem', fontSize: '0.9rem', fontWeight: '700' }}>
                                     <span style={{ color: '#64748b' }}>{(c.name || '').substring(0, 20)}</span>
-                                    <span style={{ color: deepTeal }}>${(c.value || 0).toLocaleString()}</span>
+                                    <span style={{ color: deepTeal }}>${formatPrice(c.value || 0)}</span>
                                 </div>
                             ))}
                         </div>
                         <div style={{ background: deepTeal, borderRadius: '24px', padding: '1.5rem', color: '#fff', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                             <div style={{ fontSize: '0.8rem', opacity: 0.7, fontWeight: '800' }}>IMPACTO {(safeTax?.iva || 0)}% IVA</div>
-                            <div style={{ fontSize: '1.6rem', fontWeight: '950', marginTop: '4px' }}>${(salesData.reduce((acc, d) => acc + d.total, 0) * (safeTax.iva / 100)).toLocaleString()}</div>
+                            <div style={{ fontSize: '1.6rem', fontWeight: '950', marginTop: '4px' }}>${formatPrice(salesData.reduce((acc, d) => acc + d.total, 0) * (safeTax.iva / 100))}</div>
                         </div>
                     </div>
                 </div>
@@ -628,7 +629,7 @@ const Reports = ({ orders = [], productionAnalytics = [], taxSettings = {}, setT
                             <h3 style={{ margin: '0.8rem 0 0', fontSize: '1.8rem', color: '#0369a1', fontWeight: '900' }}>Cartera por Cobrar</h3>
                         </div>
                         <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: '2.5rem', fontWeight: '950', color: '#0369a1' }}>${(carteraData?.total || 0).toLocaleString()}</div>
+                            <div style={{ fontSize: '2.5rem', fontWeight: '950', color: '#0369a1' }}>${formatPrice(carteraData?.total || 0)}</div>
                         </div>
                     </div>
                     <div style={{ height: isMobile ? '200px' : '300px', width: '100%', marginBottom: '2.5rem' }}>
@@ -637,7 +638,7 @@ const Reports = ({ orders = [], productionAnalytics = [], taxSettings = {}, setT
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 13, fontWeight: '700' }} />
                                 <YAxis hide />
-                                <Tooltip formatter={(val) => [`$${val.toLocaleString()}`]} contentStyle={{ borderRadius: '14px', border: 'none', boxShadow: '0 10px 20px rgba(0,0,0,0.05)' }} />
+                                <Tooltip formatter={(val) => [`$${formatPrice(val)}`]} contentStyle={{ borderRadius: '14px', border: 'none', boxShadow: '0 10px 20px rgba(0,0,0,0.05)' }} />
                                 <Bar dataKey="v30" stackId="a" fill="#0369a1" name="V.<30" />
                                 <Bar dataKey="v60" stackId="a" fill="#0284c7" name="V.30-60" />
                                 <Bar dataKey="v90" stackId="a" fill="#ef4444" radius={[8, 8, 0, 0]} name="V.>60" />
@@ -650,13 +651,13 @@ const Reports = ({ orders = [], productionAnalytics = [], taxSettings = {}, setT
                             {(carteraData?.pie || []).slice(0, 3).map((item, i) => (
                                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '0.6rem', fontWeight: '700' }}>
                                     <span style={{ color: '#64748b' }}>{(item.name || '').substring(0, 20)}</span>
-                                    <span style={{ color: '#0369a1' }}>${(item.value || 0).toLocaleString()}</span>
+                                    <span style={{ color: '#0369a1' }}>${formatPrice(item.value || 0)}</span>
                                 </div>
                             ))}
                         </div>
                         <div style={{ background: '#ef4444', borderRadius: '24px', padding: '1.5rem', color: '#fff', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                             <div style={{ fontSize: '0.8rem', opacity: 0.8, fontWeight: '800' }}>VENCIDO (+30 D)</div>
-                            <div style={{ fontSize: '1.6rem', fontWeight: '950', marginTop: '4px' }}>${(carteraData?.vencido || 0).toLocaleString()}</div>
+                            <div style={{ fontSize: '1.6rem', fontWeight: '950', marginTop: '4px' }}>${formatPrice(carteraData?.vencido || 0)}</div>
                         </div>
                     </div>
                 </div>

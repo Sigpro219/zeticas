@@ -8,6 +8,7 @@ import { RefreshCw, FileText, Download, TrendingUp, Calendar, Plus, Trash2, Filt
 import { db } from '../lib/firebase';
 import { collection, addDoc } from 'firebase/firestore';
 import { colombia_cities } from '../data/colombia_cities';
+import { formatQty, formatPrice } from '../utils/format';
 
 const PENDING_STATUSES = ['Pendiente', 'PENDIENTE'];
 const PROCESSED_AND_ROUTED_STATUSES = ['Facturado', 'En Producción', 'En Despacho', 'En Compras', 'Finalizado', 'Entregado', 'Cobrado', 'Cancelado'];
@@ -1001,10 +1002,10 @@ const Orders = ({ orders }) => {
         const tableColumn = ["INSUMO", "CANTIDAD", "UNIDAD", "VALOR UNIT.", "SUBTOTAL"];
         const tableRows = po.items.map(item => [
             item.name,
-            item.toBuy.toLocaleString('es-CO'),
+            formatQty(item.toBuy),
             item.unit || 'und',
-            `$${Math.round(item.purchasePrice || 0).toLocaleString('es-CO')}`,
-            `$${Math.round((item.purchasePrice * item.toBuy) || 0).toLocaleString('es-CO')}`
+            `$${formatPrice(item.purchasePrice || 0)}`,
+            `$${formatPrice((item.purchasePrice * item.toBuy) || 0)}`
         ]);
 
         autoTable(doc, {
@@ -1028,7 +1029,7 @@ const Orders = ({ orders }) => {
         doc.setFontSize(12);
         doc.setTextColor(2, 54, 54);
         doc.setFont('helvetica', 'bold');
-        const totalText = `TOTAL ORDEN: $${Math.round(po.total).toLocaleString('es-CO')}`;
+        const totalText = `TOTAL ORDEN: $${formatPrice(po.total)}`;
         doc.text(totalText, 196, finalY, { align: 'right' });
 
         doc.save(`OC_${po.id}_${po.providerName.replace(/\s+/g, '_')}.pdf`);
@@ -1114,9 +1115,9 @@ const Orders = ({ orders }) => {
         const tableColumn = ["DESCRIPCIÓN", "CANTIDAD", "V. UNITARIO", "V. TOTAL"];
         const tableRows = order.items.map(item => [
             item.name,
-            item.quantity.toLocaleString('es-CO'),
-            `$${Math.round(item.price || 0).toLocaleString('es-CO')}`,
-            `$${Math.round((item.price * item.quantity) || 0).toLocaleString('es-CO')}`
+            formatQty(item.quantity),
+            `$${formatPrice(item.price || 0)}`,
+            `$${formatPrice((item.price * item.quantity) || 0)}`
         ]);
 
         autoTable(doc, {
@@ -1148,7 +1149,7 @@ const Orders = ({ orders }) => {
         doc.text('TOTAL PEDIDO:', 145, finalY + 18, { align: 'right' });
         doc.setFontSize(14);
         doc.setFont('helvetica', 'bold');
-        doc.text(`$${Math.round(totalAmount).toLocaleString('es-CO')}`, 196, finalY + 18, { align: 'right' });
+        doc.text(`$${formatPrice(totalAmount)}`, 196, finalY + 18, { align: 'right' });
 
         doc.setFontSize(8);
         doc.setFont('helvetica', 'italic');
@@ -1490,7 +1491,7 @@ const Orders = ({ orders }) => {
                                         </div>
                                     </td>
                                     <td style={{ padding: '1.2rem 1.5rem', fontSize: '0.8rem', color: '#64748b', fontWeight: '700' }}>{order.date}</td>
-                                    <td style={{ padding: '1.2rem 1.5rem', textAlign: 'right', fontWeight: '900', color: '#0f172a', fontSize: '1rem' }}>${(order.amount || 0).toLocaleString('es-CO')}</td>
+                                    <td style={{ padding: '1.2rem 1.5rem', textAlign: 'right', fontWeight: '900', color: '#0f172a', fontSize: '1rem' }}>${formatPrice(order.amount || 0)}</td>
                                     <td style={{ padding: '1.2rem 1.5rem', textAlign: 'center' }}>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
                                             <span style={{
@@ -1921,15 +1922,15 @@ const Orders = ({ orders }) => {
                                                 <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', padding: '1.2rem', borderRadius: '20px', border: '1px solid #f1f5f9', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
                                                     <div style={{ flex: 1 }}>
                                                         <div style={{ fontWeight: '850', fontSize: '0.9rem', color: '#1e293b' }}>{item.name}</div>
-                                                        <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '700' }}>Precio: <span style={{ color: deepTeal }}>${(item.price || 0).toLocaleString()}</span></div>
+                                                        <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '700' }}>Precio: <span style={{ color: deepTeal }}>${formatPrice(item.price || 0)}</span></div>
                                                     </div>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                                                         <div style={{ display: 'flex', alignItems: 'center', background: '#f8fafc', borderRadius: '12px', border: '1px solid #f1f5f9', padding: '4px' }}>
                                                             <button onClick={() => handleUpdateQuantity(item.id, -1)} style={{ border: 'none', background: 'transparent', padding: '4px 12px', cursor: 'pointer', color: '#64748b', fontWeight: '900' }}>-</button>
-                                                            <span style={{ fontSize: '0.85rem', fontWeight: '900', color: deepTeal, minWidth: '20px', textAlign: 'center' }}>{item.quantity}</span>
+                                                            <span style={{ fontSize: '0.85rem', fontWeight: '900', color: deepTeal, minWidth: '20px', textAlign: 'center' }}>{formatQty(item.quantity)}</span>
                                                             <button onClick={() => handleUpdateQuantity(item.id, 1)} style={{ border: 'none', background: 'transparent', padding: '4px 12px', cursor: 'pointer', color: '#64748b', fontWeight: '900' }}>+</button>
                                                         </div>
-                                                        <div style={{ fontWeight: '900', width: '90px', textAlign: 'right', color: '#0f172a' }}>${((item.price || 0) * (item.quantity || 0)).toLocaleString()}</div>
+                                                        <div style={{ fontWeight: '900', width: '90px', textAlign: 'right', color: '#0f172a' }}>${formatPrice((item.price || 0) * (item.quantity || 0))}</div>
                                                         <button
                                                             onClick={() => handleRemoveItem(item.id)}
                                                             style={{ border: 'none', background: 'transparent', color: 'rgba(212, 120, 90, 0.4)', cursor: 'pointer' }}
@@ -1946,7 +1947,7 @@ const Orders = ({ orders }) => {
                                                 <div style={{ marginTop: '1.5rem', borderTop: '2px dashed #f1f5f9', paddingTop: '1.5rem', textAlign: 'right' }}>
                                                     <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '900', textTransform: 'uppercase' }}>Total con IVA</div>
                                                     <div style={{ fontSize: '2.5rem', fontWeight: '900', color: deepTeal, marginTop: '0.2rem' }}>
-                                                        ${(newOrder.items.reduce((sum, i) => sum + (i.price * i.quantity), 0)).toLocaleString()}
+                                                        ${formatPrice(newOrder.items.reduce((sum, i) => sum + (i.price * i.quantity), 0))}
                                                     </div>
                                                 </div>
                                             )}
@@ -1996,7 +1997,7 @@ const Orders = ({ orders }) => {
                                                 className="product-card-hover"
                                             >
                                                 <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#1e293b', marginBottom: '0.5rem' }}>{product.name}</div>
-                                                <div style={{ fontSize: '0.75rem', fontWeight: '900', color: deepTeal }}>${(product.price || 0).toLocaleString()}</div>
+                                                <div style={{ fontSize: '0.75rem', fontWeight: '900', color: deepTeal }}>${formatPrice(product.price || 0)}</div>
                                                 <div style={{ marginTop: '0.8rem', fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase' }}>Click para añadir</div>
                                             </div>
                                         ))}
@@ -2346,8 +2347,8 @@ const Orders = ({ orders }) => {
                                                         min="1"
                                                     />
                                                 </td>
-                                                <td style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9', textAlign: 'right', color: '#64748b' }}>${(item.price || 0).toLocaleString()}</td>
-                                                <td style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9', textAlign: 'right', fontWeight: 'bold' }}>${((item.price * item.quantity) || 0).toLocaleString()}</td>
+                                                <td style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9', textAlign: 'right', color: '#64748b' }}>${formatPrice(item.price || 0)}</td>
+                                                <td style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9', textAlign: 'right', fontWeight: 'bold' }}>${formatPrice((item.price * item.quantity) || 0)}</td>
                                                 <td style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9', textAlign: 'center' }}>
                                                     <button
                                                         onClick={() => setConfirmModal({
@@ -2397,10 +2398,10 @@ const Orders = ({ orders }) => {
                                                 />
                                             </td>
                                             <td style={{ padding: '0.8rem 1rem', borderBottom: '1px solid #e2e8f0', borderTop: '2px solid #e2e8f0', textAlign: 'right', color: '#64748b' }}>
-                                                ${(newViewedItem.price || 0).toLocaleString()}
+                                                ${formatPrice(newViewedItem.price || 0)}
                                             </td>
                                             <td style={{ padding: '0.8rem 1rem', borderBottom: '1px solid #e2e8f0', borderTop: '2px solid #e2e8f0', textAlign: 'right', fontWeight: 'bold' }}>
-                                                ${((newViewedItem.price * newViewedItem.quantity) || 0).toLocaleString()}
+                                                ${formatPrice((newViewedItem.price * newViewedItem.quantity) || 0)}
                                             </td>
                                             <td style={{ padding: '0.8rem 1rem', borderBottom: '1px solid #e2e8f0', borderTop: '2px solid #e2e8f0', textAlign: 'center' }}>
                                                 <button
@@ -2429,7 +2430,7 @@ const Orders = ({ orders }) => {
                                 <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                                     <div style={{ color: '#475569', fontSize: '0.9rem', fontWeight: 'bold' }}>TOTAL A PAGAR:</div>
                                     <div style={{ color: 'var(--color-primary)', fontSize: '1.5rem', fontWeight: '800' }}>
-                                        ${(viewingOrder.items.reduce((sum, i) => sum + (i.price * i.quantity), 0) || 0).toLocaleString()}
+                                        ${formatPrice(viewingOrder.items.reduce((sum, i) => sum + (i.price * i.quantity), 0) || 0)}
                                     </div>
                                 </div>
                             </div>
@@ -2731,7 +2732,7 @@ const Orders = ({ orders }) => {
                             </div>
                         </div>
                         <div style={{ padding: '1.5rem 2.5rem', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff' }}>
-                            <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#64748b' }}>Costo Est. Compras: <span style={{ color: '#025357', fontSize: '1.4rem' }}>${explosionPreview.reduce((s, i) => s + (i.quantityToBuy * i.unitCost), 0).toLocaleString()}</span></div>
+                            <div style={{ fontSize: '0.9rem', fontWeight: '900', color: '#64748b' }}>Costo Est. Compras: <span style={{ color: '#025357', fontSize: '1.4rem' }}>${formatPrice(explosionPreview.reduce((s, i) => s + (i.quantityToBuy * i.unitCost), 0))}</span></div>
                             <div style={{ display: 'flex', gap: '1rem' }}>
                                 <button onClick={() => setIsExplosionModalOpen(false)} style={{ padding: '0.8rem 2rem', borderRadius: '15px', border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontWeight: '900', cursor: 'pointer' }}>Cerrar</button>
                                 {(() => {

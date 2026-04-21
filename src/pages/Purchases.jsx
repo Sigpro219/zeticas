@@ -28,6 +28,7 @@ import {
     AlertTriangle,
     CreditCard
 } from 'lucide-react';
+import { formatQty, formatPrice } from '../utils/format';
 import logo from '../assets/logo.png';
 
 const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, providers }) => {
@@ -306,9 +307,9 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
             const total = item.total_cost || (qty * unit);
             return [
                 item.name || 'Material',
-                qty.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 }),
-                `$${(Number(unit)).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`,
-                `$${(Number(total)).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+                formatQty(qty),
+                `$${formatPrice(Number(unit))}`,
+                `$${formatPrice(Number(total))}`
             ];
         });
 
@@ -335,7 +336,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
         const tax = subtotal * 0.19;
         const totalAmount = subtotal + tax;
 
-        const numFormat = (num) => `$${(Number(num)).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+        const numFormat = (num) => `$${formatPrice(Number(num))}`;
 
         doc.setFontSize(9);
         doc.setTextColor(100, 116, 139);
@@ -455,7 +456,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
             // 3. Update Local State (only purchase orders, bank state is updated by updateBankBalance)
             setPurchaseOrders(prev => prev.map(o => o.id === oc.id ? { ...o, paymentStatus: 'Pagado', bankId: paymentBankId } : o));
 
-            alert(`Pago registrado exitosamente. Se descontaron $${amount.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} del banco seleccionado.`);
+            alert(`Pago registrado exitosamente. Se descontaron $${formatPrice(amount)} del banco seleccionado.`);
             setPaymentModalOC(null);
             setPaymentBankId('');
         } catch (err) {
@@ -502,7 +503,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                     </div>
                     <div style={{ fontSize: '2.2rem', fontWeight: '900', letterSpacing: '-1.5px', lineHeight: 1 }}>
                         <span style={{ fontSize: '1.4rem', opacity: 0.6, marginRight: '4px', verticalAlign: 'middle' }}>$</span>
-                        {purchaseStats.total.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                        {formatPrice(purchaseStats.total)}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '1.2rem' }}>
                         <div style={{ background: 'rgba(255,255,255,0.1)', padding: '0.6rem 1.2rem', borderRadius: '14px', fontSize: '0.85rem', fontWeight: '900', border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -540,7 +541,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                     <span style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase' }}>{item.label}</span>
                                     <span style={{ fontSize: '0.6rem', fontWeight: '800', color: '#cbd5e1' }}>{item.count} DOCS</span>
                                 </div>
-                                <span style={{ fontSize: '1.2rem', fontWeight: '900', color: item.color }}>${item.val.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
+                                <span style={{ fontSize: '1.2rem', fontWeight: '900', color: item.color }}>${formatPrice(item.val)}</span>
                             </div>
                         ))}
                     </div>
@@ -812,7 +813,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                     <td style={{ padding: '1.2rem 1rem', textAlign: 'right' }}>
                                         <div style={{ fontWeight: '900', color: '#1e293b', fontSize: '1.2rem', letterSpacing: '-0.5px' }}>
                                             <span style={{ fontSize: '0.8rem', opacity: 0.4, marginRight: '4px' }}>$</span>
-                                            {(oc.total || 0).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                            {formatPrice(oc.total || 0)}
                                         </div>
                                     </td>
                                     <td style={{ padding: '1.2rem 1rem', textAlign: 'center' }}>
@@ -1012,12 +1013,12 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                                     <div style={{ fontWeight: '900', color: '#1e293b' }}>{item.name}</div>
                                                 </td>
                                                 <td style={{ padding: '1.2rem 1rem', textAlign: 'center', fontWeight: '900', color: '#1e293b' }}>
-                                                    {qtyValue.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{item.unit || ''}</span>
+                                                    {formatQty(qtyValue)} <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{item.unit || ''}</span>
                                                 </td>
-                                                <td style={{ padding: '1.2rem 1rem', textAlign: 'right', color: '#64748b', fontWeight: '700' }}>${(Number(unitValue)).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
+                                                <td style={{ padding: '1.2rem 1rem', textAlign: 'right', color: '#64748b', fontWeight: '700' }}>${formatPrice(Number(unitValue))}</td>
                                                 <td style={{ padding: '1.2rem 1rem', textAlign: 'right', color: '#94a3b8', fontWeight: '700' }}>19%</td>
                                                 <td style={{ padding: '1.2rem 1rem', textAlign: 'right', fontWeight: '900', color: '#1e293b', borderRadius: '0 12px 12px 0' }}>
-                                                    ${(Number(total)).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                                    ${formatPrice(Number(total))}
                                                 </td>
                                             </tr>
                                         );
@@ -1041,17 +1042,17 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                             <>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.8rem' }}>
                                                     <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#64748b' }}>SUBTOTAL NETO</span>
-                                                    <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#1e293b' }}>${(Number(sub)).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
+                                                    <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#1e293b' }}>${formatPrice(Number(sub))}</span>
                                                 </div>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.2rem' }}>
                                                     <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#64748b' }}>IVA (19%)</span>
-                                                    <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#1e293b' }}>${(Number(iva)).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
+                                                    <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#1e293b' }}>${formatPrice(Number(iva))}</span>
                                                 </div>
                                                 <div style={{ height: '1px', background: '#e2e8f0', margin: '1rem 0' }} />
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                     <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#025357' }}>TOTAL ORDEN</span>
                                                     <span style={{ fontSize: '1.5rem', fontWeight: '900', color: '#025357', letterSpacing: '-0.5px' }}>
-                                                        ${(Number(sub + iva)).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                                        ${formatPrice(Number(sub + iva))}
                                                     </span>
                                                 </div>
                                             </>
@@ -1121,7 +1122,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <span style={{ fontSize: '0.9rem', fontWeight: '700', color: '#c2410c' }}>VALOR A LIQUIDAR</span>
                                 <span style={{ fontSize: '1.6rem', fontWeight: '900', color: '#c2410c', letterSpacing: '-0.5px' }}>
-                                    ${(paymentModalOC.total || 0).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                    ${formatPrice(paymentModalOC.total || 0)}
                                 </span>
                             </div>
                         </div>
@@ -1178,7 +1179,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                             >
                                 <option value="">Seleccione una cuenta...</option>
                                 {banks.filter(bank => (bank.type || '').toLowerCase() === 'cta de ahorros').map(bank => (
-                                    <option key={bank.id} value={bank.id}>{bank.name} (${(bank.balance || 0).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })})</option>
+                                    <option key={bank.id} value={bank.id}>{bank.name} (${formatPrice(bank.balance || 0)})</option>
                                 ))}
                             </select>
                         </div>
@@ -1342,7 +1343,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                         }}>
                                             <div>
                                                 <div style={{ fontWeight: '800', color: deepTeal, fontSize: '0.9rem' }}>{item.name}</div>
-                                                <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '600' }}>{item.quantity} {item.unit} x ${item.unitCost.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</div>
+                                                <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '600' }}>{formatQty(item.quantity)} {item.unit} x ${formatPrice(item.unitCost)}</div>
                                             </div>
                                             <button
                                                 onClick={() => setManualOCData({ ...manualOCData, items: manualOCData.items.filter((_, i) => i !== idx) })}
@@ -1483,7 +1484,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                                 </div>
                                             </td>
                                             <td style={{ textAlign: 'right', padding: '1rem 0', color: '#64748b', fontWeight: '700', fontSize: '0.9rem' }}>
-                                                ${(item.purchasePrice || item.unit_cost || 0).toLocaleString()}
+                                                ${formatPrice(item.purchasePrice || item.unit_cost || 0)}
                                             </td>
                                             <td style={{ textAlign: 'right', padding: '1rem 0' }}>
                                                 <div style={{ position: 'relative', width: '120px', marginLeft: 'auto' }}>

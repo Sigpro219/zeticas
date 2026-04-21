@@ -17,11 +17,14 @@ import {
     Activity,
     Clock,
     X,
-    Save
+    Save,
+    Filter,
+    ChevronDown,
+    Plus
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-// supabase import removed
+import { formatQty, formatPrice } from '../utils/format';
 
 import logo from '../assets/logo.png';
 
@@ -29,13 +32,14 @@ const Shipping = () => {
     useEffect(() => {
         window.scrollTo(0, 0);
     }, []);
-    const { orders, items, refreshData, updateOrder, ownCompany, clients, banks, updateBankBalance, productionOrders } = useBusiness();
+    const { orders, items, refreshData, updateOrder, ownCompany, clients, banks, updateBankBalance, productionOrders, loadFinishedGoods } = useBusiness();
     const [downloadedDocs, setDownloadedDocs] = useState({}); // { [orderId]: { invoice: boolean, labels: boolean } }
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState('month');
     const [viewMode, setViewMode] = useState('active'); // 'active' or 'history'
     const [customRange, setCustomRange] = useState({ from: '', to: '' });
     const [viewingOrder, setViewingOrder] = useState(null);
+    const [loadingReplenish, setLoadingReplenish] = useState(null);
     const [confirmModal, setConfirmModal] = useState({
         show: false,
         step: 1,
@@ -95,7 +99,9 @@ const Shipping = () => {
 
         const diffTime = Math.abs(end - created);
         const hours = diffTime / (1000 * 60 * 60);
-        return parseFloat(hours.toFixed(1));
+        return parseFloat(formatQty(hours).replace(',', '.')); // Internal numeric use stays decimal-dot, but let's be careful. Actually, this is for internal return.
+        // For display we use formatQty(hours).
+        return hours;
     };
 
     const generateInvoiceNumber = () => {
@@ -204,8 +210,8 @@ const Shipping = () => {
         const tableRows = (order.items || []).map(item => [
             item.name?.toUpperCase(),
             item.quantity,
-            `$${(item.price || 0).toLocaleString()}`,
-            `$${((item.price || 0) * (item.quantity || 0)).toLocaleString()}`
+            `$${formatPrice(item.price || 0)}`,
+            `$${formatPrice((item.price || 0) * (item.quantity || 0))}`
         ]);
 
         autoTable(doc, {
@@ -239,19 +245,19 @@ const Shipping = () => {
         doc.setTextColor(100, 116, 139);
         doc.text(`Subtotal:`, labelX, finalY, { align: 'right' });
         doc.setTextColor(51, 65, 85);
-        doc.text(`$${subtotal.toLocaleString()}`, valueX, finalY, { align: 'right' });
+        doc.text(`$${formatPrice(subtotal)}`, valueX, finalY, { align: 'right' });
 
         finalY += 7;
         doc.setTextColor(100, 116, 139);
         doc.text(`Envío:`, labelX, finalY, { align: 'right' });
         doc.setTextColor(51, 65, 85);
-        doc.text(`$${(shippingCost || 0).toLocaleString()}`, valueX, finalY, { align: 'right' });
+        doc.text(`$${formatPrice(shippingCost || 0)}`, valueX, finalY, { align: 'right' });
 
         finalY += 7;
         doc.setTextColor(100, 116, 139);
         doc.text(`IVA (19%):`, labelX, finalY, { align: 'right' });
         doc.setTextColor(51, 65, 85);
-        doc.text(`$${iva.toLocaleString()}`, valueX, finalY, { align: 'right' });
+        doc.text(`$${formatPrice(iva)}`, valueX, finalY, { align: 'right' });
 
         finalY += 12;
         // Clean Total View (No background box, just Bold & High contrast)
@@ -259,7 +265,7 @@ const Shipping = () => {
         doc.setFontSize(13);
         doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
         doc.text(`TOTAL FACTURA:`, labelX, finalY, { align: 'right' });
-        doc.text(`$${total.toLocaleString()}`, valueX, finalY, { align: 'right' });
+        doc.text(`$${formatPrice(total)}`, valueX, finalY, { align: 'right' });
 
         // Footer Legal
         doc.setFontSize(7);
@@ -526,8 +532,32 @@ const Shipping = () => {
         }
     };
 
+    const handleReplenishInventory = async (order) => {
+        if (!window.confirm(`¿Confirmas el ingreso de ${ (order.items || []).reduce((acc, i) => acc + (Number(i.quantity) || 0), 0) } unidades a inventario físico?`)) return;
+        
+        setLoadingReplenish(order.dbId);
+        try {
+            for (const item of (order.items || [])) {
+                await loadFinishedGoods(item.name, item.quantity, true);
+            }
 
+            await updateOrder(order.dbId, {
+                status: 'Finalizado',
+                delivered_at: new Date().toISOString(),
+                replenished_at: new Date().toISOString(),
+                payment_status: 'Pagado',
+                notes: (order.notes || '') + ' [Abastecimiento automático realizado desde Despachos]'
+            });
 
+            await refreshData();
+            alert("Inventario abastecido correctamente ✅");
+        } catch (error) {
+            console.error("Error al ingresar a inventario:", error);
+            alert("No se pudo completar el reabastecimiento: " + error.message);
+        } finally {
+            setLoadingReplenish(null);
+        }
+    };
     const handleUpdateViewedOrder = async () => {
         if (!viewingOrder) return;
         const total = (viewingOrder.items || []).reduce((sum, i) => sum + ((i.price || 0) * (i.quantity || 0)), 0);
@@ -620,9 +650,9 @@ const Shipping = () => {
             stats.times.push(days);
         });
 
-        const avg = stats.times.length > 0 ? (stats.times.reduce((a, b) => a + b, 0) / stats.times.length).toFixed(2) : 0;
-        const max = stats.times.length > 0 ? Math.max(...stats.times).toFixed(1) : 0;
-        const min = stats.times.length > 0 ? Math.min(...stats.times).toFixed(1) : 0;
+        const avg = stats.times.length > 0 ? formatQty(stats.times.reduce((a, b) => a + b, 0) / stats.times.length) : 0;
+        const max = stats.times.length > 0 ? formatQty(Math.max(...stats.times)) : 0;
+        const min = stats.times.length > 0 ? formatQty(Math.min(...stats.times)) : 0;
 
         return { ...stats, avg, max, min };
     }, [filteredOrders, getStockFulfillment]);
@@ -781,7 +811,7 @@ const Shipping = () => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '1.2rem' }}>
                         <div style={{ background: 'rgba(255,255,255,0.1)', padding: '0.6rem 1.2rem', borderRadius: '14px', fontSize: '0.85rem', fontWeight: '900', border: '1px solid rgba(255,255,255,0.1)' }}>
                             <span style={{opacity: 0.6, fontSize: '0.7rem', marginRight: '4px'}}>$</span>
-                            {kpis.totalValue.toLocaleString()}
+                            {formatPrice(kpis.totalValue)}
                         </div>
                     </div>
                 </div>
@@ -907,7 +937,7 @@ const Shipping = () => {
                                                 {(order.items || []).reduce((acc, i) => acc + (Number(i.quantity) || 0), 0)} Unidades
                                             </span>
                                             <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '900', background: 'rgba(2, 83, 87, 0.04)', padding: '4px 10px', borderRadius: '8px' }}>
-                                                {order.id?.toString().startsWith('WEB-') ? 'WEB' : 'MANUAL'}
+                                                {order.id?.toString().startsWith('RPT-') ? 'INVENTARIO' : order.id?.toString().startsWith('WEB-') ? 'WEB' : 'MANUAL'}
                                             </span>
                                             {order.purchase_order && (
                                                 <span style={{ fontSize: '0.85rem', color: '#10b981', fontWeight: '900', background: 'rgba(16, 185, 129, 0.08)', padding: '4px 10px', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.1)' }}>
@@ -1017,130 +1047,167 @@ const Shipping = () => {
                                         })()}
                                     </td>
                                      <td style={{ padding: '1.2rem 1.5rem', textAlign: 'center' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.8rem' }}>
-                                            {/* Documentation Block */}
-                                            <div style={{ display: 'flex', gap: '4px', background: '#f8fafc', padding: '4px', borderRadius: '16px', border: '1px solid #f1f5f9' }}>
-                                                {/* Invoice Button */}
-                                                <button 
-                                                    onClick={() => handleCreateInvoice(order)} 
-                                                    style={{ 
-                                                        background: order.invoiceNum || downloadedDocs[order.dbId]?.invoice ? 'rgba(16, 185, 129, 0.1)' : '#fff', 
-                                                        border: `1px solid ${order.invoiceNum || downloadedDocs[order.dbId]?.invoice ? '#10b981' : '#e2e8f0'}`, 
-                                                        padding: '0.6rem 1rem', 
-                                                        borderRadius: '12px', 
-                                                        cursor: isAvailable ? 'pointer' : 'not-allowed', 
-                                                        color: order.invoiceNum || downloadedDocs[order.dbId]?.invoice ? '#10b981' : institutionOcre,
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '0.5rem',
-                                                        fontSize: '0.7rem',
-                                                        fontWeight: '950',
-                                                        transition: 'all 0.3s',
-                                                        opacity: !isAvailable ? 0.5 : 1
-                                                    }}
-                                                    disabled={!isAvailable}
-                                                >
-                                                    <Printer size={14} /> 
-                                                    {order.invoiceNum || downloadedDocs[order.dbId]?.invoice ? (order.invoiceNum || 'FE') : 'FACTURA'}
-                                                </button>
-                                                
-                                                {/* Labels Button */}
-                                                <button 
-                                                    onClick={() => setLabelModal({ show: true, order, jarsPerBox: 12 })} 
-                                                    style={{ 
-                                                        background: downloadedDocs[order.dbId]?.labels ? 'rgba(2, 54, 54, 0.1)' : '#fff', 
-                                                        border: `1px solid ${downloadedDocs[order.dbId]?.labels ? deepTeal : '#e2e8f0'}`, 
-                                                        padding: '0.6rem 1rem', 
-                                                        borderRadius: '12px', 
-                                                        cursor: 'pointer', 
-                                                        color: downloadedDocs[order.dbId]?.labels ? deepTeal : '#64748b',
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '0.5rem',
-                                                        fontSize: '0.7rem',
-                                                        fontWeight: '950',
-                                                        transition: 'all 0.3s'
-                                                    }}
-                                                >
-                                                    <Tags size={14} /> ETIQUETAS
-                                                </button>
-                                            </div>
-
-                                            {/* Separator / Arrow */}
-                                            <ArrowRight size={16} color="#cbd5e1" />
-
-                                            {/* Dispatch Block */}
-                                            {order.status === 'Despachado' ? (
-                                                <button 
-                                                    onClick={() => updateOrder(order.dbId, { status: 'Entregado' })} 
-                                                    style={{ 
-                                                        background: deepTeal, 
-                                                        color: '#fff', 
-                                                        border: 'none', 
-                                                        padding: '0.6rem 1.5rem', 
-                                                        borderRadius: '14px', 
-                                                        cursor: 'pointer', 
-                                                        fontSize: '0.75rem', 
-                                                        fontWeight: '900',
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '0.6rem',
-                                                        boxShadow: `0 8px 15px ${deepTeal}20`,
-                                                        transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-                                                        textTransform: 'uppercase'
-                                                    }}
-                                                >
-                                                    <CheckCircle2 size={16} /> Confirmar Entrega
-                                                </button>
-                                            ) : (order.status === 'Entregado' || order.status === 'Finalizado' ) ? (
-                                                <div style={{ color: '#10b981', fontWeight: '900', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '6px', textTransform: 'uppercase', background: 'rgba(16, 185, 129, 0.08)', padding: '6px 12px', borderRadius: '10px' }}>
-                                                    <CheckCircle2 size={14} /> Entregado
-                                                </div>
-                                            ) : (() => {
-                                                const hasInvoice = order.invoiceNum || downloadedDocs[order.dbId]?.invoice;
-                                                const hasLabels = downloadedDocs[order.dbId]?.labels;
-                                                const canDispatch = hasInvoice && hasLabels;
-
+                                        {(() => {
+                                            const isRPT = order.id?.toString().startsWith('RPT-');
+                                            
+                                            // Special logic for Internal Replenishment (RPT)
+                                            if (isRPT && order.status !== 'Finalizado' && order.status !== 'Entregado') {
                                                 return (
-                                                    <div title={!canDispatch ? "Genera Factura y Etiquetas para habilitar el despacho" : ""}>
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); handleReplenishInventory(order); }}
+                                                        disabled={loadingReplenish === order.dbId || !isAvailable}
+                                                        style={{ 
+                                                            background: institutionOcre, 
+                                                            color: '#fff', 
+                                                            border: 'none', 
+                                                            padding: '0.8rem 1.8rem', 
+                                                            borderRadius: '14px', 
+                                                            cursor: (loadingReplenish === order.dbId || !isAvailable) ? 'not-allowed' : 'pointer', 
+                                                            fontSize: '0.8rem', 
+                                                            fontWeight: '950',
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '0.8rem',
+                                                            boxShadow: `0 8px 15px ${institutionOcre}30`,
+                                                            transition: 'all 0.4s',
+                                                            opacity: !isAvailable ? 0.5 : 1,
+                                                            width: '100%',
+                                                            justifyContent: 'center'
+                                                        }}
+                                                    >
+                                                        {loadingReplenish === order.dbId ? <Activity className="spin" size={18} /> : <Package size={18} />}
+                                                        INGRESAR A INVENTARIO
+                                                    </button>
+                                                );
+                                            }
+
+                                            return (
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.8rem' }}>
+                                                    {/* Documentation Block */}
+                                                    <div style={{ display: 'flex', gap: '4px', background: '#f8fafc', padding: '4px', borderRadius: '16px', border: '1px solid #f1f5f9' }}>
+                                                        {/* Invoice Button */}
                                                         <button 
-                                                            disabled={!canDispatch}
-                                                            onClick={() => {
-                                                                if (order.payment_status !== 'Pagado') {
-                                                                    setPaymentGateModal({ show: true, order, bankId: '' });
-                                                                } else {
-                                                                    setDispatchModal({ 
-                                                                        ...dispatchModal, 
-                                                                        show: true, 
-                                                                        order,
-                                                                        date: new Date().toLocaleDateString('en-CA'),
-                                                                        time: new Date().toLocaleTimeString('es-CO', { hour12: false, hour: '2-digit', minute: '2-digit' })
-                                                                    });
-                                                                }
-                                                            }} 
+                                                            onClick={() => handleCreateInvoice(order)} 
                                                             style={{ 
-                                                                background: canDispatch ? `linear-gradient(135deg, ${deepTeal} 0%, #037075 100%)` : '#f1f5f9', 
-                                                                color: canDispatch ? '#fff' : '#cbd5e1', 
-                                                                border: 'none', 
-                                                                padding: '0.8rem 1.8rem', 
-                                                                borderRadius: '16px', 
-                                                                cursor: canDispatch ? 'pointer' : 'not-allowed', 
-                                                                fontSize: '0.75rem', 
+                                                                background: order.invoiceNum || downloadedDocs[order.dbId]?.invoice ? 'rgba(16, 185, 129, 0.1)' : '#fff', 
+                                                                border: `1px solid ${order.invoiceNum || downloadedDocs[order.dbId]?.invoice ? '#10b981' : '#e2e8f0'}`, 
+                                                                padding: '0.6rem 1rem', 
+                                                                borderRadius: '12px', 
+                                                                cursor: isAvailable ? 'pointer' : 'not-allowed', 
+                                                                color: order.invoiceNum || downloadedDocs[order.dbId]?.invoice ? '#10b981' : institutionOcre,
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                gap: '0.5rem',
+                                                                fontSize: '0.7rem',
                                                                 fontWeight: '950',
+                                                                transition: 'all 0.3s',
+                                                                opacity: !isAvailable ? 0.5 : 1
+                                                            }}
+                                                            disabled={!isAvailable}
+                                                        >
+                                                            <Printer size={14} /> 
+                                                            {order.invoiceNum || downloadedDocs[order.dbId]?.invoice ? (order.invoiceNum || 'FE') : 'FACTURA'}
+                                                        </button>
+                                                        
+                                                        {/* Labels Button */}
+                                                        <button 
+                                                            onClick={() => setLabelModal({ show: true, order, jarsPerBox: 12 })} 
+                                                            style={{ 
+                                                                background: downloadedDocs[order.dbId]?.labels ? 'rgba(2, 54, 54, 0.1)' : '#fff', 
+                                                                border: `1px solid ${downloadedDocs[order.dbId]?.labels ? deepTeal : '#e2e8f0'}`, 
+                                                                padding: '0.6rem 1rem', 
+                                                                borderRadius: '12px', 
+                                                                cursor: 'pointer', 
+                                                                color: downloadedDocs[order.dbId]?.labels ? deepTeal : '#64748b',
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                gap: '0.5rem',
+                                                                fontSize: '0.7rem',
+                                                                fontWeight: '950',
+                                                                transition: 'all 0.3s'
+                                                            }}
+                                                        >
+                                                            <Tags size={14} /> ETIQUETAS
+                                                        </button>
+                                                    </div>
+
+                                                    {/* Separator / Arrow */}
+                                                    <ArrowRight size={16} color="#cbd5e1" />
+
+                                                    {/* Dispatch Block */}
+                                                    {order.status === 'Despachado' ? (
+                                                        <button 
+                                                            onClick={() => updateOrder(order.dbId, { status: 'Entregado' })} 
+                                                            style={{ 
+                                                                background: deepTeal, 
+                                                                color: '#fff', 
+                                                                border: 'none', 
+                                                                padding: '0.6rem 1.5rem', 
+                                                                borderRadius: '14px', 
+                                                                cursor: 'pointer', 
+                                                                fontSize: '0.75rem', 
+                                                                fontWeight: '900',
                                                                 display: 'inline-flex',
                                                                 alignItems: 'center',
                                                                 gap: '0.6rem',
-                                                                boxShadow: canDispatch ? `0 8px 20px ${deepTeal}30` : 'none',
+                                                                boxShadow: `0 8px 15px ${deepTeal}20`,
                                                                 transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
                                                                 textTransform: 'uppercase'
                                                             }}
                                                         >
-                                                            <Truck size={16} /> Despachar
+                                                            <CheckCircle2 size={16} /> Confirmar Entrega
                                                         </button>
-                                                    </div>
-                                                );
-                                            })()}
-                                        </div>
+                                                    ) : (order.status === 'Entregado' || order.status === 'Finalizado' ) ? (
+                                                        <div style={{ color: '#10b981', fontWeight: '900', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '6px', textTransform: 'uppercase', background: 'rgba(16, 185, 129, 0.08)', padding: '6px 12px', borderRadius: '10px' }}>
+                                                            <CheckCircle2 size={14} /> {isRPT ? 'Abastecido' : 'Entregado'}
+                                                        </div>
+                                                    ) : (() => {
+                                                        const hasInvoice = order.invoiceNum || downloadedDocs[order.dbId]?.invoice;
+                                                        const hasLabels = downloadedDocs[order.dbId]?.labels;
+                                                        const canDispatch = hasInvoice && hasLabels;
+
+                                                        return (
+                                                            <div title={!canDispatch ? "Genera Factura y Etiquetas para habilitar el despacho" : ""}>
+                                                                <button 
+                                                                    disabled={!canDispatch}
+                                                                    onClick={() => {
+                                                                        if (order.payment_status !== 'Pagado') {
+                                                                            setPaymentGateModal({ show: true, order, bankId: '' });
+                                                                        } else {
+                                                                            setDispatchModal({ 
+                                                                                ...dispatchModal, 
+                                                                                show: true, 
+                                                                                order,
+                                                                                date: new Date().toLocaleDateString('en-CA'),
+                                                                                time: new Date().toLocaleTimeString('es-CO', { hour12: false, hour: '2-digit', minute: '2-digit' })
+                                                                            });
+                                                                        }
+                                                                    }} 
+                                                                    style={{ 
+                                                                        background: canDispatch ? `linear-gradient(135deg, ${deepTeal} 0%, #037075 100%)` : '#f1f5f9', 
+                                                                        color: canDispatch ? '#fff' : '#cbd5e1', 
+                                                                        border: 'none', 
+                                                                        padding: '0.8rem 1.8rem', 
+                                                                        borderRadius: '16px', 
+                                                                        cursor: canDispatch ? 'pointer' : 'not-allowed', 
+                                                                        fontSize: '0.75rem', 
+                                                                        fontWeight: '950',
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '0.6rem',
+                                                                        boxShadow: canDispatch ? `0 8px 20px ${deepTeal}30` : 'none',
+                                                                        transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+                                                                        textTransform: 'uppercase'
+                                                                    }}
+                                                                >
+                                                                    <Truck size={16} /> Despachar
+                                                                </button>
+                                                            </div>
+                                                        );
+                                                    })()}
+                                                </div>
+                                            );
+                                        })()}
                                     </td>
                                 </tr>
                             );
@@ -1250,8 +1317,8 @@ const Shipping = () => {
                                                         min="1"
                                                     />
                                                 </td>
-                                                <td style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9', textAlign: 'right', color: '#64748b' }}>${(item.price || 0).toLocaleString()}</td>
-                                                <td style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9', textAlign: 'right', fontWeight: 'bold' }}>${((item.price * item.quantity) || 0).toLocaleString()}</td>
+                                                <td style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9', textAlign: 'right', color: '#64748b' }}>${formatPrice(item.price || 0)}</td>
+                                                <td style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9', textAlign: 'right', fontWeight: 'bold' }}>${formatPrice((item.price * item.quantity) || 0)}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -1263,7 +1330,7 @@ const Shipping = () => {
                                 <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                                     <div style={{ color: '#475569', fontSize: '0.9rem', fontWeight: 'bold' }}>TOTAL A PAGAR:</div>
                                     <div style={{ color: deepTeal, fontSize: '1.5rem', fontWeight: '800' }}>
-                                        ${(viewingOrder.items?.reduce((sum, i) => sum + (i.price * i.quantity), 0) || 0).toLocaleString()}
+                                        ${formatPrice(viewingOrder.items?.reduce((sum, i) => sum + (i.price * i.quantity), 0) || 0)}
                                     </div>
                                 </div>
                             </div>
@@ -1459,7 +1526,7 @@ const Shipping = () => {
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                 <span style={{ fontSize: '0.75rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase' }}>Total a cobrar</span>
-                                <span style={{ fontSize: '1.2rem', fontWeight: '900', color: premiumSalmon }}>${paymentGateModal.order?.amount?.toLocaleString()}</span>
+                                <span style={{ fontSize: '1.2rem', fontWeight: '900', color: premiumSalmon }}>${formatPrice(paymentGateModal.order?.amount || 0)}</span>
                             </div>
                         </div>
 

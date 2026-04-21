@@ -8,8 +8,8 @@ import {
     RefreshCcw,
     Calculator
 } from 'lucide-react';
-// supabase import removed
 import SkeletonLoader from '../components/SkeletonLoader';
+import { formatQty, formatPrice } from '../utils/format';
 
 const Costs = () => {
     const { items, recipes, recalculatePTCosts, loading: contextLoading } = useBusiness();
@@ -65,7 +65,7 @@ const Costs = () => {
                 <div style={{ background: '#f8fafc', padding: '1rem 2rem', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
                     <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase' }}>Valor Total Inventario</div>
                     <div style={{ fontSize: '1.8rem', fontWeight: '900', color: 'var(--color-primary)' }}>
-                        ${totalInventoryValue.toLocaleString()}
+                        ${formatPrice(totalInventoryValue)}
                     </div>
                 </div>
                 <button
@@ -175,10 +175,10 @@ const Costs = () => {
                                                 </td>
                                                 <td style={{ padding: '1.2rem', textAlign: 'right', color: '#64748b' }}>{stock}</td>
                                                 <td style={{ padding: '1.2rem', textAlign: 'right', fontWeight: '800', color: 'var(--color-primary)' }}>
-                                                    ${(mp.cost || 0).toLocaleString()}
+                                                    ${formatPrice(mp.cost || 0)}
                                                 </td>
                                                 <td style={{ padding: '1.2rem', textAlign: 'right', fontWeight: '800' }}>
-                                                    ${(stock * (mp.cost || 0)).toLocaleString()}
+                                                    ${formatPrice(stock * (mp.cost || 0))}
                                                 </td>
                                             </tr>
                                         );
@@ -230,10 +230,10 @@ const Costs = () => {
                                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.2rem' }}>
                                                     <div style={{ fontSize: '0.7rem', fontWeight: '900', color: '#64748b', textTransform: 'uppercase' }}>COSTO BATCH LOTE</div>
                                                     <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#10b981' }}>
-                                                        ${(pt.recipe_batch_cost || (pt.cost * (pt.batch_size || 1)) || 0).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                                        ${formatPrice(pt.recipe_batch_cost || (pt.cost * (pt.batch_size || 1)) || 0)}
                                                     </div>
                                                     <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#0ea5e9', background: '#e0f2fe', padding: '2px 8px', borderRadius: '6px', marginTop: '4px' }}>
-                                                        Valor Unitario: ${(pt.cost || 0).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                                        Valor Unitario: ${formatPrice(pt.cost || 0)}
                                                     </div>
                                                 </div>
                                             </div>
@@ -257,14 +257,14 @@ const Costs = () => {
                                                             <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '0.5rem', borderBottom: '1px solid #f1f5f9', fontSize: '0.85rem' }}>
                                                                 <div style={{ flex: 2 }}>
                                                                     <div style={{ color: '#475569', fontWeight: '600' }}>{comp.name}</div>
-                                                                    <div style={{ fontSize: '0.75rem', fontWeight: '800', color: 'var(--color-primary)' }}>{displayQty.toLocaleString('es-CO', { maximumFractionDigits: 2 })} {displayUnit}</div>
+                                                                    <div style={{ fontSize: '0.75rem', fontWeight: '800', color: 'var(--color-primary)' }}>{formatQty(displayQty)} {displayUnit}</div>
                                                                 </div>
                                                                 <div style={{ flex: 1, textAlign: 'right', fontWeight: '600', color: '#64748b' }}>
-                                                                    ${VUnitario.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                                                    ${formatPrice(VUnitario)}
                                                                     <div style={{ fontSize: '0.65rem', opacity: 0.6 }}>/ {displayUnit}</div>
                                                                 </div>
                                                                 <div style={{ flex: 1, textAlign: 'right', fontWeight: '800', color: 'var(--color-primary)' }}>
-                                                                    ${costCalc.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                                                    ${formatPrice(costCalc)}
                                                                 </div>
                                                             </div>
                                                         );
