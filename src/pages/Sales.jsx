@@ -525,13 +525,14 @@ const Orders = ({ orders }) => {
             }
 
             const ptData = Object.values(demandByProduct).map(({ pt, recipe, totalDemand, label }) => {
-                const isMaterial = pt.type === 'material' || pt.category?.toLowerCase().includes('materia prima') || pt.category?.toLowerCase().includes('suministro');
+                const isMaterial = pt.type === 'material' || pt.category?.toLowerCase().includes('materia prima') || pt.category?.toLowerCase().includes('suministro') || pt.category?.toLowerCase().includes('insumo');
                 
                 const stockVal = pt.initial !== undefined ? Number(pt.initial) : (Number(pt.stock) || 0);
                 const purchasesVal = Number(pt.purchases) || 0;
                 const salesVal = Number(pt.sales) || 0;
                 
                 // Si es material, ignoramos stock y seguridad (ya fueron calculados en Inventario)
+                // Esto garantiza que manualProduce sea igual a la demanda total para materiales vendidos directamente
                 const inventoryPT = isMaterial ? 0 : Math.max(0, stockVal + purchasesVal - salesVal);
                 const safetyUnits = isMaterial ? 0 : (Number(pt.min_stock_level) || Number(pt.safety) || 2);
                 const batchSize = isMaterial ? 1 : (Number(pt.batch_size) || Number(pt.batchSize) || 14);
@@ -551,7 +552,8 @@ const Orders = ({ orders }) => {
                     safetyUnits,
                     batchSize,
                     suggestedBatches: totalBatches,
-                    manualProduce: suggestedProduce
+                    manualProduce: suggestedProduce,
+                    isMaterial
                 };
             });
 
@@ -685,7 +687,7 @@ const Orders = ({ orders }) => {
 
     const handleGeneratePOPreviews = () => {
         // 1. Determinar el camino inteligente
-        const needsProduction = ptExplosionData.some(pt => pt.manualProduce > 0);
+        const needsProduction = ptExplosionData.some(pt => pt.manualProduce > 0 && !pt.isMaterial);
         const needsPurchases = explosionPreview.some(i => i.quantityToBuy > 0);
 
         if (!needsProduction) {
@@ -762,7 +764,7 @@ const Orders = ({ orders }) => {
             // ── Disparar ODPs Automáticas por Explosión ──
             if (ptExplosionData.length > 0) {
                 for (const pt of ptExplosionData) {
-                    if (pt.manualProduce > 0) {
+                    if (pt.manualProduce > 0 && !pt.isMaterial) {
                         const odpId = `ODP-REF-${Math.floor(Date.now() / 1000).toString().slice(-4)}`;
                         await saveOdp(pt.label, {
                             odp_number: odpId,
@@ -2612,7 +2614,7 @@ const Orders = ({ orders }) => {
                                         <span style={{ textAlign: 'right' }}>Prod. Total</span>
                                     </div>
 
-                                    {ptExplosionData.map(pt => (
+                                    {ptExplosionData.filter(p => !p.isMaterial).map(pt => (
                                         <div key={pt.ptId} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px 100px 120px', gap: '1rem', alignItems: 'center', padding: '1rem', background: '#fff', borderRadius: '14px', border: '1px solid #f1f5f9' }}>
                                             <div>
                                                 <div style={{ fontWeight: '800', color: '#1e293b', fontSize: '0.9rem' }}>{pt.label.toUpperCase()}</div>
