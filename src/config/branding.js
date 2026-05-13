@@ -5,7 +5,7 @@ export const BRANDING = {
         logoFilter: 'brightness(0) invert(1)', // Standard Zeticas logo is dark, needs invert for dark navbar
         accentColor: '#025357'
     },
-    delta: {
+    deltacore: {
         name: 'Delta CoreTech',
         logo: '/assets/logos/logo-delta-final.png',
         logoFilter: 'none',

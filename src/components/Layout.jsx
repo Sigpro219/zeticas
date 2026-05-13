@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Menu, User, LogOut, LayoutDashboard, Instagram, Mail, Phone, ChevronUp, Linkedin } from 'lucide-react';
+import { ShoppingCart, Menu, User, LogOut, LayoutDashboard, Instagram, Mail, Phone, ChevronUp, Linkedin, Zap } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -17,12 +17,25 @@ const ensureAbsoluteUrl = (url, type) => {
     if (!url) return '';
     let clean = url.trim();
     
+    // Remove all internal spaces for social links (common data entry error)
+    if (type === 'instagram' || type === 'linkedin') {
+        clean = clean.replace(/\s/g, '');
+    }
+
     // Specially handle Instagram handles (e.g. "Instagram@zeticas" or just "zeticas")
     if (type === 'instagram') {
         // Remove common labels and symbols like "Instagram", "@", etc.
         clean = clean.replace(/^instagram/i, '').replace(/^@/, '').trim();
         if (!clean.toLowerCase().includes('instagram.com')) {
             clean = `instagram.com/${clean}`;
+        }
+    }
+
+    // Specially handle LinkedIn handles
+    if (type === 'linkedin') {
+        clean = clean.replace(/^linkedin/i, '').replace(/^@/, '').trim();
+        if (!clean.toLowerCase().includes('linkedin.com')) {
+            clean = `linkedin.com/in/${clean}`;
         }
     }
     
@@ -58,7 +71,7 @@ const UtilityBar = ({ isConsulting, isMobile, contact, scrollY }) => {
                 {contact?.instagram && <a href={ensureAbsoluteUrl(contact.instagram, 'instagram')} target="_blank" rel="noreferrer" style={{ color: 'inherit', display: 'flex' }}><Instagram size={14} /></a>}
                 {contact?.phone && <a href={`https://wa.me/${contact.phone.replace(/\D/g, '').length === 10 ? '57' : ''}${contact.phone.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" style={{ color: 'inherit', display: 'flex' }}><Phone size={14} /></a>}
                 {contact?.email && <a href={`mailto:${contact.email}`} style={{ color: 'inherit', display: 'flex' }}><Mail size={14} /></a>}
-                {contact?.linkedin && <a href={ensureAbsoluteUrl(contact.linkedin)} target="_blank" rel="noreferrer" style={{ color: 'inherit', display: 'flex' }}><Linkedin size={14} /></a>}
+                {contact?.linkedin && <a href={ensureAbsoluteUrl(contact.linkedin, 'linkedin')} target="_blank" rel="noreferrer" style={{ color: 'inherit', display: 'flex' }}><Linkedin size={14} /></a>}
             </div>
         </div>
         
@@ -232,20 +245,25 @@ const Navbar = ({ isConsulting, isMobile }) => {
                     >
                         {user ? (
                             <>
-                                <button
-                                    onClick={() => setShowUserMenu(!showUserMenu)}
-                                    style={{
-                                        background: 'none',
-                                        border: 'none',
-                                        color: isConsulting ? deepTeal : '#fff',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        padding: '0.5rem'
-                                    }}
-                                >
-                                    <User size={18} strokeWidth={2} />
-                                </button>
+                                <div style={{ display: 'flex', gap: '0.2rem', alignItems: 'center' }}>
+                                    <button
+                                        onClick={() => setShowUserMenu(!showUserMenu)}
+                                        style={{
+                                            background: 'none',
+                                            border: 'none',
+                                            color: '#ef4444', // Rojo para el menú de Vite
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            padding: '0.5rem'
+                                        }}
+                                    >
+                                        <User size={18} strokeWidth={2} />
+                                    </button>
+                                    <a href="https://zeticas-portal.web.app/login" title="Portal Operativo (Next)" style={{ color: isConsulting ? deepTeal : '#fff', textDecoration: 'none', display: 'flex', alignItems: 'center', padding: '0.5rem' }}>
+                                        <User size={18} strokeWidth={2.5} />
+                                    </a>
+                                </div>
 
                                 {showUserMenu && (
                                     <div style={{
@@ -275,6 +293,16 @@ const Navbar = ({ isConsulting, isMobile }) => {
                                                 Delta CoreTech
                                             </button>
                                         </div>
+
+                                        <div style={{ padding: '0.4rem', background: '#fffbeb', borderRadius: '10px', marginTop: '0.2rem', marginBottom: '0.4rem', border: '1px solid #fef3c7' }}>
+                                            <div style={{ fontSize: '0.65rem', color: '#b45309', fontWeight: '800', padding: '2px 8px', textTransform: 'uppercase' }}>Framework (BETA)</div>
+                                            <a 
+                                                href={`https://zeticas-portal.web.app/gestion?tenant=${tenantId}`}
+                                                style={{ textDecoration: 'none', width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '8px', background: 'transparent', border: 'none', padding: '6px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '800', color: '#b45309', transition: 'all 0.2s', cursor: 'pointer' }}>
+                                                <Zap size={12} fill="#b45309" /> Ir al Portal Administrativo
+                                            </a>
+                                        </div>
+
                                         <button onClick={handleLogout} className="user-dropdown-link logout-btn" style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.8rem', padding: '0.7rem 0.8rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: '600', width: '100%' }}>
                                             <LogOut size={14} /> Cerrar Sesión
                                         </button>
@@ -282,9 +310,14 @@ const Navbar = ({ isConsulting, isMobile }) => {
                                 )}
                             </>
                         ) : (
-                            <Link to="/login" style={{ color: isConsulting ? deepTeal : '#fff', textDecoration: 'none', display: 'flex', alignItems: 'center', padding: '0.5rem' }}>
-                                <User size={18} strokeWidth={2} />
-                            </Link>
+                            <div style={{ display: 'flex', gap: '0.2rem' }}>
+                                <a href="https://zeticas-portal.web.app/login" title="Portal Operativo (Next)" style={{ color: isConsulting ? deepTeal : '#fff', textDecoration: 'none', display: 'flex', alignItems: 'center', padding: '0.5rem' }}>
+                                    <User size={18} strokeWidth={2.5} />
+                                </a>
+                                <Link to="/login" title="Login Clientes (Vite)" style={{ color: '#ef4444', textDecoration: 'none', display: 'flex', alignItems: 'center', padding: '0.5rem' }}>
+                                    <User size={18} strokeWidth={2} />
+                                </Link>
+                            </div>
                         )}
                     </div>
 
@@ -408,7 +441,7 @@ const Footer = ({ isConsulting, isMobile, contact }) => {
                         {contact?.instagram && <a href={ensureAbsoluteUrl(contact.instagram, 'instagram')} target="_blank" rel="noreferrer" style={{ color: isConsulting ? deepTeal : '#fff', opacity: 0.8 }}><Instagram size={18} /></a>}
                         {contact?.email && <a href={`mailto:${contact.email}`} style={{ color: isConsulting ? deepTeal : '#fff', opacity: 0.8 }}><Mail size={18} /></a>}
                         {contact?.phone && <a href={`https://wa.me/${contact.phone.replace(/\D/g, '').length === 10 ? '57' : ''}${contact.phone.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" style={{ color: isConsulting ? deepTeal : '#fff', opacity: 0.8 }}><Phone size={18} /></a>}
-                        {contact?.linkedin && <a href={ensureAbsoluteUrl(contact.linkedin)} target="_blank" rel="noreferrer" style={{ color: isConsulting ? deepTeal : '#fff', opacity: 0.8 }}><Linkedin size={18} /></a>}
+                        {contact?.linkedin && <a href={ensureAbsoluteUrl(contact.linkedin, 'linkedin')} target="_blank" rel="noreferrer" style={{ color: isConsulting ? deepTeal : '#fff', opacity: 0.8 }}><Linkedin size={18} /></a>}
                     </div>
                 </div>
             </div>

@@ -165,6 +165,7 @@ const CMSContents = () => {
                 { id: 'hero', label: 'Hero / Inicio', icon: <Layout size={18} /> },
                 { id: 'philosophy', label: 'Filosofía', icon: <Type size={18} /> },
                 { id: 'support', label: 'Apoyo & Soporte', icon: <MessageSquare size={18} /> },
+                { id: 'allies', label: 'Aliados & Puntos de Venta', icon: <Users size={18} /> },
             ]
         }
     ];
@@ -359,6 +360,10 @@ const CMSContents = () => {
                                     { key: 'title', label: 'Título Sección', type: 'text' },
                                     { key: 'subtitle', label: 'Sinergias de Vida', type: 'text' },
                                     { key: 'description', label: 'Descripción Ecosistema', type: 'textarea' },
+                                ],
+                                allies: [
+                                    { key: 'title', label: 'Título Sección', type: 'text' },
+                                    { key: 'description', label: 'Descripción General', type: 'textarea' },
                                 ],
                                 campaign: [
                                     { key: 'active', label: 'Campaña Activa (Switch)', type: 'toggle' },

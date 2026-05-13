@@ -97,7 +97,7 @@ const CateringBanner = () => {
                         maxWidth: '500px',
                         margin: isMobile ? '0 auto 2.5rem' : '0 0 3rem'
                     }}>
-                        {content.description || 'Llevamos la esencia de Zeticas a tus eventos. Preparaciones frescas, sándwiches gourmet y granolas artesanales servidas directamente desde nuestro icónico tuk-tuk.'}
+                        {'Llevamos las recetas, sabores y diversidad de Zeticas a tus eventos. Preparaciones frescas con alianzas de proveedores locales y comunidades rurales. En nuestro tuk-tuk ofrecemos opciones rápidas y versátiles como sopas, sándwiches gourmet, granolas artesanales y dulces tradicionales.'}
                     </p>
                     <Link
                         to="/catering"

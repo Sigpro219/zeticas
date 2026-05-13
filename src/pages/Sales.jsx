@@ -40,7 +40,7 @@ const Orders = ({ orders }) => {
     const [selectedOrders, setSelectedOrders] = useState([]);
 
     // Filters and UI State
-    const [viewMode, setViewMode] = useState('Pending'); // 'Pending' or 'Processed'
+    const [viewMode, setViewMode] = useState('Pending'); // 'Pending', 'Active', 'History'
     const [timeRange, setTimeRange] = useState('week'); // 'week', 'month', 'all', 'custom'
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isExplosionModalOpen, setIsExplosionModalOpen] = useState(false);
@@ -306,12 +306,16 @@ const Orders = ({ orders }) => {
         }
 
         // Tab Filtering (Final Separation)
-        // Tab Filtering (Final Separation) - STRICT PENDING LOGIC
         if (viewMode === 'Pending') {
             return baseFiltered.filter(o => (o.status || 'Pendiente').toLowerCase() === 'pendiente');
+        } else if (viewMode === 'Active') {
+            // Orders currently in the workflow but not finished
+            const activeStatuses = ['en producción', 'en compras', 'facturado', 'listo para despacho', 'en despacho'];
+            return baseFiltered.filter(o => activeStatuses.includes((o.status || '').toLowerCase().trim()));
         } else {
-            // EVERYTHING ELSE is considered Processed or Routed to other modules
-            return baseFiltered.filter(o => (o.status || 'Pendiente').toLowerCase() !== 'pendiente');
+            // History: Finished, Delivered, or Cancelled
+            const historyStatuses = ['finalizado', 'entregado', 'cobrado', 'cancelado', 'liquidado'];
+            return baseFiltered.filter(o => historyStatuses.includes((o.status || '').toLowerCase().trim()));
         }
     }, [orders, viewMode, searchTerm, timeRange]);
 
@@ -367,7 +371,7 @@ const Orders = ({ orders }) => {
                 const idsToDelete = Array.isArray(target) ? target : [target];
                 const dbIds = orders
                     .filter(o => idsToDelete.includes(o.id))
-                    .map(o => o.dbId)
+                    .map(o => o.id)
                     .filter(Boolean);
 
                 if (dbIds.length > 0) {
@@ -376,8 +380,8 @@ const Orders = ({ orders }) => {
                     if (successResult && type === 'bulk') setSelectedOrders([]);
                 }
             } else if (type === 'viewed') {
-                if (viewingOrder.dbId) {
-                    const { success } = await deleteOrders(viewingOrder.dbId, user);
+                if (viewingOrder.id) {
+                    const { success } = await deleteOrders(viewingOrder.id, user);
                     successResult = success;
                     if (successResult) setViewingOrder(null);
                 }
@@ -427,7 +431,7 @@ const Orders = ({ orders }) => {
         try {
             const dbIds = orders
                 .filter(o => selectedOrders.includes(o.id))
-                .map(o => o.dbId)
+                .map(o => o.id)
                 .filter(Boolean);
             
             for (const dbId of dbIds) {
@@ -755,7 +759,7 @@ const Orders = ({ orders }) => {
         try {
             const selectedDbIds = orders
                 .filter(o => selectedOrders.includes(o.id))
-                .map(o => o.dbId)
+                .map(o => o.id)
                 .filter(Boolean);
 
             for (const dbId of selectedDbIds) {
@@ -1315,17 +1319,47 @@ const Orders = ({ orders }) => {
                     </span>
                 </button>
                 <button
-                    onClick={() => setViewMode('Processed')}
+                    onClick={() => setViewMode('Active')}
                     style={{
                         padding: '0.7rem 1.8rem',
                         borderRadius: '10px',
                         border: 'none',
-                        background: viewMode === 'Processed' ? '#fff' : 'transparent',
-                        color: viewMode === 'Processed' ? deepTeal : '#64748b',
+                        background: viewMode === 'Active' ? '#fff' : 'transparent',
+                        color: viewMode === 'Active' ? deepTeal : '#64748b',
                         fontWeight: '800',
                         fontSize: '0.85rem',
                         cursor: 'pointer',
-                        boxShadow: viewMode === 'Processed' ? '0 4px 12px rgba(0,0,0,0.05)' : 'none',
+                        boxShadow: viewMode === 'Active' ? '0 4px 12px rgba(0,0,0,0.05)' : 'none',
+                        transition: 'all 0.2s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.6rem'
+                    }}
+                >
+                    <RefreshCw size={16} /> 
+                    OPERATIVO
+                    <span style={{ 
+                        background: viewMode === 'Active' ? institutionOcre : '#cbd5e1', 
+                        color: '#fff', 
+                        padding: '2px 8px', 
+                        borderRadius: '20px', 
+                        fontSize: '0.7rem' 
+                    }}>
+                        {orders.filter(o => ['en producción', 'en compras', 'facturado', 'listo para despacho', 'en despacho'].includes((o.status || '').toLowerCase().trim())).length}
+                    </span>
+                </button>
+                <button
+                    onClick={() => setViewMode('History')}
+                    style={{
+                        padding: '0.7rem 1.8rem',
+                        borderRadius: '10px',
+                        border: 'none',
+                        background: viewMode === 'History' ? '#fff' : 'transparent',
+                        color: viewMode === 'History' ? deepTeal : '#64748b',
+                        fontWeight: '800',
+                        fontSize: '0.85rem',
+                        cursor: 'pointer',
+                        boxShadow: viewMode === 'History' ? '0 4px 12px rgba(0,0,0,0.05)' : 'none',
                         transition: 'all 0.2s',
                         display: 'flex',
                         alignItems: 'center',
@@ -1333,7 +1367,16 @@ const Orders = ({ orders }) => {
                     }}
                 >
                     <CheckCircle2 size={16} /> 
-                    PROCESADOS / HISTÓRICO
+                    HISTÓRICO
+                    <span style={{ 
+                        background: viewMode === 'History' ? '#10b981' : '#cbd5e1', 
+                        color: '#fff', 
+                        padding: '2px 8px', 
+                        borderRadius: '20px', 
+                        fontSize: '0.7rem' 
+                    }}>
+                        {orders.filter(o => ['finalizado', 'entregado', 'cobrado', 'cancelado', 'liquidado'].includes((o.status || '').toLowerCase().trim())).length}
+                    </span>
                 </button>
             </div>
 

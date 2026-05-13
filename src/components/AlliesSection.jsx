@@ -5,27 +5,27 @@ import { useBusiness } from '../context/BusinessContext';
 const allies = [
     { 
         name: 'Mercado Lourdes', 
-        logo: '/assets/aliados/aliado1.png',
+        logo: '/assets/aliados/mercado_lourdes.png',
         location: 'Calle 64 #8-34, Bogotá'
     },
     { 
         name: 'Club Campestre Guaymaral', 
-        logo: '/assets/aliados/aliado2.png',
+        logo: '/assets/aliados/club_campestre.jpg',
         location: 'Auto. Norte #245-01, Bogotá'
     },
     { 
         name: 'Corales Traiteur', 
-        logo: '/assets/aliados/aliado3.png',
+        logo: '/assets/aliados/corales.png',
         location: 'Km 18.3 via la calera - sopó, La Calera'
     },
     { 
         name: 'Vereda Delikatessen Rural', 
-        logo: '/assets/aliados/aliado4.png',
+        logo: '/assets/aliados/delikatessen.jpg',
         location: 'C.C. Potosí, Km 20 Vía La Calera - Sopó'
     },
     { 
         name: 'Bestial Market', 
-        logo: '/assets/aliados/aliado5.png',
+        logo: '/assets/aliados/bestial.jpg',
         location: 'Cra. 9 #4-60, Villa de Leyva, Boyacá'
     }
 ];
@@ -34,8 +34,9 @@ const AlliesSection = () => {
     const isMobile = useMediaQuery('(max-width: 768px)');
     const { siteContent } = useBusiness();
     const content = siteContent?.allies || {};
+    const displayList = (content.list && content.list.length > 0) ? content.list : allies;
     // Duplicate for infinite scroll
-    const duplicateAllies = [...allies, ...allies, ...allies];
+    const duplicateAllies = [...displayList, ...displayList, ...displayList];
 
     return (
         <section className="allies-section botanical-bg" style={{ 

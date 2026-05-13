@@ -5,13 +5,13 @@ import { getStorage } from "firebase/storage";
 
 // TODO: Reemplaza con tu configuración real de Firebase
 const firebaseConfig = {
-  apiKey: "AIzaSyAeHMdtEt04RtYarEx_h19gcCUzsIUUpSc",
-  authDomain: "delta-core-cloud-45ea0.firebaseapp.com",
-  projectId: "delta-core-cloud-45ea0",
-  storageBucket: "delta-core-cloud-45ea0.firebasestorage.app",
-  messagingSenderId: "378250949856",
-  appId: "1:378250949856:web:7a0ce44de64bc9a5becc85",
-  measurementId: "G-Q1BXE4WVZP"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 export const app = initializeApp(firebaseConfig);

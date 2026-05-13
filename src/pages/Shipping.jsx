@@ -278,11 +278,11 @@ const Shipping = () => {
         // Update locally for UI guardrails
         setDownloadedDocs(prev => ({
             ...prev,
-            [order.dbId]: { ...prev[order.dbId], invoice: true }
+            [order.id]: { ...prev[order.id], invoice: true }
         }));
 
         // Update in Firestore with link table logic (Metadata on order)
-        await updateOrder(order.dbId, {
+        await updateOrder(order.id, {
             invoice_number: invNum,
             invoice_date: new Date().toISOString(),
             status: 'Facturado'
@@ -457,7 +457,7 @@ const Shipping = () => {
         // Update local state for UI guardrails
         setDownloadedDocs(prev => ({
             ...prev,
-            [order.dbId]: { ...prev[order.dbId], labels: true }
+            [order.id]: { ...prev[order.id], labels: true }
         }));
 
         setLabelModal({ show: false, order: null, jarsPerBox: 12 });
@@ -470,7 +470,7 @@ const Shipping = () => {
         }
 
         try {
-            await updateOrder(dispatchModal.order.dbId, {
+            await updateOrder(dispatchModal.order.id, {
                 status: 'Despachado',
                 tracking_number: dispatchModal.trackingNumber,
                 dispatched_at: `${dispatchModal.date}T${dispatchModal.time}:00Z`,
@@ -509,7 +509,7 @@ const Shipping = () => {
             );
 
             // 2. Update order status to Pagado
-            await updateOrder(order.dbId, { 
+            await updateOrder(order.id, { 
                 payment_status: 'Pagado',
                 payment_bank_id: paymentGateModal.bankId 
             });
@@ -535,13 +535,13 @@ const Shipping = () => {
     const handleReplenishInventory = async (order) => {
         if (!window.confirm(`¿Confirmas el ingreso de ${ (order.items || []).reduce((acc, i) => acc + (Number(i.quantity) || 0), 0) } unidades a inventario físico?`)) return;
         
-        setLoadingReplenish(order.dbId);
+        setLoadingReplenish(order.id);
         try {
             for (const item of (order.items || [])) {
                 await loadFinishedGoods(item.name, item.quantity, true);
             }
 
-            await updateOrder(order.dbId, {
+            await updateOrder(order.id, {
                 status: 'Finalizado',
                 delivered_at: new Date().toISOString(),
                 replenished_at: new Date().toISOString(),
@@ -564,7 +564,7 @@ const Shipping = () => {
         const updated = { ...viewingOrder, amount: total };
 
         try {
-            const res = await updateOrder(updated.dbId, {
+            const res = await updateOrder(updated.id, {
                 amount: updated.amount,
                 status: updated.status,
                 items: updated.items

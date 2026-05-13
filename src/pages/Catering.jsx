@@ -14,12 +14,13 @@ const Catering = () => {
     ];
 
     const allies = [
-        { name: 'Farm Fresh', url: '/assets/aliados/aliado6.png' },
-        { name: 'Holandes', url: '/assets/aliados/aliado7.png' },
-        { name: 'Castilac', url: '/assets/aliados/aliado8.png' },
-        { name: 'Patico', url: '/assets/aliados/aliado9.png' },
-        { name: 'Terra Santa', url: '/assets/aliados/aliado10.png' },
-        { name: 'Masa Madre', url: '/assets/aliados/aliado11.png' }
+        { name: 'Nuquí', url: '/assets/insumos/nuqui.jpg' },
+        { name: 'Clementina', url: '/assets/insumos/clementina.jpg' },
+        { name: 'Farm Fresh', url: '/assets/insumos/farm_fresh.jpg' },
+        { name: 'Holandes', url: '/assets/insumos/holandes.png' },
+        { name: 'Castilac', url: '/assets/insumos/castilac.png' },
+        { name: 'Terra Santa', url: '/assets/insumos/terra_santa.jpg' },
+        { name: 'Masa Madre', url: '/assets/insumos/masa_madre.jpg' }
     ];
     
     // Triple for seamless permanent loop
@@ -64,9 +65,10 @@ const Catering = () => {
                             color: 'rgba(0,0,0,0.7)', 
                             fontSize: isMobile ? '1.1rem' : '1.25rem', 
                             lineHeight: '1.8',
-                            maxWidth: '540px'
+                            maxWidth: '650px'
                         }}>
-                            Llevamos la esencia de la Sabana a tus momentos más especiales. Con nuestro <strong>ZETAmóvil</strong>, convertimos cualquier espacio en una estación de gastronomía consciente y artesanal.
+                            Llevamos las recetas, sabores y diversidad de Zeticas a tus eventos. Preparaciones frescas con alianzas de proveedores locales y comunidades rurales. <br/><br/>
+                            Con nuestro <strong>ZETAmóvil</strong>, convertimos cualquier espacio en una estación de comida consciente, natural y artesanal.
                         </p>
                     </div>
                     <div style={{ position: 'relative' }}>
@@ -228,7 +230,7 @@ const Catering = () => {
                             </p>
                             <div style={{ display: 'flex', justifyContent: 'center' }}>
                                 <a 
-                                    href="https://wa.me/3144336525" 
+                                    href="https://wa.me/3144336525?text=%C2%A1Hola%20Zeticas!%20Me%20gustar%C3%ADa%20recibir%20informaci%C3%B3n%20sobre%20sus%20servicios%20de%20catering%20y%20eventos%20para%20mi%20pr%C3%B3xima%20celebraci%C3%B3n.%20%C2%BFMe%20podr%C3%ADan%20ayudar%3F" 
                                     target="_blank" 
                                     rel="noreferrer" 
                                     style={{ 

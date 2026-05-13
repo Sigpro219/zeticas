@@ -182,7 +182,7 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
                                         .map(odp => {
                                             const isStarted = !!odp.started_at;
                                             return (
-                                                <div key={`odp-${odp.dbId || odp.id}`} style={{ background: '#fff', padding: '1.2rem', borderRadius: '16px', borderLeft: `6px solid ${isStarted ? '#10b981' : '#ef4444'}`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)', position: 'relative' }}>
+                                                <div key={`odp-${odp.id || odp.id}`} style={{ background: '#fff', padding: '1.2rem', borderRadius: '16px', borderLeft: `6px solid ${isStarted ? '#10b981' : '#ef4444'}`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)', position: 'relative' }}>
                                                     {(odp.priority === 'CRÍTICA' || odp.is_critical) && (
                                                         <div style={{ position: 'absolute', top: '-8px', left: '12px', background: '#ef4444', color: '#fff', fontSize: '0.55rem', fontWeight: '900', padding: '2px 8px', borderRadius: '4px', zIndex: 1 }}>PRIORIDAD CRÍTICA</div>
                                                     )}
@@ -235,7 +235,7 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
                                             });
                                             return !allMaterialsReady;
                                         }).map(odp => (
-                                            <div key={`odp-blocked-${odp.dbId || odp.id}`} style={{ background: 'rgba(239, 68, 68, 0.03)', padding: '1.2rem', borderRadius: '16px', borderLeft: `6px solid #ef4444`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+                                            <div key={`odp-blocked-${odp.id || odp.id}`} style={{ background: 'rgba(239, 68, 68, 0.03)', padding: '1.2rem', borderRadius: '16px', borderLeft: `6px solid #ef4444`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                     <div style={{ fontSize: '0.6rem', fontWeight: '950', color: '#ef4444' }}>ESPERANDO MATERIALES</div>
                                                     <div style={{ fontSize: '0.85rem', fontWeight: '950', color: '#1e293b' }}>#{odp.odp_number || odp.id?.slice(-8)}</div>
@@ -254,7 +254,7 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
                                         .map(order => {
                                             const relatedPOs = (purchaseOrders || []).filter(po => {
                                                 const related = (po.relatedOrders || po.related_orders || []).map(id => String(id).toUpperCase().trim());
-                                                return related.includes(String(order.id).toUpperCase().trim()) || related.includes(String(order.dbId).toUpperCase().trim());
+                                                return related.includes(String(order.id).toUpperCase().trim()) || related.includes(String(order.id).toUpperCase().trim());
                                             });
                                             const allPaid = relatedPOs.length > 0 && relatedPOs.every(po => {
                                                 const status = String(po.payment_status || po.paymentStatus || '').toLowerCase();
@@ -263,7 +263,7 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
                                             const cardIdColor = allPaid ? '#10b981' : '#D4785A';
                                             
                                             return (
-                                                <div key={order.dbId || order.id} onClick={() => setSelectedOrder({ ...order, stageName: col.label })} style={{ background: '#fff', padding: '1.2rem', borderRadius: '16px', borderLeft: `6px solid ${cardIdColor}`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)', cursor: 'pointer' }}>
+                                                <div key={order.id || order.id} onClick={() => setSelectedOrder({ ...order, stageName: col.label })} style={{ background: '#fff', padding: '1.2rem', borderRadius: '16px', borderLeft: `6px solid ${cardIdColor}`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)', cursor: 'pointer' }}>
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', alignItems: 'center' }}>
                                                         <span style={{ fontSize: '0.85rem', fontWeight: '950', color: '#1e293b' }}>#{order.id}</span>
                                                         <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: cardIdColor }} />
@@ -300,7 +300,7 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
                                         if (statusLower === 'pendiente' || statusLower === 'pendiente de explosión de materiales' || statusLower === 'pendiente para ejecución') cardColor = '#0ea5e9';
 
                                         return (
-                                            <div key={order.dbId || order.id} onClick={() => setSelectedOrder({ ...order, stageName: col.label })} style={{ background: '#fff', padding: '1.2rem', borderRadius: '16px', borderLeft: `6px solid ${cardColor}`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)', cursor: 'pointer', position: 'relative' }}>
+                                            <div key={order.id || order.id} onClick={() => setSelectedOrder({ ...order, stageName: col.label })} style={{ background: '#fff', padding: '1.2rem', borderRadius: '16px', borderLeft: `6px solid ${cardColor}`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)', cursor: 'pointer', position: 'relative' }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', alignItems: 'center' }}>
                                                     <span style={{ fontSize: '0.85rem', fontWeight: '950', color: '#1e293b' }}>#{order.id}</span>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -308,7 +308,7 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
                                                             <button 
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
-                                                                    updateOrder(order.dbId, { kanban_hidden: false });
+                                                                    updateOrder(order.id, { kanban_hidden: false });
                                                                 }}
                                                                 style={{ background: 'rgba(212, 120, 90, 0.1)', border: 'none', color: '#D4785A', padding: '4px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.6rem', fontWeight: '900' }}
                                                             >
@@ -320,7 +320,7 @@ const KanbanModal = ({ isOpen, onClose, orders = [], items = [] }) => {
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
                                                                         if (confirm('¿Deseas archivar este pedido del Kanban?')) {
-                                                                            updateOrder(order.dbId, { kanban_hidden: true });
+                                                                            updateOrder(order.id, { kanban_hidden: true });
                                                                         }
                                                                     }}
                                                                     style={{ background: '#10b98115', border: 'none', color: '#10b981', padding: '4px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}

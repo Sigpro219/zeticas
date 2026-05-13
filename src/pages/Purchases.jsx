@@ -26,7 +26,9 @@ import {
     ChefHat,
     Trash2,
     AlertTriangle,
-    CreditCard
+    CreditCard,
+    MessageSquare,
+    Mail
 } from 'lucide-react';
 import { formatQty, formatPrice } from '../utils/format';
 import logo from '../assets/logo.png';
@@ -86,7 +88,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
         const updated = { ...viewingRelatedOrder, amount: total };
 
         try {
-            const res = await updateOrder(updated.dbId || updated.id, {
+            const res = await updateOrder(updated.id, {
                 amount: updated.amount,
                 status: updated.status,
                 items: updated.items
@@ -138,9 +140,45 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
             setIsCreatingManualOC(false);
             setManualOCData({ providerId: '', items: [], date: new Date().toLocaleDateString('en-CA') });
             refreshData();
+            
+            // Trigger opcional: Preguntar si desea enviar por WhatsApp de inmediato
+            if (window.confirm("¿Deseas enviar esta Orden de Compra por WhatsApp al proveedor?")) {
+                handleWhatsAppOC(finalOC);
+            }
         } else {
             alert("Error al guardar la orden de compra.");
         }
+    };
+
+    const handleWhatsAppOC = (oc) => {
+        const provider = providers.find(p => p.id === oc.provider_id || p.name === (oc.providerName || oc.supplier));
+        const phone = oc.provider_phone || provider?.phone || provider?.telefono;
+        
+        if (!phone) {
+            alert("El proveedor no tiene un número de teléfono registrado.");
+            return;
+        }
+
+        const message = `Hola *${oc.providerName || oc.supplier}*, te enviamos la *Orden de Compra ${oc.id}* de Zeticas.\n\n*Monto:* $${formatPrice(oc.total || oc.total_amount || 0)}\n*Fecha:* ${oc.date || oc.order_date}\n\nQuedamos atentos a la confirmación.`;
+        
+        const cleanPhone = phone.startsWith('+') ? phone.replace(/\D/g, '') : `57${phone.replace(/\D/g, '')}`; 
+        const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+        window.open(url, '_blank');
+    };
+
+    const handleEmailOC = async (oc) => {
+        const provider = providers.find(p => p.id === oc.provider_id || p.name === (oc.providerName || oc.supplier));
+        const email = oc.provider_email || provider?.email;
+
+        if (!email) {
+            alert("El proveedor no tiene un correo electrónico registrado.");
+            return;
+        }
+
+        alert(`Simulando envío de correo a: ${email}\n\n(Para activar correos reales, necesitamos configurar EmailJS - ¡Es gratis!)`);
+        
+        // Aquí iría la lógica de EmailJS:
+        // emailjs.send('service_id', 'template_id', templateParams, 'user_id')
     };
 
     // Filtering logic for Purchase Orders
@@ -149,9 +187,21 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
 
         // 1. Status Filter (Pendientes vs Histórico)
         if (statusFilter === 'pending') {
-            result = result.filter(po => (po.status || '').toLowerCase() !== 'recibida');
+                                result = result.filter(po => {
+                                    const p1 = String(po.payment_status || '').toLowerCase();
+                                    const p2 = String(po.paymentStatus || '').toLowerCase();
+                                    const isPaid = p1 === 'pagado' || p2 === 'pagado' || p1 === 'paid' || p2 === 'paid';
+                                    const isReceived = String(po.status || '').toLowerCase() === 'recibida';
+                                    return !isReceived || !isPaid;
+                                });
         } else if (statusFilter === 'history') {
-            result = result.filter(po => (po.status || '').toLowerCase() === 'recibida');
+            result = result.filter(po => {
+                const p1 = String(po.payment_status || '').toLowerCase();
+                const p2 = String(po.paymentStatus || '').toLowerCase();
+                const isPaid = p1 === 'pagado' || p2 === 'pagado';
+                const isReceived = String(po.status || '').toLowerCase() === 'recibida';
+                return isReceived && isPaid;
+            });
         }
 
         // 2. Date filtering
@@ -365,9 +415,9 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
         doc.save(`${oc.id}.pdf`);
     };
 
-    const handleReceiveOC = async (ocId) => {
+    const handleReceiveOC = async (targetId) => {
         try {
-            const oc = purchaseOrders.find(o => o.id === ocId);
+            const oc = purchaseOrders.find(o => o.dbId === targetId || o.id === targetId);
             if (!oc) return;
 
             const confirmMessage = `¿Registrar ingreso de las materias primas de la orden ${oc.id}?\n\nAl confirmar, el inventario de compras y sus saldos se actualizarán automáticamente.`;
@@ -381,18 +431,32 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                 const invItemIndex = updatedInventory.findIndex(i => i.id === ocItem.id || i.name === ocItem.name);
                 if (invItemIndex !== -1) {
                     const item = updatedInventory[invItemIndex];
-                    const currentStock = (item.initial || 0) + (item.purchases || 0) - (item.sales || 0);
+                    
+                    // Logic aligned with ProcurementContext.jsx
+                    const invUnit = (item.unit_measure || item.unit || 'gr').toLowerCase();
+                    const qtyBuy = Number(ocItem.toBuy || ocItem.quantity || 0);
+                    const purchaseUnitConfig = (item.purchase_unit || invUnit).toLowerCase();
+                    const conversionFactor = Number(item.conversion_factor || 1);
+                    const buyUnit = (ocItem.unit || ocItem.purchaseUnit || invUnit).toLowerCase();
+
+                    // Calculate real quantity to add in base unit
+                    // Note: Simplified local version of convertUnit logic for speed/reliability
+                    let qtyToAddBase = (buyUnit === purchaseUnitConfig) ? qtyBuy * conversionFactor : qtyBuy; 
+                    // If units are standard SI (kg/gr), we could be more precise, but conversionFactor is the primary Zeticas mechanism.
+
+                    const currentStock = (Number(item.initial || 0)) + (Number(item.purchases || 0)) - (Number(item.sales || 0));
                     const currentTotalValue = currentStock * (item.avgCost || 0);
                     
-                    // Priority: Use realPrice (invoice) from the modal input
-                    const purchaseValue = (ocItem.toBuy || ocItem.quantity || 0) * (Number(ocItem.realPrice) || ocItem.purchasePrice || ocItem.unit_cost || 0);
+                    // Price is per PURCHASE unit, but cost is per BASE unit.
+                    const purchaseUnitPrice = (Number(ocItem.realPrice) || ocItem.purchasePrice || ocItem.unit_cost || 0);
+                    const lineTotalValue = qtyBuy * purchaseUnitPrice;
 
-                    const newTotalQty = currentStock + (ocItem.toBuy || ocItem.quantity || 0);
-                    const newAvgCost = newTotalQty > 0 ? (currentTotalValue + purchaseValue) / newTotalQty : item.avgCost;
+                    const newTotalQty = currentStock + qtyToAddBase;
+                    const newAvgCost = newTotalQty > 0 ? (currentTotalValue + lineTotalValue) / newTotalQty : item.avgCost;
 
                     updatedInventory[invItemIndex] = {
                         ...item,
-                        purchases: (item.purchases || 0) + (ocItem.toBuy || ocItem.quantity || 0),
+                        purchases: (item.purchases || 0) + qtyToAddBase,
                         avgCost: Math.round(newAvgCost)
                     };
                 }
@@ -418,8 +482,9 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
             });
 
             // 4. Persist Inventory & OC changes to Context DB Map
-            // Use dbId (Firestore UUID) as primary, fallback to alphanumeric id
-            const res = await receivePurchase(oc.dbId || oc.id, receivingItems, refs);
+            // 3. Finalize and update document status
+            const targetId = invEntryOC.dbId || invEntryOC.id;
+            const res = await receivePurchase(targetId, receivingItems, refs);
             if (!res.success) {
                 console.error("Error persisting receipt:", res.error);
                 alert(`Error técnico: ${res.error}`);
@@ -450,11 +515,18 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
 
         try {
             // 1. Update OC Payment Status, Bank Balance and Create Expense record centrally
-            const res = await payPurchase(oc.id, paymentBankId, amount, oc.providerName);
+            // We MUST use dbId (the real Firestore Document ID)
+            const targetId = oc.dbId || oc.id;
+            const res = await payPurchase(targetId, paymentBankId, amount, oc.providerName);
             if (!res.success) throw new Error(res.error);
 
-            // 3. Update Local State (only purchase orders, bank state is updated by updateBankBalance)
-            setPurchaseOrders(prev => prev.map(o => o.id === oc.id ? { ...o, paymentStatus: 'Pagado', bankId: paymentBankId } : o));
+            // 3. Update Local State: Force BOTH to be sure, but prioritize snake_case
+            setPurchaseOrders(prev => prev.map(o => (o.dbId === targetId || o.id === targetId) ? { 
+                ...o, 
+                payment_status: 'Pagado', 
+                paymentStatus: 'Pagado', 
+                bank_id: paymentBankId 
+            } : o));
 
             alert(`Pago registrado exitosamente. Se descontaron $${formatPrice(amount)} del banco seleccionado.`);
             setPaymentModalOC(null);
@@ -748,12 +820,10 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                             <tr style={{ background: 'rgba(2, 83, 87, 0.03)', borderBottom: '1px solid #f1f5f9' }}>
                                 <th style={{ padding: '1.2rem 1rem', textAlign: 'left', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Referencia OC</th>
                                 <th style={{ padding: '1.2rem 1rem', textAlign: 'left', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Proveedor</th>
-                                <th style={{ padding: '1.2rem 1rem', textAlign: 'left', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Pedidos Relacionados</th>
                                 <th style={{ padding: '1.2rem 1rem', textAlign: 'left', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Fecha</th>
-                                <th style={{ padding: '1.2rem 1rem', textAlign: 'right', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Valor Total</th>
-                                <th style={{ padding: '1.2rem 1rem', textAlign: 'center', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Ingreso Inv.</th>
+                                <th style={{ padding: '1.2rem 1rem', textAlign: 'right', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Monto OC</th>
+                                <th style={{ padding: '1.2rem 1rem', textAlign: 'center', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Pago</th>
                                 <th style={{ padding: '1.2rem 1rem', textAlign: 'center', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Acciones</th>
-                                <th style={{ padding: '1.2rem 1rem', textAlign: 'center', fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Status</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -817,68 +887,102 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                         </div>
                                     </td>
                                     <td style={{ padding: '1.2rem 1rem', textAlign: 'center' }}>
-                                        {oc.status === 'Recibida' ? (
-                                            <div style={{ color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontWeight: 'bold', fontSize: '0.8rem' }}>
-                                                <CheckCircle2 size={24} /> INGRESADO
-                                            </div>
-                                        ) : (
-                                            <button
-                                                onClick={(e) => { 
-                                                    e.stopPropagation(); 
-                                                    setInvEntryOC(oc); 
-                                                    setReceivingItems(oc.items.map(i => ({ 
-                                                        ...i, 
-                                                        realPrice: i.purchasePrice || i.unit_cost || 0 
-                                                    })));
-                                                }}
-                                                style={{
-                                                    background: '#fff', border: '1px solid #e2e8f0', padding: '0.6rem 1rem', borderRadius: '10px',
-                                                    fontSize: '0.75rem', fontWeight: 'bold', color: '#475569', cursor: 'pointer', transition: '0.2s'
-                                                }}
-                                                onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
-                                                onMouseLeave={(e) => e.currentTarget.style.background = '#fff'}
-                                            >
-                                                INGRESAR...
-                                            </button>
-                                        )}
+                                        {(() => {
+                                            const p1 = String(oc.payment_status || '').toLowerCase();
+                                            const p2 = String(oc.paymentStatus || '').toLowerCase();
+                                            const isPaid = p1 === 'pagado' || p2 === 'pagado';
+                                            const isReceived = String(oc.status || '').toLowerCase() === 'recibida';
+                                            
+                                            if (isReceived) return (
+                                                <span style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '0.7rem', fontWeight: '900', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', border: '1px solid #10b981' }}>RECIBIDA</span>
+                                            );
+                                            if (isPaid) return (
+                                                <span style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '0.7rem', fontWeight: '900', background: 'rgba(212, 120, 90, 0.1)', color: institutionOcre, border: `1px solid ${institutionOcre}` }}>PAGADO</span>
+                                            );
+                                            return (
+                                                <span style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '0.7rem', fontWeight: '900', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid #ef4444' }}>PENDIENTE</span>
+                                            );
+                                        })()}
                                     </td>
                                     <td style={{ padding: '1.2rem 1rem', textAlign: 'center' }}>
-                                        {oc.paymentStatus !== 'Pagado' ? (
-                                            <button
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.8rem' }}>
+                                            {/* 1. Ver Detalle (Ojo) */}
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); setViewingOC(oc); }}
+                                                title="Ver Detalle"
+                                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', transition: '0.2s', padding: '0.4rem' }}
+                                                onMouseEnter={(e) => e.currentTarget.style.color = deepTeal}
+                                                onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
+                                            >
+                                                <Eye size={20} />
+                                            </button>
+
+                                            {/* 2. Recibir Mercancía (Camión) - SIEMPRE HABILITADO */}
+                                            {String(oc.status || '').toLowerCase() !== 'recibida' && (
+                                                <button 
+                                                    onClick={(e) => { 
+                                                        e.stopPropagation(); 
+                                                        setInvEntryOC(oc); 
+                                                        setReceivingItems((oc.items || []).map(i => ({ 
+                                                            ...i, 
+                                                            realPrice: i.purchasePrice || i.unit_cost || 0 
+                                                        })));
+                                                    }}
+                                                    title="Recibir Mercancía"
+                                                    style={{ 
+                                                        background: 'none', 
+                                                        border: 'none', 
+                                                        cursor: 'pointer', 
+                                                        color: (String(oc.payment_status || '').toLowerCase() === 'pagado' || String(oc.paymentStatus || '').toLowerCase() === 'pagado') ? '#64748b' : '#D4785A', 
+                                                        transition: '0.2s', 
+                                                        padding: '0.4rem',
+                                                        opacity: 1
+                                                    }}
+                                                    onMouseEnter={(e) => { e.currentTarget.style.color = institutionOcre; }}
+                                                    onMouseLeave={(e) => { e.currentTarget.style.color = (String(oc.payment_status || '').toLowerCase() === 'pagado' || String(oc.paymentStatus || '').toLowerCase() === 'pagado') ? '#64748b' : '#D4785A'; }}
+                                                >
+                                                    <Truck size={20} />
+                                                </button>
+                                            )}
+
+                                            {/* 3. Gestionar Pago (Banco/Tarjeta) */}
+                                            <button 
                                                 onClick={(e) => { e.stopPropagation(); setPaymentModalOC(oc); }}
-                                                style={{
-                                                    background: `${premiumSalmon}15`,
-                                                    color: premiumSalmon,
-                                                    border: `1px solid ${premiumSalmon}30`,
-                                                    borderRadius: '12px',
-                                                    padding: '0.8rem 1.5rem',
-                                                    fontSize: '0.75rem',
-                                                    fontWeight: '900',
-                                                    cursor: 'pointer',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '0.6rem',
-                                                    textTransform: 'uppercase',
-                                                    letterSpacing: '1px',
-                                                    transition: 'all 0.3s'
+                                                title="Gestionar Pago"
+                                                style={{ 
+                                                    background: 'none', 
+                                                    border: 'none', 
+                                                    cursor: 'pointer', 
+                                                    color: (String(oc.payment_status || '').toLowerCase() === 'pagado' || String(oc.paymentStatus || '').toLowerCase() === 'pagado') ? institutionOcre : '#94a3b8', 
+                                                    transition: '0.2s', 
+                                                    padding: '0.4rem'
                                                 }}
                                             >
-                                                PAGAR
+                                                <CreditCard size={20} />
                                             </button>
-                                        ) : (
-                                            <span style={{ fontSize: '0.75rem', fontWeight: '900', color: '#10b981' }}>LIQUIDADO</span>
-                                        )}
+
+                                            {/* 4. WhatsApp */}
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); handleWhatsAppOC(oc); }}
+                                                title="Enviar WhatsApp"
+                                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#10b981', transition: '0.2s', padding: '0.4rem' }}
+                                            >
+                                                <MessageSquare size={20} />
+                                            </button>
+
+                                            {/* 5. Email */}
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); handleEmailOC(oc); }}
+                                                title="Enviar Email"
+                                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3b82f6', transition: '0.2s', padding: '0.4rem' }}
+                                            >
+                                                <Mail size={20} />
+                                            </button>
+                                        </div>
                                     </td>
-                                    <td style={{ padding: '1.2rem 1rem', textAlign: 'center' }}>
-                                        <span style={{
-                                            padding: '6px 12px', borderRadius: '8px', fontSize: '0.7rem', fontWeight: '900',
-                                            background: oc.status === 'Recibida' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(214, 189, 152, 0.2)',
-                                            color: oc.status === 'Recibida' ? '#10b981' : '#B8A07E',
-                                            border: '1px solid currentColor'
-                                        }}>
-                                            {oc.status.toUpperCase()}
-                                        </span>
-                                    </td>
+
+
+
                                 </tr>
                             )) : (
                                 <tr>
@@ -952,6 +1056,18 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                     }}
                                 >
                                     <Download size={18} /> Exportar PDF
+                                </button>
+                                <button
+                                    onClick={() => handleWhatsAppOC(viewingOC)}
+                                    style={{
+                                        display: 'flex', alignItems: 'center', gap: '0.6rem',
+                                        background: '#10b981', color: '#fff',
+                                        border: 'none', padding: '0.8rem 1.5rem', borderRadius: '12px',
+                                        fontWeight: '900', cursor: 'pointer', transition: 'all 0.2s',
+                                        fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px'
+                                    }}
+                                >
+                                    <MessageSquare size={18} /> WhatsApp
                                 </button>
                                 <button
                                     onClick={() => setViewingOC(null)}
@@ -1178,8 +1294,10 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
                                 onBlur={(e) => { e.target.style.background = '#f8fafc'; e.target.style.borderColor = '#f1f5f9'; }}
                             >
                                 <option value="">Seleccione una cuenta...</option>
-                                {banks.filter(bank => (bank.type || '').toLowerCase() === 'cta de ahorros').map(bank => (
-                                    <option key={bank.id} value={bank.id}>{bank.name} (${formatPrice(bank.balance || 0)})</option>
+                                {banks.map(bank => (
+                                    <option key={bank.id} value={bank.id}>
+                                        {bank.name} ({bank.type || 'Cuenta'}) - ${formatPrice(bank.balance || 0)}
+                                    </option>
                                 ))}
                             </select>
                         </div>
@@ -1520,7 +1638,7 @@ const Purchases = ({ items, setItems, purchaseOrders, setPurchaseOrders, provide
 
                         <div style={{ display: 'flex', justifyContent: 'center' }}>
                             <button
-                                onClick={() => handleReceiveOC(invEntryOC.id)}
+                                onClick={() => handleReceiveOC(invEntryOC.dbId || invEntryOC.id)}
                                 style={{
                                     width: '100%', padding: '1.2rem', background: '#D4785A', color: '#fff', border: 'none', borderRadius: '16px',
                                     fontWeight: '900', fontSize: '1.1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.8rem',

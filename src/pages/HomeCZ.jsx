@@ -65,7 +65,7 @@ const HomeCZ = () => {
             }}>
                 <div style={{ textAlign: 'center', order: isMobile ? 1 : 0 }}>
                     <p style={{ fontStyle: 'italic', color: '#666', fontSize: isMobile ? '1.1rem' : '1.2rem', lineHeight: '1.8' }} className="font-serif">
-                            {extra.hero_quote || '"Los árboles son solo un elemento del bosque, hacen parte de un ecosistema, que aprende, colabora, conecta, se comunica y responde; Nuestro “Yarumo” ancestral, pensativo y reflexivo nos permite ser parte dé ser cada día mejor."'}
+                            {'"Los árboles son solo un elemento del bosque, hacen parte de un ecosistema, que aprende, colabora, conecta, se comunica y responde; Yarumo ancestral, representa el modelo de pensamiento reflexivo, para acompañar a las comunidades, organizaciones y empresas para ser cada día mejor."'}
                     </p>
                 </div>
                 <div style={{ position: 'relative', width: isMobile ? '240px' : '336px', margin: '0 auto', display: 'flex', justifyContent: 'center', order: isMobile ? 0 : 1 }}>
@@ -73,8 +73,8 @@ const HomeCZ = () => {
                 </div>
                 <div style={{ textAlign: 'center', padding: isMobile ? '0' : '0 2rem', order: isMobile ? 2 : 2 }}>
                     <img src={logoCZ} alt="CZ Logo" style={{ height: isMobile ? '80px' : '100px', marginBottom: '1.5rem', opacity: 0.8 }} />
-                    <p style={{ color: '#444', fontSize: '1.05rem', lineHeight: '1.7' }}>
-                        {extra.hero_desc || 'Apoyamos y acompañamos a comunidades y organizaciones para pensar y reflexionar, reconocer su potencial y vivir plenamente su territorio. Lo hacemos fortaleciendo capacidades, valorando su identidad, desarrollando productos y gestionando alianzas, con el fin de construir un tejido social profundo, conectado, productivo y en equilibrio con la naturaleza.'}
+                    <p style={{ color: '#444', fontSize: '1.05rem', lineHeight: '1.7' }} className="font-serif">
+                        {'Apoyamos y acompañamos a comunidades y organizaciones para pensar, reflexionar, reconocer su potencial y vivir plenamente su territorio. Lo hacemos fortaleciendo capacidades, valorando su identidad, desarrollando productos y gestionando alianzas, con el fin de construir un tejido social profundo, conectado, productivo y en equilibrio con la naturaleza.'}
                     </p>
                 </div>
             </section>
@@ -110,8 +110,10 @@ const HomeCZ = () => {
             <section style={{ padding: '8rem 5%', textAlign: 'center', background: '#fff', position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '360px', height: '360px', backgroundImage: 'url(https://www.zeticas.com/wp-content/uploads/2025/05/yarumo.png)', backgroundSize: 'contain', backgroundRepeat: 'no-repeat', opacity: 0.1, zIndex: 1 }}></div>
                 <div style={{ maxWidth: '850px', margin: '0 auto', position: 'relative', zIndex: 2 }}>
-                    <h2 className="font-serif" style={{ color: deepTeal, fontSize: '3rem', lineHeight: '1.3' }}>
-                        {extra.quote_yarumo || 'Yarumo árbol del pensamiento y la sabiduría ancestral, su fortaleza radica en su crecimiento'}
+                    <h2 className="font-serif" style={{ color: deepTeal, fontSize: '1.8rem', lineHeight: '1.5' }}>
+                        {'El espíritu LEAN es la evolución a través de la metodología y la filosofía que nos permite reflexionar, pensar y esforzarnos siempre por ser mejores para ser SOSTENIBLES y REGENERARNOS con el tiempo.'}
+                        <br /><br />
+                        {'Ser ese árbol de sabiduría y respeto como nuestro YARUMO, reconociendo y valorando el ecosistema para el bien común.'}
                     </h2>
                 </div>
             </section>
@@ -233,8 +235,10 @@ const HomeCZ = () => {
                     zIndex: 1
                 }}></div>
                 <div style={{ maxWidth: '800px', margin: '0 auto', position: 'relative', zIndex: 2 }}>
-                    <p className="font-serif" style={{ color: '#444', fontSize: '2.5rem', lineHeight: '1.4', fontWeight: '500' }}>
-                        {extra.quote_tronco || 'El tronco nos permite la nutrición y es el medio para alimentarse y llenarse de energía para florecer. No hay yarumos sin hormigas, los defienden'}
+                    <p className="font-serif" style={{ color: '#444', fontSize: '1.8rem', lineHeight: '1.5', fontWeight: '500' }}>
+                        {'El Propósito de vida – Ikigai- el sentido de hacer lo que hacemos, como el Yarumo es parte del proceso para “sentar la palabra” asimilar nuestra esencia.'}
+                        <br /><br />
+                        {'A medida que aprendes, prácticas y evolucionas la vida florecerá de forma natural.'}
                     </p>
                 </div>
             </section>

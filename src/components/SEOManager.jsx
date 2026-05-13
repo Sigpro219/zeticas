@@ -31,7 +31,7 @@ const SEOManager = () => {
             ? (seo.consulting_description || 'Acompañamos a comunidades y organizaciones para fortalecer capacidades en equilibrio con la naturaleza.')
             : (isCampaignActive && campaign.hero_subtitle)
                 ? campaign.hero_subtitle
-                : (seo.home_description || 'Zeticas promueve un estilo de vida en armonía, consciente y diverso; recordando recetas tradicionales.');
+                : (seo.home_description || 'Zeticas promueve un estilo de vida de alimentos naturales, listos para consumir aprovechando nuestra biodiversidad colombiana.');
             
         const ogImage = isConsulting
             ? (seo.og_image_consulting || '/assets/yarumo_tree.png')

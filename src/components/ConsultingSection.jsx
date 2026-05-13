@@ -26,10 +26,10 @@ const ConsultingSection = () => {
                         marginBottom: '1.5rem', 
                         lineHeight: '1.2' 
                     }}>
-                        {content.title || 'Asesoría con Propósito'}
+                        {'Consultoría con Propósito'}
                     </h2>
-                    <p style={{ color: '#666', marginBottom: '2rem', fontSize: isMobile ? '1rem' : '1.1rem' }}>
-                        {content.description || 'No solo vendemos productos; impulsamos el crecimiento de la región. Ofrecemos consultoría especializada en sostenibilidad para empresas y acompañamiento integral a comunidades rurales a nivel nacional.'}
+                    <p style={{ color: '#666', marginBottom: '2rem', fontSize: isMobile ? '1rem' : '1.1rem', lineHeight: '1.6' }}>
+                        {'Nuestra pasión va más allá de nuestros productos, impulsamos lideres y emprendedores a un desarrollo rural sostenible, de acuerdo a sus contextos, con apoyo de largo aliento para relaciones de confianza y lograr resultados de crecimiento juntos.'}
                     </p>
                     <ul style={{ 
                         listStyle: 'none', 
@@ -37,21 +37,22 @@ const ConsultingSection = () => {
                         padding: 0, 
                         display: 'flex', 
                         flexDirection: 'column', 
-                        gap: '1rem',
-                        alignItems: isMobile ? 'center' : 'flex-start'
+                        gap: '1.2rem',
+                        alignItems: isMobile ? 'center' : 'flex-start',
+                        color: '#666',
+                        fontSize: '1.05rem'
                     }}>
-                        <li style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--color-secondary)', flexShrink: 0 }}></span>
-                            Impulso a productores campesinos
-                        </li>
-                        <li style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--color-secondary)', flexShrink: 0 }}></span>
-                            Estrategias de sostenibilidad corporativa
-                        </li>
-                        <li style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--color-secondary)', flexShrink: 0 }}></span>
-                            Optimización de cadena de valor local
-                        </li>
+                        {[
+                            'Optimización de cadena de valor local',
+                            'Desarrollo de productos para aprovechar la biodiversidad local',
+                            'Desarrollo de modelos de socio bioeconomía',
+                            'Modelos empresariales sostenibles bajo el espíritu LEAN'
+                        ].map((item, i) => (
+                            <li key={i} style={{ display: 'flex', alignItems: 'center', gap: '1rem', textAlign: 'left' }}>
+                                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--color-secondary)', flexShrink: 0 }}></span>
+                                {item}
+                            </li>
+                        ))}
                     </ul>
                     <Link to="/consultoria" className="btn btn-primary" style={{
                         padding: '1rem 2.5rem',

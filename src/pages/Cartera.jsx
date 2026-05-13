@@ -60,7 +60,7 @@ const Cartera = () => {
 
             return {
                 id: order.invoiceNum || `P-${order.id || 'err'}`,
-                orderId: order.dbId,
+                orderId: order.id,
                 client: order.client || 'Cliente Sin Nombre',
                 clientNit: clientNit,
                 amount: order.amount || 0,
@@ -141,7 +141,7 @@ const Cartera = () => {
             alert("Pago aplicado exitosamente");
         } catch (_err) { 
             console.error("Error al procesar el pago", _err);
-            alert("Error al procesar el pago"); 
+            alert("Error al procesar el pago: " + (_err.message || _err)); 
         }
     };
 

@@ -16,7 +16,7 @@ const Nosotros = () => {
                             boxShadow: '20px 20px 60px rgba(0,0,0,0.1)'
                         }}>
                             <p style={{ color: '#fff', fontSize: 'clamp(1rem, 4vw, 1.2rem)', lineHeight: '1.8', opacity: 0.9 }}>
-                                Zeticas nace de la pasión por nuestra tierra y el deseo de transformar la riqueza de la Sabana de Bogotá en productos excepcionales que cuentan una historia de sostenibilidad y respeto.
+                                Zeticas nace de la pasión por nuestra tierra y el deseo de transformar la riqueza de nuestro país en productos excepcionales que cuentan una historia de sostenibilidad, respeto y equilibrio con los ecosistemas.
                             </p>
                         </div>
                         <div className="nosotros-image">
@@ -32,23 +32,23 @@ const Nosotros = () => {
                 {/* Detailed Story Section */}
                 <section className="nosotros-details" style={{ maxWidth: '800px', margin: '0 auto', background: '#fff', padding: 'clamp(1.5rem, 5vw, 4rem)', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', borderRadius: '24px' }}>
                     <h2 className="font-serif" style={{ fontSize: '2.5rem', marginBottom: '2rem', textAlign: 'center' }}>Camila Zambrano</h2>
-                    <p style={{ marginBottom: '2rem', fontSize: '1.1rem', color: '#444' }}>
-                        Ingeniera de Producción Agroindustrial con 15 años de experiencia en desarrollo rural. Camila ha unido su conocimiento técnico con una passion profunda por la biodiversidad colombiana.
+                    <p style={{ marginBottom: '2rem', fontSize: '1.1rem', color: '#666' }}>
+                        Ingeniera de Producción Agroindustrial con maestría en economía agrícola para el desarrollo con más de 15 años de experiencia en desarrollo rural sostenible. Zeticas es la unión de la experiencia y conocimiento técnico con la pasión y espíritu emprendedor de crear, diseñar y evolucionar el desarrollo comunitario y productos a partir de la biodiversidad colombiana.
                     </p>
 
                     <h3 className="font-serif" style={{ fontSize: '1.8rem', marginBottom: '1rem', color: 'var(--color-primary)' }}>Nuestra Misión</h3>
                     <p style={{ marginBottom: '2rem', fontSize: '1.1rem', color: '#666' }}>
-                        Exaltar los ecosistemas colombianos a través de productos agroecológicos. Valoramos lo local, eliminando aditivos y conservantes para llevar la pureza del campo a su mesa.
+                        Valorar, aprovechar y conectar de manera consciente los ecosistemas colombianos como alternativa de desarrollo comunitario y de bionegocios.
                     </p>
 
                     <h3 className="font-serif" style={{ fontSize: '1.8rem', marginBottom: '1rem', color: 'var(--color-primary)' }}>Impacto Social</h3>
                     <p style={{ marginBottom: '2rem', fontSize: '1.1rem', color: '#666' }}>
-                        Somos un motor de cambio en Guasca, Cundinamarca. Promovemos el empleo local, priorizando a mujeres cabeza de familia y trabajando mano a mano con productores agroecológicos de la región.
+                        Zeticas es un aliado para promover transformaciones en los territorios y comunidades con las que trabajamos, buscando desde el ser de mejores personas, mejores relaciones entre pares, colaboradores y redes y un equilibrio con el entorno. Promovemos el empleo local, priorizando a mujeres cabeza de familia y trabajando mano a mano con productores y guardianes agroecológicos de las regiones.
                     </p>
 
                     <div style={{ padding: '2rem', borderLeft: '4px solid var(--color-secondary)', background: '#fdf8f6', marginTop: '3rem' }}>
                         <p style={{ fontStyle: 'italic', color: 'var(--color-primary)', fontSize: '1.1rem' }}>
-                            "Zeticas no es solo una marca de conservas; es un compromiso con el futuro del campo colombiano y el bienestar de quienes lo trabajan."
+                            "Zeticas no es solo una marca de <span style={{ color: 'var(--color-secondary)', fontWeight: '700' }}>ALIMENTOS NATURALES</span>; es un compromiso con el futuro del campo colombiano y el bienestar de quienes lo trabajan."
                         </p>
                     </div>
                 </section>
@@ -74,7 +74,7 @@ const Nosotros = () => {
                     />
                     <h2 className="font-serif" style={{ fontSize: '2.5rem', marginBottom: '2rem' }}>El Zetamóvil</h2>
                     <p style={{ maxWidth: '600px', margin: '0 auto 3rem', color: '#666' }}>
-                        Nuestra forma de llevar el campo a la ciudad. Participamos en ferias y eventos, transformando nuestras conservas gourmet en experiencias instantáneas: sándwiches, granolas y más.
+                        Nuestra forma de llevar nuestra experiencia culinaria a otras partes. Participamos en ferias y eventos, transformando nuestras recetas en experiencias deliciosas: sopas, sándwiches, granolas y más.
                     </p>
                 </section>
             </div>

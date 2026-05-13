@@ -55,7 +55,7 @@ const PhilosophySection = () => {
                     }}></div>
 
                     <p className="font-serif" style={{
-                        maxWidth: isMobile ? '100%' : '460px',
+                        maxWidth: isMobile ? '100%' : '700px',
                         fontSize: isMobile ? '1.25rem' : '1.7rem',
                         lineHeight: isMobile ? '1.6' : '1.8',
                         color: 'var(--color-primary)',
@@ -65,7 +65,7 @@ const PhilosophySection = () => {
                         zIndex: 2,
                         padding: isMobile ? '0 1rem' : '0'
                     }}>
-                        Zeticas promueve un estilo de vida en armonía, consciente y diverso; recordando recetas tradicionales, rescatando ingredientes y valorando nuestro ecosistema.
+                        Zeticas promueve un estilo de vida de alimentos naturales, listos para consumir aprovechando los ciclos de cosecha de nuestra biodiversidad colombiana. A través de la consultoría busca rescatar, desarrollar y valorar ingredientes y recetas con las comunidades rurales.
                     </p>
 
                     {/* Right Artistic Bracket (Logical Half 2) */}

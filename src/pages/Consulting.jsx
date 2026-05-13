@@ -80,11 +80,10 @@ const Consulting = () => {
                         Consultoría con Propósito
                     </h1>
                     <p style={{ fontSize: '1.25rem', color: '#444', lineHeight: '1.8', fontStyle: 'italic', marginBottom: '2rem' }}>
-                        "Los árboles son solo un elemento del bosque, hacen parte de un ecosistema que aprende, colabora, conecta y responde."
+                        "Los árboles son solo un elemento del bosque, hacen parte de un ecosistema, que aprende, colabora, conecta, se comunica y responde;"
                     </p>
                     <p style={{ fontSize: '1.1rem', color: '#666', lineHeight: '1.8' }}>
-                        Apoyamos comunidades y organizaciones para reconocer su potencial y vivir plenamente su territorio,
-                        fortaleciendo capacidades y gestionando alianzas estratégicas.
+                        Yarumo ancestral, representa el modelo de pensamiento reflexivo, para acompañar a las comunidades, organizaciones y empresas para ser cada día mejor.
                     </p>
                 </header>
 

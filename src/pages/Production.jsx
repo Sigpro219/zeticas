@@ -223,91 +223,81 @@ const Production = () => {
             });
         });
 
-        // ── FUENTE DE VERDAD: production_orders de Firestore ──
-        if (productionOrders && productionOrders.length > 0) {
-            return productionOrders.map((odpDoc) => {
-                const product = items.find(i => i.name === odpDoc.sku);
-                const recipeList = recipes[odpDoc.sku] || [];
-                const batchSize = product?.batch_size || recipeList[0]?.yield_quantity || 1;
-                
-                const inventoryPT = product
-                    ? (product.initial || 0) + (product.purchases || 0) - (product.sales || 0)
-                    : 0;
+        const baseResults = (productionOrders && productionOrders.length > 0) ? productionOrders.map((odpDoc) => {
+            const product = items.find(i => i.name === odpDoc.sku);
+            const recipeList = recipes[odpDoc.sku] || [];
+            const batchSize = product?.batch_size || recipeList[0]?.yield_quantity || 1;
+            
+            const inventoryPT = product
+                ? (product.initial || 0) + (product.purchases || 0) - (product.sales || 0)
+                : 0;
 
-                const settings = odpSettings[odpDoc.sku] || {};
-                
-                // Prioridad: 1. Ajuste manual local, 2. Valor en Firestore, 3. Fallback
-                const finalQty = settings.customQty !== undefined ? settings.customQty : (odpDoc.qty || 0);
+            const settings = odpSettings[odpDoc.sku] || {};
+            const finalQty = settings.customQty !== undefined ? settings.customQty : (odpDoc.qty || 0);
 
-                // ── NUEVO: Validación de Disponibilidad de Materiales ──
-                let missingMaterials = [];
-                if (!settings.start && !settings.end) {
-                    recipeList.forEach(ri => {
-                        const mp = items.find(i => i.id === ri.rm_id || (i.name && i.name.toLowerCase().trim() === (ri.name || '').toLowerCase().trim()));
-                        const currentMPStock = mp ? ((mp.initial || 0) + (mp.purchases || 0) - (mp.sales || 0)) : 0;
-                        const yieldQty = Number(ri.yield_quantity) || 1;
-                        const qtyNeeded = (Number(ri.qty) / yieldQty) * finalQty;
-                        
-                        if (currentMPStock < qtyNeeded) {
-                            missingMaterials.push({
-                                name: ri.name || ri.raw_material_name,
-                                missing: qtyNeeded - currentMPStock
-                            });
-                        }
-                    });
-                }
+            let missingMaterials = [];
+            if (!settings.start && !settings.end) {
+                recipeList.forEach(ri => {
+                    const mp = items.find(i => i.id === ri.rm_id || (i.name && i.name.toLowerCase().trim() === (ri.name || '').toLowerCase().trim()));
+                    const currentMPStock = mp ? ((mp.initial || 0) + (mp.purchases || 0) - (mp.sales || 0)) : 0;
+                    const yieldQty = Number(ri.yield_quantity) || 1;
+                    const qtyNeeded = (Number(ri.qty) / yieldQty) * finalQty;
+                    
+                    if (currentMPStock < qtyNeeded) {
+                        missingMaterials.push({
+                            name: ri.name || ri.raw_material_name,
+                            missing: qtyNeeded - currentMPStock
+                        });
+                    }
+                });
+            }
 
-                let status = { text: STATUS_PROGRAMADA, color: 'rgba(239, 68, 68, 0.1)', textColor: '#ef4444' };
-                
-                if (missingMaterials.length > 0) {
-                    status = { text: STATUS_PENDIENTE_MATERIALES, color: 'rgba(245, 158, 11, 0.1)', textColor: '#f59e0b' };
-                } else if (odpDoc.status === 'IN_PROGRESS' || settings.start) {
-                    status = { text: STATUS_EN_PRODUCCION, color: 'rgba(212, 120, 90, 0.1)', textColor: '#D4785A' };
-                }
-                
-                if (odpDoc.status === 'DONE' || (settings.end && settings.inventorySynced) || odpDoc.status === STATUS_FINALIZADA) {
-                    status = { text: STATUS_FINALIZADA, color: 'rgba(16, 185, 129, 0.1)', textColor: '#10b981' };
-                }
+            let status = { text: STATUS_PROGRAMADA, color: 'rgba(239, 68, 68, 0.1)', textColor: '#ef4444' };
+            if (missingMaterials.length > 0) {
+                status = { text: STATUS_PENDIENTE_MATERIALES, color: 'rgba(245, 158, 11, 0.1)', textColor: '#f59e0b' };
+            } else if (odpDoc.status === 'IN_PROGRESS' || settings.start) {
+                status = { text: STATUS_EN_PRODUCCION, color: 'rgba(212, 120, 90, 0.1)', textColor: '#D4785A' };
+            }
+            if (odpDoc.status === 'DONE' || (settings.end && settings.inventorySynced) || odpDoc.status === STATUS_FINALIZADA) {
+                status = { text: STATUS_FINALIZADA, color: 'rgba(16, 185, 129, 0.1)', textColor: '#10b981' };
+            }
 
-                // Waste calculation available as soon as there's a record, even if not finished
-                let efficiency = null;
-                let waste = null;
-                let waste_percent = null;
-                const startTime = odpDoc.started_at || settings.start;
-                const endTime = odpDoc.completed_at || settings.end;
+            let efficiency = null;
+            let waste = null;
+            let waste_percent = null;
+            const startTime = odpDoc.started_at || settings.start;
+            const endTime = odpDoc.completed_at || settings.end;
 
-                const currentWaste = odpDoc.waste_qty !== undefined ? odpDoc.waste_qty : settings.wasteQty;
-                if (currentWaste !== undefined && Number(finalQty) > 0) {
-                    waste = Number(currentWaste);
-                    waste_percent = formatQty((waste / Number(finalQty)) * 100);
-                }
+            const currentWaste = odpDoc.waste_qty !== undefined ? odpDoc.waste_qty : settings.wasteQty;
+            if (currentWaste !== undefined && Number(finalQty) > 0) {
+                waste = Number(currentWaste);
+                waste_percent = formatQty((waste / Number(finalQty)) * 100);
+            }
 
-                if (startTime && endTime) {
-                    const diffHr = (new Date(endTime) - new Date(startTime)) / (1000 * 60 * 60);
-                    if (diffHr > 0) efficiency = Math.round(Number(finalQty) / diffHr);
-                }
+            if (startTime && endTime) {
+                const diffHr = (new Date(endTime) - new Date(startTime)) / (1000 * 60 * 60);
+                if (diffHr > 0) efficiency = Math.round(Number(finalQty) / diffHr);
+            }
 
-                return {
-                    sku: odpDoc.sku,
-                    odpId: odpDoc.odp_number || odpDoc.id,
-                    dbId: odpDoc.id,
-                    inventoryPT,
-                    batchSize,
-                    finalQty,
-                    settings: { ...settings, start: startTime, end: endTime },
-                    status,
-                    efficiency,
-                    wasteQty: waste || 0,
-                    waste_percent: waste_percent || '0.0',
-                    relatedOrders: groups[odpDoc.sku]?.relatedOrders || [],
-                    isBlocked: status.text === STATUS_PENDIENTE_MATERIALES,
-                    missingMaterials
-                };
-            });
-        }
+            return {
+                sku: odpDoc.sku,
+                odpId: odpDoc.odp_number || odpDoc.id,
+                id: odpDoc.id,
+                inventoryPT,
+                batchSize,
+                finalQty,
+                settings: { ...settings, start: startTime, end: endTime },
+                status,
+                efficiency,
+                wasteQty: waste || 0,
+                waste_percent: waste_percent || '0.0',
+                relatedOrders: groups[odpDoc.sku]?.relatedOrders || [],
+                isBlocked: status.text === STATUS_PENDIENTE_MATERIALES,
+                missingMaterials
+            };
+        }) : [];
 
-        // Fallback for legacy (empty DB)
-        return [];
+        return baseResults;
     }, [productionOrders, items, odpSettings, recipes, pendingOrders]);
 
     // --- NUEVO: Cálculo de Necesidades (Deficit de Producción) ---
@@ -506,9 +496,9 @@ const Production = () => {
         try {
             // 1. Return related sales orders to 'Pendiente'
             const updatePromises = (odp.relatedOrders || []).map(order => {
-                const orderRef = orders.find(o => o.id === order.id || o.dbId === order.dbId);
-                if (orderRef?.dbId) {
-                    return updateOrder(orderRef.dbId, { status: 'Pendiente' });
+                const orderRef = orders.find(o => o.id === (order.id || order.dbId));
+                if (orderRef) {
+                    return updateOrder(orderRef.id, { status: 'Pendiente' });
                 }
                 return Promise.resolve();
             });
@@ -516,8 +506,8 @@ const Production = () => {
             await Promise.all(updatePromises);
 
             // 2. Permanent deletion from Firestore
-            if (odp.dbId) {
-                await deleteOdp(odp.dbId, user);
+            if (odp.id) {
+                await deleteOdp(odp.id, user);
             } else {
                 console.warn("ODP sin dbId para borrado directo.");
             }
@@ -729,7 +719,7 @@ const Production = () => {
                 for (const ord of ordersToUpdate) {
                     try {
                         const newStatus = 'En Despacho';
-                        await updateOrder(ord.dbId, { 
+                        await updateOrder(ord.id, { 
                             status: newStatus,
                             production_ready_at: new Date().toISOString()
                         });
