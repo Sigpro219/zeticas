@@ -824,6 +824,34 @@ const RecurringCustomers = () => {
                         </div>
                         <div style={{ background: '#fff', width: '100%', maxWidth: '480px', padding: '1.8rem 2rem', borderRadius: '28px', boxShadow: '0 15px 40px rgba(0,0,0,0.07)' }}>
                             <h2 style={{ textAlign: 'center', color: deepTeal, fontSize: '1.75rem', marginBottom: '1rem', fontFamily: 'serif' }}>{authMode === 'login' ? 'Bienvenido' : 'Crea tu Cuenta'}</h2>
+                            {subscriptionData?.plan && (
+                                <div style={{ 
+                                    background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', 
+                                    border: '1px solid #bbf7d0',
+                                    borderRadius: '16px', 
+                                    padding: '0.85rem 1.2rem', 
+                                    marginBottom: '1.5rem',
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'space-between',
+                                    boxShadow: '0 4px 12px rgba(22, 101, 52, 0.05)'
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                        <div style={{ background: deepTeal, color: '#fff', padding: '0.5rem', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            <Sparkles size={18} />
+                                        </div>
+                                        <div>
+                                            <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: '800', color: '#166534' }}>Plan Seleccionado</div>
+                                            <div style={{ fontSize: '1.05rem', fontWeight: '900', color: deepTeal }}>{subscriptionData.plan}</div>
+                                        </div>
+                                    </div>
+                                    {subscriptionData?.frequency && (
+                                        <span style={{ background: '#166534', color: '#fff', fontSize: '0.7rem', fontWeight: '800', padding: '0.3rem 0.75rem', borderRadius: '20px' }}>
+                                            {subscriptionData.frequency}
+                                        </span>
+                                    )}
+                                </div>
+                            )}
                             {authMode === 'login' ? (
                                 <form onSubmit={handleOnboardingLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', marginTop: '1rem' }}>
                                     <div className="input-group"><Mail size={20}/><input type="email" placeholder="Email" onChange={e => setAuthData({...authData, email: e.target.value})} required/></div>
