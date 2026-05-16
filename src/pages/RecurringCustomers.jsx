@@ -885,7 +885,13 @@ const RecurringCustomers = () => {
                             {authMode === 'login' ? (
                                 <form onSubmit={handleOnboardingLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', marginTop: '1rem' }}>
                                     <div className="input-group"><Mail size={20}/><input type="email" placeholder="Email" value={authData.email} onChange={e => setAuthData({...authData, email: e.target.value})} required/></div>
-                                    <div className="input-group"><Lock size={20}/><input type="password" placeholder="Clave" value={authData.password} onChange={e => setAuthData({...authData, password: e.target.value})} required/></div>
+                                    <div className="input-group">
+                                        <Lock size={20}/>
+                                        <input type={showPass ? 'text' : 'password'} placeholder="Clave" value={authData.password} onChange={e => setAuthData({...authData, password: e.target.value})} required/>
+                                        <button type="button" onClick={() => setShowPass(!showPass)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
+                                            {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+                                        </button>
+                                    </div>
                                     <button type="submit" disabled={isSaving} style={{ background: deepTeal, color: '#fff', padding: '1.2rem', borderRadius: '16px', border: 'none', fontWeight: '900', fontSize: '1rem', cursor: isSaving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: isSaving ? '0 0 20px rgba(2, 83, 87, 0.3)' : 'none' }}>
                                         {isSaving ? <><RefreshCw size={18} className="spin-animation" /> INGRESANDO...</> : 'INGRESAR'}
                                     </button>
