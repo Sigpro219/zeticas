@@ -49,7 +49,7 @@ const RecurringCustomers = () => {
         items, clients, siteContent, upsertMember, saveWebCheckout, 
         getWebCheckout, addOrder, updateBankBalance, banks, addBank, sendWelcomeEmail
     } = useBusiness();
-    const { login, user, logout } = useAuth();
+    const { login, directLogin, user, logout } = useAuth();
     const navigate = useNavigate();
     
     const [step, setStep] = useState(1);
@@ -461,26 +461,13 @@ const RecurringCustomers = () => {
 
             if (res.success) {
                 console.log("✅ Socio guardado en Firestore:", res.id);
-                
-                // Notificación automática por correo "Under the hood"
-                sendWelcomeEmail(res.data, subscriptionData.plan);
 
-                // Forzamos un pequeño delay para asegurar propagación en Firestore antes del login
-                setTimeout(async () => {
-                    try {
-                        const loginRes = await login(cleanEmail, authData.password);
-                        if (loginRes.success) {
-                            setIsFirstTimeOnboarding(true);
-                            setSubscriptionData(prev => ({ ...prev, products: [], frequency: 'Quincenal' }));
-                            setStep(4);
-                            setShowGuideModal(true);
-                        }
-                    } catch (loginErr) {
-                        console.error("Auto-login falló:", loginErr.message);
-                        alert("¡Cuenta creada! Pero no pudimos iniciar sesión automáticamente. Por favor ingresa manualmente.");
-                        setAuthMode('login');
-                    }
-                }, 1000);
+                // Inicio de sesión directo e instantáneo usando los datos ya confirmados
+                directLogin(res.data);
+                setIsFirstTimeOnboarding(true);
+                setSubscriptionData(prev => ({ ...prev, products: [], frequency: 'Quincenal' }));
+                setStep(4);
+                setShowGuideModal(true);
             } else {
                 alert("Error al guardar en base de datos: " + res.error);
             }
@@ -552,8 +539,27 @@ const RecurringCustomers = () => {
             });
 
             if (res.success) {
-                if (activeMember || res.data) {
-                    sendWelcomeEmail(activeMember || res.data, subscriptionData.plan);
+                const targetUserData = activeMember || res.data;
+                if (targetUserData) {
+                    await sendWelcomeEmail(targetUserData, subscriptionData.plan, {
+                        items: subscriptionData.products.map(p => ({
+                            name: p.name,
+                            quantity: p.quantity,
+                            price: Number(p.price * p.quantity).toLocaleString('es-CO')
+                        })),
+                        subtotal: subtotal.toLocaleString('es-CO'),
+                        savings: savings > 0 ? savings.toLocaleString('es-CO') : null,
+                        shippingCost: shippingCost.toLocaleString('es-CO'),
+                        total: totalAmount.toLocaleString('es-CO'),
+                        hasFreeShipping: shippingCost === 0
+                    });
+
+                    // Dejar marca de auditoría en el cliente de que el correo ya fue programado/enviado
+                    await upsertMember({
+                        nit: targetUserData.nit || targetUserData.idNumber || targetUserData.id,
+                        welcome_email_sent: true,
+                        welcome_email_sent_at: new Date().toISOString()
+                    });
                 }
                 logout(); // Cerramos la sesión temporal de onboarding para que entren limpios por el portal oficial
                 setIsFirstTimeOnboarding(false);

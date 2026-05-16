@@ -332,61 +332,84 @@ export const SalesProvider = ({ children }) => {
         try {
             const targetTenants = ['zeticas', 'delta'];
             const baseId = data.nit || data.idNumber || data.id;
-            let lastId = baseId;
-            let finalData = null;
+            let masterId = null;
+            let existingDocs = {};
 
+            // 1. Buscar en ambos tenants para ver si ya existe un ID CLI-XXXX o documentos antiguos
             for (const tId of targetTenants) {
                 const clientsCol = collection(db, 'tenants', tId, 'clients');
-                let existingDoc = null;
+                let foundDoc = null;
                 if (baseId) {
                     const qNit = query(clientsCol, where('nit', '==', baseId));
                     const snapNit = await getDocs(qNit);
-                    if (!snapNit.empty) existingDoc = snapNit.docs[0];
+                    if (!snapNit.empty) foundDoc = snapNit.docs[0];
                 }
-                if (!existingDoc && data.email) {
+                if (!foundDoc && data.email) {
                     const qEmail = query(clientsCol, where('email', '==', data.email.toLowerCase().trim()));
                     const snapEmail = await getDocs(qEmail);
-                    if (!snapEmail.empty) existingDoc = snapEmail.docs[0];
+                    if (!snapEmail.empty) foundDoc = snapEmail.docs[0];
                 }
+
+                if (foundDoc) {
+                    existingDocs[tId] = foundDoc;
+                    const docId = foundDoc.id;
+                    const docClientNumber = foundDoc.data().client_number;
+                    if (docId.startsWith('CLI-')) { masterId = docId; }
+                    else if (docClientNumber && docClientNumber.startsWith('CLI-')) { masterId = docClientNumber; }
+                }
+            }
+
+            // 2. Si no se encontró ningún masterId CLI-XXXX en ningún tenant, generamos uno nuevo maestro
+            if (!masterId) {
+                const counterRef = doc(db, 'tenants', 'zeticas', 'metadata', 'counters');
+                let finalNumber;
+                await runTransaction(db, async (transaction) => {
+                    const counterDoc = await transaction.get(counterRef);
+                    const nextVal = (counterDoc?.exists() ? (counterDoc.data().last_client_number || 0) : 0) + 1;
+                    transaction.set(counterRef, { last_client_number: nextVal }, { merge: true });
+                    finalNumber = nextVal;
+                });
+                masterId = `CLI-${String(finalNumber).padStart(4, '0')}`;
+            }
+
+            let finalData = null;
+
+            // 3. Escribir/Migrar en ambos tenants usando el masterId unificado
+            for (const tId of targetTenants) {
+                const clientsCol = collection(db, 'tenants', tId, 'clients');
+                const oldDoc = existingDocs[tId];
 
                 const payload = {
                     ...data,
+                    client_number: masterId,
+                    id: masterId,
                     updated_at: new Date().toISOString()
                 };
                 if (data.email) payload.email = data.email.toLowerCase().trim();
 
-                if (existingDoc) {
-                    const docRef = doc(db, 'tenants', tId, 'clients', existingDoc.id);
-                    await updateDoc(docRef, payload);
-                    lastId = existingDoc.id;
-                    finalData = { ...existingDoc.data(), ...payload, id: existingDoc.id };
+                if (oldDoc) {
+                    if (oldDoc.id !== masterId) {
+                        // MIGRACIÓN: Tiene un ID antiguo aleatorio. Creamos el nuevo con masterId y borramos el viejo.
+                        const mergedData = { ...oldDoc.data(), ...payload, id: masterId, client_number: masterId };
+                        await setDoc(doc(clientsCol, masterId), mergedData);
+                        await deleteDoc(doc(clientsCol, oldDoc.id));
+                        finalData = mergedData;
+                    } else {
+                        // Ya tiene el masterId correcto, solo actualizamos
+                        await updateDoc(doc(clientsCol, masterId), payload);
+                        finalData = { ...oldDoc.data(), ...payload, id: masterId };
+                    }
                 } else {
-                    // Generar consecutivo CLI-XXXX
-                    const counterRef = doc(db, 'tenants', tId, 'metadata', 'counters');
-                    let finalNumber;
-
-                    await runTransaction(db, async (transaction) => {
-                        const counterDoc = await transaction.get(counterRef);
-                        const nextVal = (counterDoc?.exists() ? (counterDoc.data().last_client_number || 0) : 0) + 1;
-                        transaction.set(counterRef, { last_client_number: nextVal }, { merge: true });
-                        finalNumber = nextVal;
-                    });
-
-                    const displayId = `CLI-${String(finalNumber).padStart(4, '0')}`;
-                    payload.client_number = displayId;
-                    payload.id = displayId;
+                    // Documento nuevo en este tenant
                     payload.created_at = new Date().toISOString();
-
-                    const clientDocRef = doc(clientsCol, displayId);
-                    await setDoc(clientDocRef, payload);
-                    lastId = displayId;
-                    finalData = { ...payload, id: displayId };
+                    await setDoc(doc(clientsCol, masterId), payload);
+                    finalData = payload;
                 }
             }
 
-            return { success: true, id: lastId, data: finalData };
+            return { success: true, id: masterId, data: finalData };
         } catch (err) {
-            console.error("Error in upsertMember (dual-tenant consecutive):", err);
+            console.error("Error in upsertMember (dual-tenant unified ID):", err);
             return { success: false, error: err.message };
         }
     }, []);
@@ -438,27 +461,46 @@ export const SalesProvider = ({ children }) => {
         }
     }, []);
 
-    const sendWelcomeEmail = useCallback(async (userData, planName) => {
+    const sendWelcomeEmail = useCallback(async (userData, planName, orderSummary = null) => {
         try {
             const targetTenants = ['zeticas', 'delta'];
-            for (const tId of targetTenants) {
-                const mailCol = collection(db, 'tenants', tId, 'mail');
-                await addDoc(mailCol, {
-                    to: userData.email,
-                    template: {
-                        name: 'welcome_subscription',
-                        data: {
-                            name: userData.name || userData.nombreCompleto || 'Socio',
-                            plan: planName || 'Plan Círculo Zeticas',
-                            frequency: userData.frequency || 'Mensual'
-                        }
-                    },
-                    created_at: new Date().toISOString()
-                });
+            const templateData = {
+                name: userData.name || userData.nombreCompleto || 'Socio',
+                plan: planName || 'Plan Círculo Zeticas',
+                frequency: userData.frequency || 'Mensual'
+            };
+
+            if (orderSummary) {
+                templateData.items = orderSummary.items;
+                templateData.subtotal = orderSummary.subtotal;
+                templateData.savings = orderSummary.savings;
+                templateData.shippingCost = orderSummary.shippingCost;
+                templateData.total = orderSummary.total;
+                templateData.hasFreeShipping = orderSummary.hasFreeShipping;
             }
+
+            const mailPayload = {
+                to: userData.email,
+                template: {
+                    name: 'welcome_subscription',
+                    data: templateData
+                },
+                created_at: new Date().toISOString()
+            };
+
+            // 1. Escribir en la colección raíz 'mail' para que la extensión Trigger Email lo detecte y envíe instantáneamente
+            const rootMailCol = collection(db, 'mail');
+            await addDoc(rootMailCol, mailPayload);
+
+            // 2. Escribir en el historial de cada tenant para mantener la auditoría multi-tenant intacta
+            for (const tId of targetTenants) {
+                const tenantMailCol = collection(db, 'tenants', tId, 'mail');
+                await addDoc(tenantMailCol, mailPayload);
+            }
+
             return { success: true };
         } catch (err) {
-            console.error("Error in sendWelcomeEmail (dual-tenant):", err);
+            console.error("Error in sendWelcomeEmail (root + dual-tenant):", err);
             return { success: false, error: err.message };
         }
     }, []);

@@ -145,8 +145,19 @@ export const AuthProvider = ({ children }) => {
         localStorage.removeItem('zeticas_user');
     };
 
+    const directLogin = (userData) => {
+        const authenticatedMember = {
+            role: 'member',
+            name: userData.name || userData.contactName || 'Socio',
+            ...userData
+        };
+        setUser(authenticatedMember);
+        localStorage.setItem('zeticas_user', JSON.stringify(authenticatedMember));
+        return { success: true };
+    };
+
     return (
-        <AuthContext.Provider value={{ user, login, loginWithGoogle, resetPassword, logout, loading }}>
+        <AuthContext.Provider value={{ user, login, directLogin, loginWithGoogle, resetPassword, logout, loading }}>
             {!loading && children}
         </AuthContext.Provider>
     );
