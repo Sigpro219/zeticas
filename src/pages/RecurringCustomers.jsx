@@ -62,6 +62,7 @@ const RecurringCustomers = () => {
     const [showGuideModal, setShowGuideModal] = useState(false);
     const [showPass, setShowPass] = useState(false);
     const [showConfirm, setShowConfirm] = useState(false);
+    const [isFirstTimeOnboarding, setIsFirstTimeOnboarding] = useState(false);
 
     const config = useMemo(() => siteContent.recurring || {}, [siteContent]);
     const planDurations = ["3 Meses", "6 Meses", "12 Meses"];
@@ -448,8 +449,8 @@ const RecurringCustomers = () => {
                 phone: authData.phone,
                 nit: authData.idNumber,
                 is_member: true,
-                pantry: subscriptionData.products.map(p => ({ id: p.id, quantity: p.quantity })), // Guardamos selección inicial
-                frequency: subscriptionData.frequency || 'Quincenal', // Frecuencia por defecto o elegida
+                pantry: [], // Vaciamos selección inicial para que armen su despensa limpia
+                frequency: 'Quincenal', // Frecuencia por defecto Quincenal
                 membership: { 
                     plan: subscriptionData.plan, 
                     status: 'Active', 
@@ -468,6 +469,8 @@ const RecurringCustomers = () => {
                     try {
                         const loginRes = await login(cleanEmail, authData.password);
                         if (loginRes.success) {
+                            setIsFirstTimeOnboarding(true);
+                            setSubscriptionData(prev => ({ ...prev, products: [], frequency: 'Quincenal' }));
                             setStep(4);
                             setShowGuideModal(true);
                         }
@@ -985,10 +988,10 @@ const RecurringCustomers = () => {
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
                                 <div style={{ flex: 1 }}>
                                     <h2 style={{ color: deepTeal, fontFamily: 'serif', fontSize: '2.5rem', margin: 0 }}>
-                                        {activeMember ? `¡Hola, ${activeMember.name?.split(' ')[0]}!` : 'Tu Despensa'}
+                                        {`¡Hola, ${(activeMember?.name || authData.name || user?.name || activeMember?.email || 'Socio').split(' ')[0]}!`}
                                     </h2>
                                     <p style={{ color: '#666', margin: '0.5rem 0 0' }}>
-                                        Personaliza tu pedido sugerido para este ciclo.
+                                        {isFirstTimeOnboarding ? 'Agrega tus productos favoritos y configura tu despensa recurrente.' : 'Personaliza tu pedido sugerido para este ciclo.'}
                                     </p>
                                 </div>
                             </div>
@@ -1035,7 +1038,7 @@ const RecurringCustomers = () => {
                                         Vence: <b>{planEndDate}</b> ({planMetrics.daysRemaining} días)
                                     </div>
                                 )}
-                                <div style={{ margin: '1rem 0', padding: '1rem 0', borderTop: '1px solid rgba(255,255,255,0.1)', borderBottom: '1px solid rgba(255,255,255,0.1)', maxHeight: '200px', overflowY: 'auto' }}>
+                                <div style={{ margin: '1rem 0', padding: '1rem 0', borderTop: '1px solid rgba(255,255,255,0.1)', borderBottom: '1px solid rgba(255,255,255,0.1)', maxHeight: '200px', overflow: 'auto' }}>
                                     {subscriptionData.products.map(p => (
                                         <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', fontSize: '0.8rem' }}>
                                             <span>{p.quantity}x {p.name}</span>
@@ -1058,44 +1061,47 @@ const RecurringCustomers = () => {
                                 </div>
 
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', marginTop: '1rem' }}>
-                                    {hasPendingChanges && (
+                                    {(hasPendingChanges || isFirstTimeOnboarding) && (
                                         <button 
                                             onClick={finalizeMembership} 
                                             disabled={isSaving} 
                                             style={{ 
                                                 width: '100%', 
-                                                padding: '1rem', 
-                                                background: 'transparent', 
-                                                color: '#fff', 
+                                                padding: isFirstTimeOnboarding ? '1.2rem' : '1rem', 
+                                                background: isFirstTimeOnboarding ? institutionOcre : 'transparent', 
+                                                color: isFirstTimeOnboarding ? deepTeal : '#fff', 
                                                 border: `1.5px solid ${institutionOcre}`, 
                                                 borderRadius: '20px', 
                                                 fontWeight: '900', 
-                                                fontSize: '0.85rem', 
-                                                cursor: 'pointer' 
+                                                fontSize: isFirstTimeOnboarding ? '1.05rem' : '0.85rem', 
+                                                cursor: 'pointer',
+                                                boxShadow: isFirstTimeOnboarding ? '0 10px 25px rgba(214, 189, 152, 0.3)' : 'none'
                                             }}
                                         >
-                                            {isSaving ? 'GUARDANDO...' : 'ACTUALIZAR MI SUSCRIPCIÓN'}
+                                            {isSaving ? 'GUARDANDO...' : (isFirstTimeOnboarding ? 'GUARDAR MI DESPENSA' : 'ACTUALIZAR MI SUSCRIPCIÓN')}
                                         </button>
                                     )}
                                     
-                                    <button 
-                                        onClick={handleBoldPayment} 
-                                        disabled={isSaving || (subscriptionData.products.length === 0)} 
-                                        style={{ 
-                                            width: '100%', 
-                                            padding: '1.2rem', 
-                                            background: institutionOcre, 
-                                            color: deepTeal, 
-                                            border: 'none', 
-                                            borderRadius: '20px', 
-                                            fontWeight: '900', 
-                                            fontSize: '1.1rem', 
-                                            cursor: 'pointer',
-                                            boxShadow: '0 10px 20px rgba(0,0,0,0.1)'
-                                        }}
-                                    >
-                                        {isSaving ? 'PROCESANDO...' : (hasPendingChanges ? 'PAGAR CON ESTOS CAMBIOS' : 'PAGAR MI PEDIDO')}
-                                    </button>
+                                    {!isFirstTimeOnboarding && (
+                                        <button 
+                                            onClick={handleBoldPayment} 
+                                            disabled={isSaving || (subscriptionData.products.length === 0)} 
+                                            style={{ 
+                                                width: '100%', 
+                                                padding: '1.2rem', 
+                                                background: institutionOcre, 
+                                                color: deepTeal, 
+                                                border: 'none', 
+                                                borderRadius: '20px', 
+                                                fontWeight: '900', 
+                                                fontSize: '1.1rem', 
+                                                cursor: 'pointer',
+                                                boxShadow: '0 10px 20px rgba(0,0,0,0.1)'
+                                            }}
+                                        >
+                                            {isSaving ? 'PROCESANDO...' : (hasPendingChanges ? 'PAGAR CON ESTOS CAMBIOS' : 'PAGAR MI PEDIDO')}
+                                        </button>
+                                    )}
                                 </div>
                                 {user?.role === 'member' && (
                                     <button onClick={() => setIsCancelModalOpen(true)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', textDecoration: 'underline', cursor: 'pointer', fontSize: '0.7rem', marginTop: '1rem' }}>DEJAR DE SER MIEMBRO</button>
