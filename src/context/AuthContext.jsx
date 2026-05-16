@@ -44,17 +44,14 @@ export const AuthProvider = ({ children }) => {
             // Opción 2: Autenticación Multicapa (Administradores primero, luego Miembros)
             
             // 2.1 Buscar en colección 'users' del Tenant correspondientes
-            const qUser = query(
-                tCol('users'), 
-                where('email', '==', email.toLowerCase()),
-                where('status', '==', 'Active')
-            );
+            const qUser = query(tCol('users'), where('email', '==', email.toLowerCase()));
             const snapshotUser = await getDocs(qUser);
+            const activeUserDoc = snapshotUser.docs.find(doc => doc.data().status === 'Active');
 
-            if (!snapshotUser.empty) {
-                const userData = snapshotUser.docs[0].data();
+            if (activeUserDoc) {
+                const userData = activeUserDoc.data();
                 if (userData.password === password) {
-                    const authenticatedUser = { id: snapshotUser.docs[0].id, role: 'admin', ...userData };
+                    const authenticatedUser = { id: activeUserDoc.id, role: 'admin', ...userData };
                     setUser(authenticatedUser);
                     localStorage.setItem('zeticas_user', JSON.stringify(authenticatedUser));
                     return { success: true };
@@ -64,18 +61,15 @@ export const AuthProvider = ({ children }) => {
             }
 
             // 2.2 Buscar en colección 'clients' del Tenant (Miembros del Círculo)
-            const qClient = query(
-                tCol('clients'),
-                where('email', '==', email.toLowerCase()),
-                where('is_member', '==', true)
-            );
+            const qClient = query(tCol('clients'), where('email', '==', email.toLowerCase()));
             const snapshotClient = await getDocs(qClient);
+            const memberClientDoc = snapshotClient.docs.find(doc => doc.data().is_member === true);
 
-            if (!snapshotClient.empty) {
-                const clientData = snapshotClient.docs[0].data();
+            if (memberClientDoc) {
+                const clientData = memberClientDoc.data();
                 if (clientData.password === password) {
                     const authenticatedMember = { 
-                        id: snapshotClient.docs[0].id, 
+                        id: memberClientDoc.id, 
                         role: 'member', 
                         name: clientData.name || clientData.contactName,
                         ...clientData 
@@ -105,21 +99,23 @@ export const AuthProvider = ({ children }) => {
             const userEmail = result.user.email.toLowerCase();
 
             // Verificar si es Admin
-            const qUser = query(tCol('users'), where('email', '==', userEmail), where('status', '==', 'Active'));
+            const qUser = query(tCol('users'), where('email', '==', userEmail));
             const snapUser = await getDocs(qUser);
-            if (!snapUser.empty) {
-                const authenticatedUser = { id: snapUser.docs[0].id, role: 'admin', ...snapUser.docs[0].data() };
+            const activeUserDoc = snapUser.docs.find(doc => doc.data().status === 'Active');
+            if (activeUserDoc) {
+                const authenticatedUser = { id: activeUserDoc.id, role: 'admin', ...activeUserDoc.data() };
                 setUser(authenticatedUser);
                 localStorage.setItem('zeticas_user', JSON.stringify(authenticatedUser));
                 return { success: true };
             }
 
             // Verificar si es Miembro
-            const qClient = query(tCol('clients'), where('email', '==', userEmail), where('is_member', '==', true));
+            const qClient = query(tCol('clients'), where('email', '==', userEmail));
             const snapClient = await getDocs(qClient);
-            if (!snapClient.empty) {
-                const clientData = snapClient.docs[0].data();
-                const authenticatedMember = { id: snapClient.docs[0].id, role: 'member', name: clientData.name || clientData.contactName, ...clientData };
+            const memberClientDoc = snapClient.docs.find(doc => doc.data().is_member === true);
+            if (memberClientDoc) {
+                const clientData = memberClientDoc.data();
+                const authenticatedMember = { id: memberClientDoc.id, role: 'member', name: clientData.name || clientData.contactName, ...clientData };
                 setUser(authenticatedMember);
                 localStorage.setItem('zeticas_user', JSON.stringify(authenticatedMember));
                 return { success: true };
