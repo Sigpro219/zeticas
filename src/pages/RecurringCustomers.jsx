@@ -703,7 +703,7 @@ const RecurringCustomers = () => {
                                 setAuthData({ email: '', password: '', confirmPassword: '', name: '', phone: '', address: '', city: '', idNumber: '' });
                                 setAuthMode('register'); 
                                 setStep(2); 
-                            }} style={{ background: deepTeal, color: '#fff', padding: '1.4rem 3rem', borderRadius: '50px', fontWeight: '900', border: 'none', cursor: 'pointer' }}>Suscribirme <UserPlus size={20} style={{marginLeft:'8px'}}/></button>
+                            }} className="pulse-subscribe-btn" style={{ background: deepTeal, color: '#fff', padding: '1.4rem 3rem', borderRadius: '50px', fontWeight: '900', border: 'none', cursor: 'pointer', transition: 'all 0.3s ease' }}>Suscribirme <UserPlus size={20} style={{marginLeft:'8px'}}/></button>
                             <button onClick={() => { setAuthMode('login'); setStep(3); }} style={{ background: '#fff', color: deepTeal, padding: '1.4rem 3rem', borderRadius: '50px', fontWeight: '900', border: `2px solid ${deepTeal}`, cursor: 'pointer' }}>MI PORTAL <LogIn size={20} style={{marginLeft:'8px'}}/></button>
                         </div>
                     </div>
@@ -1458,6 +1458,20 @@ const RecurringCustomers = () => {
                     .carousel-item { width: 220px; }
                     .product-show-card { height: 260px; }
                     .product-image-box { height: 180px; }
+                }
+
+                @keyframes pulseButton {
+                    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(2, 54, 54, 0.4); }
+                    70% { transform: scale(1.05); box-shadow: 0 0 0 15px rgba(2, 54, 54, 0); }
+                    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(2, 54, 54, 0); }
+                }
+                .pulse-subscribe-btn {
+                    animation: pulseButton 2.2s infinite cubic-bezier(0.66, 0, 0, 1);
+                }
+                .pulse-subscribe-btn:hover {
+                    animation: none;
+                    transform: scale(1.05);
+                    box-shadow: 0 10px 25px rgba(2, 54, 54, 0.3);
                 }
             `}</style>
         </div>
