@@ -554,6 +554,8 @@ const RecurringCustomers = () => {
                 if (activeMember || res.data) {
                     sendWelcomeEmail(activeMember || res.data, subscriptionData.plan);
                 }
+                logout(); // Cerramos la sesión temporal de onboarding para que entren limpios por el portal oficial
+                setIsFirstTimeOnboarding(false);
                 setStep(5);
             } else {
                 throw new Error(res.error || 'Error al guardar membresía');
@@ -1254,12 +1256,35 @@ const RecurringCustomers = () => {
                 )}
 
                 {step === 5 && (
-                    <div style={{ textAlign: 'center', padding: '4rem 0' }}>
-                        <CheckCircle size={80} color="#16a34a" style={{ marginBottom: '2rem' }}/>
-                        <h1 style={{ color: deepTeal }}>¡Bienvenido al Círculo!</h1>
-                        <p>Tu cuenta ha sido creada. Pronto nos pondremos en contacto para coordinar tu primer envío.</p>
-                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginTop: '3rem' }}>
-                            <button onClick={() => navigate('/')} style={{ background: deepTeal, color: '#fff', padding: '1rem 3rem', borderRadius: '50px', border: 'none', fontWeight: '900', cursor: 'pointer', transition: 'all 0.3s ease' }}>VOLVER AL INICIO</button>
+                    <div style={{ textAlign: 'center', padding: '5rem 1rem', maxWidth: '680px', margin: '0 auto', animation: 'fadeInScale 0.5s ease-out' }}>
+                        <div style={{ width: '100px', height: '100px', background: 'linear-gradient(135deg, #f8f9f5 0%, #ffffff 100%)', border: `2px solid ${institutionOcre}`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 2rem', boxShadow: '0 20px 40px rgba(214, 189, 152, 0.2)' }}>
+                            <CheckCircle size={50} color={institutionOcre} />
+                        </div>
+                        <h1 style={{ color: deepTeal, fontFamily: 'serif', fontSize: '2.8rem', marginBottom: '1rem', lineHeight: 1.1 }}>¡Despensa Guardada con Éxito!</h1>
+                        <p style={{ color: '#64748b', fontSize: '1.1rem', lineHeight: 1.6, marginBottom: '2.5rem' }}>
+                            Tu suscripción y selección de productos han sido registradas correctamente. Para gestionar tus envíos, modificar tu despensa o realizar el pago de tu primer ciclo, ingresa a tu portal oficial de miembro.
+                        </p>
+                        <div style={{ display: 'flex', gap: '1.2rem', justifyContent: 'center' }}>
+                            <button 
+                                onClick={() => { setAuthMode('login'); setStep(3); }} 
+                                style={{ 
+                                    background: institutionOcre, 
+                                    color: deepTeal, 
+                                    padding: '1.4rem 3.5rem', 
+                                    borderRadius: '50px', 
+                                    border: 'none', 
+                                    fontWeight: '900', 
+                                    fontSize: '1.1rem',
+                                    cursor: 'pointer', 
+                                    boxShadow: '0 15px 30px rgba(214, 189, 152, 0.3)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '10px',
+                                    transition: 'all 0.3s ease'
+                                }}
+                            >
+                                <LogIn size={22} /> INGRESAR A MI PORTAL
+                            </button>
                         </div>
                     </div>
                 )}
