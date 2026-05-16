@@ -25,7 +25,7 @@ const SEOManager = () => {
             ? (seo.consulting_title || 'Zeticas | Consultoría y Sostenibilidad')
             : (isCampaignActive && campaign.hero_title)
                 ? campaign.hero_title
-                : (seo.home_title || 'Zeticas | Sabores de la Sabana');
+                : ('Zeticas | Productos naturales y saludables apoyando la ruralidad');
             
         const description = isConsulting
             ? (seo.consulting_description || 'Acompañamos a comunidades y organizaciones para fortalecer capacidades en equilibrio con la naturaleza.')
