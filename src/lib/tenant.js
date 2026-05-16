@@ -16,13 +16,13 @@ export const detectTenantId = () => {
     // 2. Detect from Port (Testing override)
     const port = window.location.port;
     if (port === '5174') {
-        return 'deltacore';
+        return 'delta';
     }
 
     // 3. Detect from Hostname (Production mapping)
     const host = window.location.hostname;
-    if (host.includes('deltacore') || host.includes('deltacoretech') || host.includes('delta-coretech')) {
-        return 'deltacore';
+    if (host.includes('deltacore') || host.includes('deltacoretech') || host.includes('delta-coretech') || host.includes('delta')) {
+        return 'delta';
     }
     
     if (host.includes('zeticas') || host.includes('web.app') || host.includes('firebaseapp.com')) {

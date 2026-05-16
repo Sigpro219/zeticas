@@ -171,7 +171,7 @@ export const SalesProvider = ({ children }) => {
 
     const addOrder = useCallback(async (data) => {
         try {
-            const targetTenants = ['zeticas', 'deltacore'];
+            const targetTenants = ['zeticas', 'delta'];
             let finalDisplayId = '';
             let firstDocId = '';
 
@@ -302,15 +302,16 @@ export const SalesProvider = ({ children }) => {
 
     const upsertMember = useCallback(async (data) => {
         try {
-            const targetTenants = ['zeticas', 'deltacore'];
-            let finalId = data.nit || data.idNumber || data.id;
+            const targetTenants = ['zeticas', 'delta'];
+            const baseId = data.nit || data.idNumber || data.id;
+            let lastId = baseId;
             let finalData = null;
 
             for (const tId of targetTenants) {
                 const clientsCol = collection(db, 'tenants', tId, 'clients');
                 let existingDoc = null;
-                if (finalId) {
-                    const qNit = query(clientsCol, where('nit', '==', finalId));
+                if (baseId) {
+                    const qNit = query(clientsCol, where('nit', '==', baseId));
                     const snapNit = await getDocs(qNit);
                     if (!snapNit.empty) existingDoc = snapNit.docs[0];
                 }
@@ -329,17 +330,17 @@ export const SalesProvider = ({ children }) => {
                 if (existingDoc) {
                     const docRef = doc(db, 'tenants', tId, 'clients', existingDoc.id);
                     await updateDoc(docRef, payload);
-                    finalId = existingDoc.id;
+                    lastId = existingDoc.id;
                     finalData = { ...existingDoc.data(), ...payload, id: existingDoc.id };
                 } else {
                     payload.created_at = new Date().toISOString();
                     const docRef = await addDoc(clientsCol, payload);
-                    finalId = docRef.id;
+                    lastId = docRef.id;
                     finalData = { ...payload, id: docRef.id };
                 }
             }
 
-            return { success: true, id: finalId, data: finalData };
+            return { success: true, id: lastId, data: finalData };
         } catch (err) {
             console.error("Error in upsertMember (dual-tenant):", err);
             return { success: false, error: err.message };
@@ -348,7 +349,7 @@ export const SalesProvider = ({ children }) => {
 
     const saveWebCheckout = useCallback(async (draftData) => {
         try {
-            const targetTenants = ['zeticas', 'deltacore'];
+            const targetTenants = ['zeticas', 'delta'];
             let finalId = draftData.orderId || `draft_${Date.now()}`;
 
             for (const tId of targetTenants) {
@@ -364,7 +365,7 @@ export const SalesProvider = ({ children }) => {
 
     const getWebCheckout = useCallback(async (chkID) => {
         try {
-            const targetTenants = ['zeticas', 'deltacore'];
+            const targetTenants = ['zeticas', 'delta'];
             for (const tId of targetTenants) {
                 const docRef = doc(db, 'tenants', tId, 'web_checkouts', chkID);
                 const snap = await getDoc(docRef);
@@ -381,7 +382,7 @@ export const SalesProvider = ({ children }) => {
 
     const updateWebCheckoutStatus = useCallback(async (chkID, status, boldData = {}) => {
         try {
-            const targetTenants = ['zeticas', 'deltacore'];
+            const targetTenants = ['zeticas', 'delta'];
             for (const tId of targetTenants) {
                 const docRef = doc(db, 'tenants', tId, 'web_checkouts', chkID);
                 await setDoc(docRef, { status, bold_data: boldData, updated_at: new Date().toISOString() }, { merge: true });
@@ -395,7 +396,7 @@ export const SalesProvider = ({ children }) => {
 
     const sendWelcomeEmail = useCallback(async (userData, planName) => {
         try {
-            const targetTenants = ['zeticas', 'deltacore'];
+            const targetTenants = ['zeticas', 'delta'];
             for (const tId of targetTenants) {
                 const mailCol = collection(db, 'tenants', tId, 'mail');
                 await addDoc(mailCol, {
