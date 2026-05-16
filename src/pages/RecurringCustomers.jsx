@@ -1053,13 +1053,13 @@ const RecurringCustomers = () => {
                                     {subscriptionData.products.map(p => (
                                         <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', fontSize: '0.8rem' }}>
                                             <span>{p.quantity}x {p.name}</span>
-                                            <span>${(p.price * p.quantity * (1-currentPlanConfig.discount/100)).toLocaleString()}</span>
+                                            <span>${(p.price * p.quantity * (1-currentPlanConfig.discount/100)).toLocaleString('es-CO')}</span>
                                         </div>
                                     ))}
                                 </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Envío:</span><b>{shippingCost === 0 ? 'GRATIS' : `$${shippingCost.toLocaleString()}`}</b></div>
-                                <h2 style={{ color: institutionOcre, marginBottom: 0 }}>Total: ${totalAmount.toLocaleString()}</h2>
-                                {savings > 0 && <div style={{ color: '#4ade80', fontSize: '0.8rem', fontWeight: '800' }}>AHORRO: ${savings.toLocaleString()}</div>}
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Envío:</span><b>{shippingCost === 0 ? 'GRATIS' : `$${shippingCost.toLocaleString('es-CO')}`}</b></div>
+                                <h2 style={{ color: institutionOcre, marginBottom: 0 }}>Total: ${totalAmount.toLocaleString('es-CO')}</h2>
+                                {savings > 0 && <div style={{ color: '#4ade80', fontSize: '0.8rem', fontWeight: '800' }}>AHORRO: ${savings.toLocaleString('es-CO')}</div>}
                                 
                                 <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '15px' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
