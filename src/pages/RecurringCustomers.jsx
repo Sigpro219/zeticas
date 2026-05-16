@@ -898,7 +898,7 @@ const RecurringCustomers = () => {
                                     <button type="button" onClick={() => setAuthMode('register')} style={{ background: 'none', border: 'none', color: deepTeal, fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', marginTop: '0.5rem' }}>No tengo cuenta, quiero registrarme</button>
                                 </form>
                             ) : (
-                                <form onSubmit={handleOnboardingRegister} autoComplete="off" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem', marginTop: '0.4rem' }}>
+                                <form onSubmit={handleOnboardingRegister} autoComplete="off" className="register-form-grid">
 
                                     {/* Nombre */}
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
@@ -946,7 +946,7 @@ const RecurringCustomers = () => {
                                     </div>
 
                                     {/* Passwords */}
-                                    <div style={{ gridColumn: '1 / -1', borderTop: '1px solid #f1f5f9', paddingTop: '0.85rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
+                                    <div className="password-fields-grid">
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
                                             <label style={{ fontSize: '0.6rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Contraseña</label>
                                             <div style={{ display: 'flex', alignItems: 'center', borderBottom: `1.5px solid ${authData.password ? deepTeal : '#e2e8f0'}` }}>
@@ -1472,6 +1472,29 @@ const RecurringCustomers = () => {
                     animation: none;
                     transform: scale(1.05);
                     box-shadow: 0 10px 25px rgba(2, 54, 54, 0.3);
+                }
+
+                .register-form-grid {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 0.85rem;
+                    margin-top: 0.4rem;
+                }
+                .password-fields-grid {
+                    grid-column: 1 / -1;
+                    border-top: 1px solid #f1f5f9;
+                    padding-top: 0.85rem;
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 0.85rem;
+                }
+                @media (max-width: 550px) {
+                    .register-form-grid {
+                        grid-template-columns: 1fr;
+                    }
+                    .password-fields-grid {
+                        grid-template-columns: 1fr;
+                    }
                 }
             `}</style>
         </div>
