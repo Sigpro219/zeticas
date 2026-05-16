@@ -883,8 +883,8 @@ const RecurringCustomers = () => {
                             )}
                             {authMode === 'login' ? (
                                 <form onSubmit={handleOnboardingLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', marginTop: '1rem' }}>
-                                    <div className="input-group"><Mail size={20}/><input type="email" placeholder="Email" onChange={e => setAuthData({...authData, email: e.target.value})} required/></div>
-                                    <div className="input-group"><Lock size={20}/><input type="password" placeholder="Clave" onChange={e => setAuthData({...authData, password: e.target.value})} required/></div>
+                                    <div className="input-group"><Mail size={20}/><input type="email" placeholder="Email" value={authData.email} onChange={e => setAuthData({...authData, email: e.target.value})} required/></div>
+                                    <div className="input-group"><Lock size={20}/><input type="password" placeholder="Clave" value={authData.password} onChange={e => setAuthData({...authData, password: e.target.value})} required/></div>
                                     <button type="submit" style={{ background: deepTeal, color: '#fff', padding: '1.2rem', borderRadius: '16px', border: 'none', fontWeight: '900', fontSize: '1rem', cursor: 'pointer' }}>INGRESAR</button>
                                     <button type="button" onClick={() => setAuthMode('register')} style={{ background: 'none', border: 'none', color: deepTeal, fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', marginTop: '0.5rem' }}>No tengo cuenta, quiero registrarme</button>
                                 </form>
