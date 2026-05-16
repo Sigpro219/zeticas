@@ -823,32 +823,56 @@ const RecurringCustomers = () => {
                             <span>VOLVER AL INICIO</span>
                         </div>
                         <div style={{ background: '#fff', width: '100%', maxWidth: '480px', padding: '1.8rem 2rem', borderRadius: '28px', boxShadow: '0 15px 40px rgba(0,0,0,0.07)' }}>
-                            <h2 style={{ textAlign: 'center', color: deepTeal, fontSize: '1.75rem', marginBottom: '1rem', fontFamily: 'serif' }}>{authMode === 'login' ? 'Bienvenido' : 'Crea tu Cuenta'}</h2>
+                            <h2 style={{ textAlign: 'center', color: deepTeal, fontSize: '1.75rem', marginBottom: '1.2rem', fontFamily: 'serif' }}>{authMode === 'login' ? 'Bienvenido' : 'Crea tu Cuenta'}</h2>
                             {subscriptionData?.plan && (
                                 <div style={{ 
-                                    background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', 
-                                    border: '1px solid #bbf7d0',
-                                    borderRadius: '16px', 
-                                    padding: '0.85rem 1.2rem', 
-                                    marginBottom: '1.5rem',
+                                    background: 'linear-gradient(145deg, #f8f9f5 0%, #ffffff 100%)', 
+                                    border: `1px solid ${institutionOcre}40`,
+                                    borderRadius: '20px', 
+                                    padding: '1.2rem 1.5rem', 
+                                    marginBottom: '1.8rem',
                                     display: 'flex', 
                                     alignItems: 'center', 
                                     justifyContent: 'space-between',
-                                    boxShadow: '0 4px 12px rgba(22, 101, 52, 0.05)'
+                                    boxShadow: '0 10px 30px rgba(2, 83, 87, 0.06)',
+                                    position: 'relative',
+                                    overflow: 'hidden'
                                 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                        <div style={{ background: deepTeal, color: '#fff', padding: '0.5rem', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                            <Sparkles size={18} />
+                                    {/* Ocre accent bar on the left */}
+                                    <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '4px', background: institutionOcre }} />
+                                    
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                        <div style={{ 
+                                            background: `linear-gradient(135deg, ${deepTeal} 0%, #037075 100%)`, 
+                                            color: institutionOcre, 
+                                            padding: '0.7rem', 
+                                            borderRadius: '16px', 
+                                            display: 'flex', 
+                                            alignItems: 'center', 
+                                            justifyContent: 'center',
+                                            boxShadow: '0 6px 16px rgba(2, 83, 87, 0.15)'
+                                        }}>
+                                            <Sparkles size={22} />
                                         </div>
-                                        <div>
-                                            <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: '800', color: '#166534' }}>Plan Seleccionado</div>
-                                            <div style={{ fontSize: '1.05rem', fontWeight: '900', color: deepTeal }}>{subscriptionData.plan}</div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                                            <div style={{ fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: '800', color: '#94a3b8' }}>Tu Selección</div>
+                                            <div style={{ fontSize: '1.2rem', fontWeight: '900', color: deepTeal, fontFamily: 'serif', letterSpacing: '-0.02em' }}>{subscriptionData.plan}</div>
                                         </div>
                                     </div>
                                     {subscriptionData?.frequency && (
-                                        <span style={{ background: '#166534', color: '#fff', fontSize: '0.7rem', fontWeight: '800', padding: '0.3rem 0.75rem', borderRadius: '20px' }}>
+                                        <div style={{ 
+                                            background: `${institutionOcre}25`, 
+                                            border: `1px solid ${institutionOcre}50`,
+                                            color: deepTeal, 
+                                            fontSize: '0.75rem', 
+                                            fontWeight: '800', 
+                                            padding: '0.4rem 0.9rem', 
+                                            borderRadius: '24px',
+                                            letterSpacing: '0.05em',
+                                            textTransform: 'uppercase'
+                                        }}>
                                             {subscriptionData.frequency}
-                                        </span>
+                                        </div>
                                     )}
                                 </div>
                             )}
