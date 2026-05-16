@@ -413,6 +413,7 @@ const RecurringCustomers = () => {
 
     const handleOnboardingLogin = async (e) => {
         if (e) e.preventDefault();
+        setIsSaving(true);
         try {
             const res = await login(authData.email, authData.password);
             if (res.success) {
@@ -423,7 +424,7 @@ const RecurringCustomers = () => {
                 // Or better: try to find the client data in the login response if we added it
                 setStep(4);
             }
-        } catch (err) { alert("Error: " + err.message); }
+        } catch (err) { alert("Error: " + err.message); } finally { setIsSaving(false); }
     };
 
     const handleOnboardingRegister = async (e) => {
@@ -885,7 +886,9 @@ const RecurringCustomers = () => {
                                 <form onSubmit={handleOnboardingLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', marginTop: '1rem' }}>
                                     <div className="input-group"><Mail size={20}/><input type="email" placeholder="Email" value={authData.email} onChange={e => setAuthData({...authData, email: e.target.value})} required/></div>
                                     <div className="input-group"><Lock size={20}/><input type="password" placeholder="Clave" value={authData.password} onChange={e => setAuthData({...authData, password: e.target.value})} required/></div>
-                                    <button type="submit" style={{ background: deepTeal, color: '#fff', padding: '1.2rem', borderRadius: '16px', border: 'none', fontWeight: '900', fontSize: '1rem', cursor: 'pointer' }}>INGRESAR</button>
+                                    <button type="submit" disabled={isSaving} style={{ background: deepTeal, color: '#fff', padding: '1.2rem', borderRadius: '16px', border: 'none', fontWeight: '900', fontSize: '1rem', cursor: isSaving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: isSaving ? '0 0 20px rgba(2, 83, 87, 0.3)' : 'none' }}>
+                                        {isSaving ? <><RefreshCw size={18} className="spin-animation" /> INGRESANDO...</> : 'INGRESAR'}
+                                    </button>
                                     <button type="button" onClick={() => setAuthMode('register')} style={{ background: 'none', border: 'none', color: deepTeal, fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', marginTop: '0.5rem' }}>No tengo cuenta, quiero registrarme</button>
                                 </form>
                             ) : (
@@ -960,9 +963,9 @@ const RecurringCustomers = () => {
 
                                     {/* Submit */}
                                     <div style={{ gridColumn: '1 / -1' }}>
-                                        <button type="submit" disabled={authData.password !== authData.confirmPassword || !authData.password}
-                                            style={{ width: '100%', background: deepTeal, color: '#fff', padding: '0.85rem', borderRadius: '12px', border: 'none', fontWeight: 900, fontSize: '0.85rem', letterSpacing: '0.5px', cursor: 'pointer', opacity: (authData.password !== authData.confirmPassword || !authData.password) ? 0.4 : 1, transition: 'opacity 0.2s' }}>
-                                            INSCRIBIRSE
+                                        <button type="submit" disabled={isSaving || authData.password !== authData.confirmPassword || !authData.password}
+                                            style={{ width: '100%', background: deepTeal, color: '#fff', padding: '0.85rem', borderRadius: '12px', border: 'none', fontWeight: 900, fontSize: '0.85rem', letterSpacing: '0.5px', cursor: isSaving ? 'not-allowed' : 'pointer', opacity: (authData.password !== authData.confirmPassword || !authData.password) ? 0.4 : 1, transition: 'all 0.3s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: isSaving ? '0 0 20px rgba(2, 83, 87, 0.4)' : 'none' }}>
+                                            {isSaving ? <><RefreshCw size={18} className="spin-animation" /> CREANDO CUENTA...</> : 'INSCRIBIRSE'}
                                         </button>
                                         <button type="button" onClick={() => setAuthMode('login')} style={{ width: '100%', background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', marginTop: '0.5rem' }}>
                                             Ya tengo cuenta · Iniciar sesión
@@ -1368,6 +1371,9 @@ const RecurringCustomers = () => {
                 )}
             </div>
             <style>{`
+                @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+                .spin-animation { animation: spin 1s linear infinite; }
+
                 @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
                 @keyframes fadeInScale { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }
                 @keyframes scroll { from { transform: translateX(0); } to { transform: translateX(-33.33%); } }
