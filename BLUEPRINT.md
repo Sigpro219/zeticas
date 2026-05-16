@@ -63,8 +63,24 @@ El sistema implementa guardas de software para asegurar que la experiencia sea f
 ---
 
 ## 5. Guía de Mantenimiento y Despliegue
-- **Publicación**: A través del script `scripts/publish.mjs`. Este script automatiza el control de versiones, el build de producción y el deploy a Firebase Hosting.
-- **Seguridad**: Reglas de Firestore y Authentication protegen el acceso según el rol del usuario (Admin/Operativo).
+
+### 🚀 Estrategia de Doble Publicación (Vite + Next)
+El ecosistema Zeticas opera bajo una arquitectura híbrida denominada **"Lo mejor de los dos mundos"**, donde conviven dos proyectos independientes bajo el mismo paraguas de marca:
+
+1.  **Rama Vite (Landing & Legacy Management)**:
+    - **Port Local**: `5173`.
+    - **Producción**: `https://zeticas.com/`.
+    - **Acceso**: Ícono de Usuario **ROJO** en el Navbar.
+    - **Script**: `node scripts/publish.mjs --zeticas`.
+
+2.  **Rama Next (Operational Portal)**:
+    - **Port Local**: `3011`.
+    - **Producción**: `https://zeticas-portal.web.app/`.
+    - **Acceso**: Ícono de Usuario **BLANCO** en el Navbar.
+    - **Comando**: `cmd /c "npm run build && npx firebase deploy --only hosting:portal"`.
+
+### 🛠️ Flujo de Sincronización
+Cuando se solicita un **"Publish"** general, se deben ejecutar ambos despliegues secuencialmente para asegurar que los enlaces entre la Landing y el Portal estén actualizados.
 
 ---
 *Documento generado por Antigravity AI - Zeticas SAS Project Archive 2026.*

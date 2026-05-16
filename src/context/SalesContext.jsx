@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { onSnapshot, query, orderBy, updateDoc, deleteDoc, addDoc, increment, getDoc, getDocs, where, runTransaction } from 'firebase/firestore';
+import { onSnapshot, query, orderBy, updateDoc, deleteDoc, addDoc, increment, getDoc, getDocs, where, runTransaction, setDoc, doc, collection } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useTenant } from './TenantContext';
 import { useInventory } from './InventoryContext';
@@ -171,29 +171,40 @@ export const SalesProvider = ({ children }) => {
 
     const addOrder = useCallback(async (data) => {
         try {
-            const counterRef = tDoc('metadata', 'counters');
-            let finalNumber;
+            const targetTenants = ['zeticas', 'deltacore'];
+            let finalDisplayId = '';
+            let firstDocId = '';
 
-            await runTransaction(db, async (transaction) => {
-                const counterDoc = await transaction.get(counterRef);
-                const nextVal = (counterDoc?.exists() ? (counterDoc.data().last_order_number || 0) : 0) + 1;
-                transaction.set(counterRef, { last_order_number: nextVal }, { merge: true });
-                finalNumber = nextVal;
-            });
+            for (const tId of targetTenants) {
+                const counterRef = doc(db, 'tenants', tId, 'metadata', 'counters');
+                let finalNumber;
 
-            const displayId = String(finalNumber).padStart(4, '0');
-            const docRef = await addDoc(tCol('orders'), {
-                ...data,
-                order_number: displayId,
-                id: displayId,
-                created_at: new Date().toISOString()
-            });
-            return { success: true, id: docRef.id, displayId };
+                await runTransaction(db, async (transaction) => {
+                    const counterDoc = await transaction.get(counterRef);
+                    const nextVal = (counterDoc?.exists() ? (counterDoc.data().last_order_number || 0) : 0) + 1;
+                    transaction.set(counterRef, { last_order_number: nextVal }, { merge: true });
+                    finalNumber = nextVal;
+                });
+
+                const displayId = String(finalNumber).padStart(4, '0');
+                if (!finalDisplayId) finalDisplayId = displayId;
+
+                const ordersCol = collection(db, 'tenants', tId, 'orders');
+                const docRef = await addDoc(ordersCol, {
+                    ...data,
+                    order_number: displayId,
+                    id: displayId,
+                    created_at: new Date().toISOString()
+                });
+                if (!firstDocId) firstDocId = docRef.id;
+            }
+
+            return { success: true, id: firstDocId, displayId: finalDisplayId };
         } catch (err) {
-            console.error("Error adding order:", err);
+            console.error("Error adding order (dual-tenant):", err);
             return { success: false, error: err.message };
         }
-    }, [tCol, tDoc]);
+    }, []);
 
     const createInternalOrder = useCallback(async (selectedMap = [], type = 'PT') => {
         try {
@@ -289,6 +300,124 @@ export const SalesProvider = ({ children }) => {
         } catch (err) { return { success: false, error: err.message }; }
     }, [tDoc]);
 
+    const upsertMember = useCallback(async (data) => {
+        try {
+            const targetTenants = ['zeticas', 'deltacore'];
+            let finalId = data.nit || data.idNumber || data.id;
+            let finalData = null;
+
+            for (const tId of targetTenants) {
+                const clientsCol = collection(db, 'tenants', tId, 'clients');
+                let existingDoc = null;
+                if (finalId) {
+                    const qNit = query(clientsCol, where('nit', '==', finalId));
+                    const snapNit = await getDocs(qNit);
+                    if (!snapNit.empty) existingDoc = snapNit.docs[0];
+                }
+                if (!existingDoc && data.email) {
+                    const qEmail = query(clientsCol, where('email', '==', data.email.toLowerCase().trim()));
+                    const snapEmail = await getDocs(qEmail);
+                    if (!snapEmail.empty) existingDoc = snapEmail.docs[0];
+                }
+
+                const payload = {
+                    ...data,
+                    updated_at: new Date().toISOString()
+                };
+                if (data.email) payload.email = data.email.toLowerCase().trim();
+
+                if (existingDoc) {
+                    const docRef = doc(db, 'tenants', tId, 'clients', existingDoc.id);
+                    await updateDoc(docRef, payload);
+                    finalId = existingDoc.id;
+                    finalData = { ...existingDoc.data(), ...payload, id: existingDoc.id };
+                } else {
+                    payload.created_at = new Date().toISOString();
+                    const docRef = await addDoc(clientsCol, payload);
+                    finalId = docRef.id;
+                    finalData = { ...payload, id: docRef.id };
+                }
+            }
+
+            return { success: true, id: finalId, data: finalData };
+        } catch (err) {
+            console.error("Error in upsertMember (dual-tenant):", err);
+            return { success: false, error: err.message };
+        }
+    }, []);
+
+    const saveWebCheckout = useCallback(async (draftData) => {
+        try {
+            const targetTenants = ['zeticas', 'deltacore'];
+            let finalId = draftData.orderId || `draft_${Date.now()}`;
+
+            for (const tId of targetTenants) {
+                const docRef = doc(db, 'tenants', tId, 'web_checkouts', finalId);
+                await setDoc(docRef, { ...draftData, id: finalId, updated_at: new Date().toISOString() }, { merge: true });
+            }
+            return { success: true, id: finalId };
+        } catch (err) {
+            console.error("Error in saveWebCheckout (dual-tenant):", err);
+            return { success: false, error: err.message };
+        }
+    }, []);
+
+    const getWebCheckout = useCallback(async (chkID) => {
+        try {
+            const targetTenants = ['zeticas', 'deltacore'];
+            for (const tId of targetTenants) {
+                const docRef = doc(db, 'tenants', tId, 'web_checkouts', chkID);
+                const snap = await getDoc(docRef);
+                if (snap.exists()) {
+                    return { success: true, data: { ...snap.data(), id: snap.id } };
+                }
+            }
+            throw new Error("Borrador de checkout no encontrado en ningún tenant");
+        } catch (err) {
+            console.error("Error in getWebCheckout:", err);
+            return { success: false, error: err.message };
+        }
+    }, []);
+
+    const updateWebCheckoutStatus = useCallback(async (chkID, status, boldData = {}) => {
+        try {
+            const targetTenants = ['zeticas', 'deltacore'];
+            for (const tId of targetTenants) {
+                const docRef = doc(db, 'tenants', tId, 'web_checkouts', chkID);
+                await setDoc(docRef, { status, bold_data: boldData, updated_at: new Date().toISOString() }, { merge: true });
+            }
+            return { success: true };
+        } catch (err) {
+            console.error("Error in updateWebCheckoutStatus (dual-tenant):", err);
+            return { success: false, error: err.message };
+        }
+    }, []);
+
+    const sendWelcomeEmail = useCallback(async (userData, planName) => {
+        try {
+            const targetTenants = ['zeticas', 'deltacore'];
+            for (const tId of targetTenants) {
+                const mailCol = collection(db, 'tenants', tId, 'mail');
+                await addDoc(mailCol, {
+                    to: userData.email,
+                    template: {
+                        name: 'welcome_subscription',
+                        data: {
+                            name: userData.name || userData.nombreCompleto || 'Socio',
+                            plan: planName || 'Plan Círculo Zeticas',
+                            frequency: userData.frequency || 'Mensual'
+                        }
+                    },
+                    created_at: new Date().toISOString()
+                });
+            }
+            return { success: true };
+        } catch (err) {
+            console.error("Error in sendWelcomeEmail (dual-tenant):", err);
+            return { success: false, error: err.message };
+        }
+    }, []);
+
     // Subscriptions
     useEffect(() => {
         const unsubOrders = onSnapshot(query(tCol('orders'), orderBy('created_at', 'desc')), (snapshot) => {
@@ -332,7 +461,12 @@ export const SalesProvider = ({ children }) => {
         createInternalOrder,
         addQuotation,
         deleteQuotation,
-        updateLead
+        updateLead,
+        upsertMember,
+        saveWebCheckout,
+        getWebCheckout,
+        updateWebCheckoutStatus,
+        sendWelcomeEmail
     };
 
     return (
