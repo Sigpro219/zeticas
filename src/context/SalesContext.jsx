@@ -18,13 +18,41 @@ export const SalesProvider = ({ children }) => {
 
     const addClient = useCallback(async (data) => {
         try {
-            const docRef = await addDoc(tCol('clients'), { ...data, created_at: new Date().toISOString() });
-            return { success: true, id: docRef.id };
+            const targetTenants = ['zeticas', 'delta'];
+            let finalDisplayId = '';
+            let firstDocId = '';
+
+            for (const tId of targetTenants) {
+                const counterRef = doc(db, 'tenants', tId, 'metadata', 'counters');
+                let finalNumber;
+
+                await runTransaction(db, async (transaction) => {
+                    const counterDoc = await transaction.get(counterRef);
+                    const nextVal = (counterDoc?.exists() ? (counterDoc.data().last_client_number || 0) : 0) + 1;
+                    transaction.set(counterRef, { last_client_number: nextVal }, { merge: true });
+                    finalNumber = nextVal;
+                });
+
+                const displayId = `CLI-${String(finalNumber).padStart(4, '0')}`;
+                if (!finalDisplayId) finalDisplayId = displayId;
+
+                const clientsCol = collection(db, 'tenants', tId, 'clients');
+                const clientDocRef = doc(clientsCol, displayId);
+                await setDoc(clientDocRef, {
+                    ...data,
+                    client_number: displayId,
+                    id: displayId,
+                    created_at: new Date().toISOString()
+                });
+                if (!firstDocId) firstDocId = displayId;
+            }
+
+            return { success: true, id: firstDocId, displayId: finalDisplayId };
         } catch (err) {
-            console.error("Error adding client:", err);
+            console.error("Error adding client (dual-tenant consecutive):", err);
             return { success: false, error: err.message };
         }
-    }, [tCol]);
+    }, []);
 
     const updateClient = useCallback(async (clientId, payload) => {
         try {
@@ -333,16 +361,32 @@ export const SalesProvider = ({ children }) => {
                     lastId = existingDoc.id;
                     finalData = { ...existingDoc.data(), ...payload, id: existingDoc.id };
                 } else {
+                    // Generar consecutivo CLI-XXXX
+                    const counterRef = doc(db, 'tenants', tId, 'metadata', 'counters');
+                    let finalNumber;
+
+                    await runTransaction(db, async (transaction) => {
+                        const counterDoc = await transaction.get(counterRef);
+                        const nextVal = (counterDoc?.exists() ? (counterDoc.data().last_client_number || 0) : 0) + 1;
+                        transaction.set(counterRef, { last_client_number: nextVal }, { merge: true });
+                        finalNumber = nextVal;
+                    });
+
+                    const displayId = `CLI-${String(finalNumber).padStart(4, '0')}`;
+                    payload.client_number = displayId;
+                    payload.id = displayId;
                     payload.created_at = new Date().toISOString();
-                    const docRef = await addDoc(clientsCol, payload);
-                    lastId = docRef.id;
-                    finalData = { ...payload, id: docRef.id };
+
+                    const clientDocRef = doc(clientsCol, displayId);
+                    await setDoc(clientDocRef, payload);
+                    lastId = displayId;
+                    finalData = { ...payload, id: displayId };
                 }
             }
 
             return { success: true, id: lastId, data: finalData };
         } catch (err) {
-            console.error("Error in upsertMember (dual-tenant):", err);
+            console.error("Error in upsertMember (dual-tenant consecutive):", err);
             return { success: false, error: err.message };
         }
     }, []);
