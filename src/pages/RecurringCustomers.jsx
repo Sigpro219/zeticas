@@ -703,7 +703,7 @@ const RecurringCustomers = () => {
                                 setAuthData({ email: '', password: '', confirmPassword: '', name: '', phone: '', address: '', city: '', idNumber: '' });
                                 setAuthMode('register'); 
                                 setStep(2); 
-                            }} style={{ background: deepTeal, color: '#fff', padding: '1.4rem 3rem', borderRadius: '50px', fontWeight: '900', border: 'none', cursor: 'pointer' }}>UNIRME AL CÍRCULO <UserPlus size={20} style={{marginLeft:'8px'}}/></button>
+                            }} style={{ background: deepTeal, color: '#fff', padding: '1.4rem 3rem', borderRadius: '50px', fontWeight: '900', border: 'none', cursor: 'pointer' }}>Suscribirme <UserPlus size={20} style={{marginLeft:'8px'}}/></button>
                             <button onClick={() => { setAuthMode('login'); setStep(3); }} style={{ background: '#fff', color: deepTeal, padding: '1.4rem 3rem', borderRadius: '50px', fontWeight: '900', border: `2px solid ${deepTeal}`, cursor: 'pointer' }}>MI PORTAL <LogIn size={20} style={{marginLeft:'8px'}}/></button>
                         </div>
                     </div>
