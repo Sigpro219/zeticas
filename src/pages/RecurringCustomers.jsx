@@ -902,7 +902,7 @@ const RecurringCustomers = () => {
 
                                     {/* Nombre */}
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                                        <label style={{ fontSize: '0.6rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Nombre</label>
+                                        <label style={{ fontSize: '0.6rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Nombre y Apellido</label>
                                         <input type="text" autoComplete="off" required placeholder="María García" value={authData.name} onChange={e => setAuthData({...authData, name: e.target.value})}
                                             style={{ padding: '0.45rem 0', border: 'none', borderBottom: `1.5px solid ${authData.name ? deepTeal : '#e2e8f0'}`, background: 'transparent', fontSize: '0.9rem', color: deepTeal, fontWeight: 600, outline: 'none', width: '100%' }} />
                                     </div>
