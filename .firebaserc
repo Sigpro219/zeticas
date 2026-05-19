@@ -14,5 +14,11 @@
       }
     }
   },
-  "etags": {}
+  "etags": {
+    "delta-core-cloud-45ea0": {
+      "extensionInstances": {
+        "firestore-send-email": "049746e823737745a961f6c0df6874d78ae245673bf7c0c369b3474db63e86a5"
+      }
+    }
+  }
 }

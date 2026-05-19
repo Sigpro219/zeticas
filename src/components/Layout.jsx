@@ -246,6 +246,7 @@ const Navbar = ({ isConsulting, isMobile }) => {
                         {user ? (
                             <>
                                 <div style={{ display: 'flex', gap: '0.2rem', alignItems: 'center' }}>
+                                    {/* Red button hidden (Vite Menu) as requested. Uncomment to restore.
                                     <button
                                         onClick={() => setShowUserMenu(!showUserMenu)}
                                         style={{
@@ -260,6 +261,7 @@ const Navbar = ({ isConsulting, isMobile }) => {
                                     >
                                         <User size={18} strokeWidth={2} />
                                     </button>
+                                    */}
                                     <a href="https://zeticas-portal.web.app/login" title="Portal Operativo (Next)" style={{ color: isConsulting ? deepTeal : '#fff', textDecoration: 'none', display: 'flex', alignItems: 'center', padding: '0.5rem' }}>
                                         <User size={18} strokeWidth={2.5} />
                                     </a>
@@ -314,9 +316,11 @@ const Navbar = ({ isConsulting, isMobile }) => {
                                 <a href="https://zeticas-portal.web.app/login" title="Portal Operativo (Next)" style={{ color: isConsulting ? deepTeal : '#fff', textDecoration: 'none', display: 'flex', alignItems: 'center', padding: '0.5rem' }}>
                                     <User size={18} strokeWidth={2.5} />
                                 </a>
+                                {/* Red link hidden (Vite Login) as requested. Uncomment to restore.
                                 <Link to="/login" title="Login Clientes (Vite)" style={{ color: '#ef4444', textDecoration: 'none', display: 'flex', alignItems: 'center', padding: '0.5rem' }}>
                                     <User size={18} strokeWidth={2} />
                                 </Link>
+                                */}
                             </div>
                         )}
                     </div>

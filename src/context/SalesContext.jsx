@@ -8,7 +8,7 @@ import { supabase } from '../lib/supabase';
 const SalesContext = createContext({});
 
 export const SalesProvider = ({ children }) => {
-    const { tCol, tDoc, setLoading, updateSyncTime, addAdminLog } = useTenant();
+    const { tenantId, tCol, tDoc, setLoading, updateSyncTime, addAdminLog } = useTenant();
     const { items, recipes, consumeMaterials } = useInventory();
 
     const [orders, setOrders] = useState([]);
@@ -225,6 +225,42 @@ export const SalesProvider = ({ children }) => {
                     created_at: new Date().toISOString()
                 });
                 if (!firstDocId) firstDocId = docRef.id;
+
+                // Encolar correo de confirmación de pedido para Zeticas
+                if (tId === 'zeticas') {
+                    try {
+                        const masterClient = clients.find(c => 
+                            (c.id && (c.id === data.clientId || c.id === data.client_id || c.id === data.nit)) || 
+                            (c.name && c.name.toLowerCase().trim() === (data.client || '').toLowerCase().trim())
+                        );
+                        const clientEmail = masterClient?.email || data.shipping_email || data.email || data.client_email;
+                        
+                        if (clientEmail && clientEmail !== 'N/A') {
+                            await addDoc(collection(db, 'mail'), {
+                                to: clientEmail,
+                                tenantId: 'zeticas',
+                                template: {
+                                    name: 'order_confirmation',
+                                    data: {
+                                        client: data.client || masterClient?.name || 'Cliente',
+                                        order_number: data.order_number || displayId,
+                                        date: data.date || new Date().toLocaleDateString('es-CO'),
+                                        total_amount: Number(data.total_amount || data.amount || 0).toLocaleString('es-CO'),
+                                        items: (data.items || []).map(item => ({
+                                            name: item.name,
+                                            quantity: item.quantity,
+                                            price: Number(item.price || 0).toLocaleString('es-CO')
+                                        }))
+                                    }
+                                },
+                                created_at: new Date().toISOString()
+                            });
+                            console.log("📨 Correo de confirmación de pedido encolado para:", clientEmail);
+                        }
+                    } catch (emailErr) {
+                        console.error("Error al encolar correo de pedido en landing:", emailErr);
+                    }
+                }
             }
 
             return { success: true, id: firstDocId, displayId: finalDisplayId };
@@ -232,7 +268,7 @@ export const SalesProvider = ({ children }) => {
             console.error("Error adding order (dual-tenant):", err);
             return { success: false, error: err.message };
         }
-    }, []);
+    }, [clients]);
 
     const createInternalOrder = useCallback(async (selectedMap = [], type = 'PT') => {
         try {
@@ -463,7 +499,6 @@ export const SalesProvider = ({ children }) => {
 
     const sendWelcomeEmail = useCallback(async (userData, planName, orderSummary = null) => {
         try {
-            const targetTenants = ['zeticas', 'delta'];
             const templateData = {
                 name: userData.name || userData.nombreCompleto || 'Socio',
                 plan: planName || 'Plan Círculo Zeticas',
@@ -481,6 +516,7 @@ export const SalesProvider = ({ children }) => {
 
             const mailPayload = {
                 to: userData.email,
+                tenantId: tenantId || 'zeticas',
                 template: {
                     name: 'welcome_subscription',
                     data: templateData
@@ -488,22 +524,16 @@ export const SalesProvider = ({ children }) => {
                 created_at: new Date().toISOString()
             };
 
-            // 1. Escribir en la colección raíz 'mail' para que la extensión Trigger Email lo detecte y envíe instantáneamente
+            // Escribir únicamente en la colección raíz 'mail' para que la extensión Trigger Email lo detecte y envíe
             const rootMailCol = collection(db, 'mail');
             await addDoc(rootMailCol, mailPayload);
 
-            // 2. Escribir en el historial de cada tenant para mantener la auditoría multi-tenant intacta
-            for (const tId of targetTenants) {
-                const tenantMailCol = collection(db, 'tenants', tId, 'mail');
-                await addDoc(tenantMailCol, mailPayload);
-            }
-
             return { success: true };
         } catch (err) {
-            console.error("Error in sendWelcomeEmail (root + dual-tenant):", err);
+            console.error("Error in sendWelcomeEmail (root only):", err);
             return { success: false, error: err.message };
         }
-    }, []);
+    }, [tenantId]);
 
     // Subscriptions
     useEffect(() => {
