@@ -18,41 +18,39 @@ export const SalesProvider = ({ children }) => {
 
     const addClient = useCallback(async (data) => {
         try {
-            const targetTenants = ['zeticas', 'delta'];
+            const tId = tenantId;
             let finalDisplayId = '';
             let firstDocId = '';
 
-            for (const tId of targetTenants) {
-                const counterRef = doc(db, 'tenants', tId, 'metadata', 'counters');
-                let finalNumber;
+            const counterRef = doc(db, 'tenants', tId, 'metadata', 'counters');
+            let finalNumber;
 
-                await runTransaction(db, async (transaction) => {
-                    const counterDoc = await transaction.get(counterRef);
-                    const nextVal = (counterDoc?.exists() ? (counterDoc.data().last_client_number || 0) : 0) + 1;
-                    transaction.set(counterRef, { last_client_number: nextVal }, { merge: true });
-                    finalNumber = nextVal;
-                });
+            await runTransaction(db, async (transaction) => {
+                const counterDoc = await transaction.get(counterRef);
+                const nextVal = (counterDoc?.exists() ? (counterDoc.data().last_client_number || 0) : 0) + 1;
+                transaction.set(counterRef, { last_client_number: nextVal }, { merge: true });
+                finalNumber = nextVal;
+            });
 
-                const displayId = `CLI-${String(finalNumber).padStart(4, '0')}`;
-                if (!finalDisplayId) finalDisplayId = displayId;
+            const displayId = `CLI-${String(finalNumber).padStart(4, '0')}`;
+            if (!finalDisplayId) finalDisplayId = displayId;
 
-                const clientsCol = collection(db, 'tenants', tId, 'clients');
-                const clientDocRef = doc(clientsCol, displayId);
-                await setDoc(clientDocRef, {
-                    ...data,
-                    client_number: displayId,
-                    id: displayId,
-                    created_at: new Date().toISOString()
-                });
-                if (!firstDocId) firstDocId = displayId;
-            }
+            const clientsCol = collection(db, 'tenants', tId, 'clients');
+            const clientDocRef = doc(clientsCol, displayId);
+            await setDoc(clientDocRef, {
+                ...data,
+                client_number: displayId,
+                id: displayId,
+                created_at: new Date().toISOString()
+            });
+            if (!firstDocId) firstDocId = displayId;
 
             return { success: true, id: firstDocId, displayId: finalDisplayId };
         } catch (err) {
-            console.error("Error adding client (dual-tenant consecutive):", err);
+            console.error("Error adding client:", err);
             return { success: false, error: err.message };
         }
-    }, []);
+    }, [tenantId]);
 
     const updateClient = useCallback(async (clientId, payload) => {
         try {
@@ -199,76 +197,74 @@ export const SalesProvider = ({ children }) => {
 
     const addOrder = useCallback(async (data) => {
         try {
-            const targetTenants = ['zeticas', 'delta'];
+            const tId = tenantId;
             let finalDisplayId = '';
             let firstDocId = '';
 
-            for (const tId of targetTenants) {
-                const counterRef = doc(db, 'tenants', tId, 'metadata', 'counters');
-                let finalNumber;
+            const counterRef = doc(db, 'tenants', tId, 'metadata', 'counters');
+            let finalNumber;
 
-                await runTransaction(db, async (transaction) => {
-                    const counterDoc = await transaction.get(counterRef);
-                    const nextVal = (counterDoc?.exists() ? (counterDoc.data().last_order_number || 0) : 0) + 1;
-                    transaction.set(counterRef, { last_order_number: nextVal }, { merge: true });
-                    finalNumber = nextVal;
-                });
+            await runTransaction(db, async (transaction) => {
+                const counterDoc = await transaction.get(counterRef);
+                const nextVal = (counterDoc?.exists() ? (counterDoc.data().last_order_number || 0) : 0) + 1;
+                transaction.set(counterRef, { last_order_number: nextVal }, { merge: true });
+                finalNumber = nextVal;
+            });
 
-                const displayId = String(finalNumber).padStart(4, '0');
-                if (!finalDisplayId) finalDisplayId = displayId;
+            const displayId = String(finalNumber).padStart(4, '0');
+            if (!finalDisplayId) finalDisplayId = displayId;
 
-                const ordersCol = collection(db, 'tenants', tId, 'orders');
-                const docRef = await addDoc(ordersCol, {
-                    ...data,
-                    order_number: displayId,
-                    id: displayId,
-                    created_at: new Date().toISOString()
-                });
-                if (!firstDocId) firstDocId = docRef.id;
+            const ordersCol = collection(db, 'tenants', tId, 'orders');
+            const docRef = await addDoc(ordersCol, {
+                ...data,
+                order_number: displayId,
+                id: displayId,
+                created_at: new Date().toISOString()
+            });
+            if (!firstDocId) firstDocId = docRef.id;
 
-                // Encolar correo de confirmación de pedido para Zeticas
-                if (tId === 'zeticas') {
-                    try {
-                        const masterClient = clients.find(c => 
-                            (c.id && (c.id === data.clientId || c.id === data.client_id || c.id === data.nit)) || 
-                            (c.name && c.name.toLowerCase().trim() === (data.client || '').toLowerCase().trim())
-                        );
-                        const clientEmail = masterClient?.email || data.shipping_email || data.email || data.client_email;
-                        
-                        if (clientEmail && clientEmail !== 'N/A') {
-                            await addDoc(collection(db, 'mail'), {
-                                to: clientEmail,
-                                tenantId: 'zeticas',
-                                template: {
-                                    name: 'order_confirmation',
-                                    data: {
-                                        client: data.client || masterClient?.name || 'Cliente',
-                                        order_number: data.order_number || displayId,
-                                        date: data.date || new Date().toLocaleDateString('es-CO'),
-                                        total_amount: Number(data.total_amount || data.amount || 0).toLocaleString('es-CO'),
-                                        items: (data.items || []).map(item => ({
-                                            name: item.name,
-                                            quantity: item.quantity,
-                                            price: Number(item.price || 0).toLocaleString('es-CO')
-                                        }))
-                                    }
-                                },
-                                created_at: new Date().toISOString()
-                            });
-                            console.log("📨 Correo de confirmación de pedido encolado para:", clientEmail);
-                        }
-                    } catch (emailErr) {
-                        console.error("Error al encolar correo de pedido en landing:", emailErr);
+            // Encolar correo de confirmación de pedido para Zeticas
+            if (tId === 'zeticas') {
+                try {
+                    const masterClient = clients.find(c => 
+                        (c.id && (c.id === data.clientId || c.id === data.client_id || c.id === data.nit)) || 
+                        (c.name && c.name.toLowerCase().trim() === (data.client || '').toLowerCase().trim())
+                    );
+                    const clientEmail = masterClient?.email || data.shipping_email || data.email || data.client_email;
+                    
+                    if (clientEmail && clientEmail !== 'N/A') {
+                        await addDoc(collection(db, 'mail'), {
+                            to: clientEmail,
+                            tenantId: 'zeticas',
+                            template: {
+                                name: 'order_confirmation',
+                                data: {
+                                    client: data.client || masterClient?.name || 'Cliente',
+                                    order_number: data.order_number || displayId,
+                                    date: data.date || new Date().toLocaleDateString('es-CO'),
+                                    total_amount: Number(data.total_amount || data.amount || 0).toLocaleString('es-CO'),
+                                    items: (data.items || []).map(item => ({
+                                        name: item.name,
+                                        quantity: item.quantity,
+                                        price: Number(item.price || 0).toLocaleString('es-CO')
+                                    }))
+                                }
+                            },
+                            created_at: new Date().toISOString()
+                        });
+                        console.log("📨 Correo de confirmación de pedido encolado para:", clientEmail);
                     }
+                } catch (emailErr) {
+                    console.error("Error al encolar correo de pedido en landing:", emailErr);
                 }
             }
 
             return { success: true, id: firstDocId, displayId: finalDisplayId };
         } catch (err) {
-            console.error("Error adding order (dual-tenant):", err);
+            console.error("Error adding order:", err);
             return { success: false, error: err.message };
         }
-    }, [clients]);
+    }, [clients, tenantId]);
 
     const createInternalOrder = useCallback(async (selectedMap = [], type = 'PT') => {
         try {
@@ -366,38 +362,34 @@ export const SalesProvider = ({ children }) => {
 
     const upsertMember = useCallback(async (data) => {
         try {
-            const targetTenants = ['zeticas', 'delta'];
+            const tId = tenantId;
             const baseId = data.nit || data.idNumber || data.id;
             let masterId = null;
-            let existingDocs = {};
+            let existingDoc = null;
 
-            // 1. Buscar en ambos tenants para ver si ya existe un ID CLI-XXXX o documentos antiguos
-            for (const tId of targetTenants) {
-                const clientsCol = collection(db, 'tenants', tId, 'clients');
-                let foundDoc = null;
-                if (baseId) {
-                    const qNit = query(clientsCol, where('nit', '==', baseId));
-                    const snapNit = await getDocs(qNit);
-                    if (!snapNit.empty) foundDoc = snapNit.docs[0];
-                }
-                if (!foundDoc && data.email) {
-                    const qEmail = query(clientsCol, where('email', '==', data.email.toLowerCase().trim()));
-                    const snapEmail = await getDocs(qEmail);
-                    if (!snapEmail.empty) foundDoc = snapEmail.docs[0];
-                }
-
-                if (foundDoc) {
-                    existingDocs[tId] = foundDoc;
-                    const docId = foundDoc.id;
-                    const docClientNumber = foundDoc.data().client_number;
-                    if (docId.startsWith('CLI-')) { masterId = docId; }
-                    else if (docClientNumber && docClientNumber.startsWith('CLI-')) { masterId = docClientNumber; }
-                }
+            // 1. Buscar en el tenant activo para ver si ya existe un ID CLI-XXXX o documentos antiguos
+            const clientsCol = collection(db, 'tenants', tId, 'clients');
+            if (baseId) {
+                const qNit = query(clientsCol, where('nit', '==', baseId));
+                const snapNit = await getDocs(qNit);
+                if (!snapNit.empty) existingDoc = snapNit.docs[0];
+            }
+            if (!existingDoc && data.email) {
+                const qEmail = query(clientsCol, where('email', '==', data.email.toLowerCase().trim()));
+                const snapEmail = await getDocs(qEmail);
+                if (!snapEmail.empty) existingDoc = snapEmail.docs[0];
             }
 
-            // 2. Si no se encontró ningún masterId CLI-XXXX en ningún tenant, generamos uno nuevo maestro
+            if (existingDoc) {
+                const docId = existingDoc.id;
+                const docClientNumber = existingDoc.data().client_number;
+                if (docId.startsWith('CLI-')) { masterId = docId; }
+                else if (docClientNumber && docClientNumber.startsWith('CLI-')) { masterId = docClientNumber; }
+            }
+
+            // 2. Si no se encontró ningún masterId CLI-XXXX, generamos uno nuevo maestro
             if (!masterId) {
-                const counterRef = doc(db, 'tenants', 'zeticas', 'metadata', 'counters');
+                const counterRef = doc(db, 'tenants', tId, 'metadata', 'counters');
                 let finalNumber;
                 await runTransaction(db, async (transaction) => {
                     const counterDoc = await transaction.get(counterRef);
@@ -410,45 +402,40 @@ export const SalesProvider = ({ children }) => {
 
             let finalData = null;
 
-            // 3. Escribir/Migrar en ambos tenants usando el masterId unificado
-            for (const tId of targetTenants) {
-                const clientsCol = collection(db, 'tenants', tId, 'clients');
-                const oldDoc = existingDocs[tId];
+            // 3. Escribir/Migrar en el tenant activo usando el masterId unificado
+            const payload = {
+                ...data,
+                client_number: masterId,
+                id: masterId,
+                updated_at: new Date().toISOString()
+            };
+            if (data.email) payload.email = data.email.toLowerCase().trim();
 
-                const payload = {
-                    ...data,
-                    client_number: masterId,
-                    id: masterId,
-                    updated_at: new Date().toISOString()
-                };
-                if (data.email) payload.email = data.email.toLowerCase().trim();
-
-                if (oldDoc) {
-                    if (oldDoc.id !== masterId) {
-                        // MIGRACIÓN: Tiene un ID antiguo aleatorio. Creamos el nuevo con masterId y borramos el viejo.
-                        const mergedData = { ...oldDoc.data(), ...payload, id: masterId, client_number: masterId };
-                        await setDoc(doc(clientsCol, masterId), mergedData);
-                        await deleteDoc(doc(clientsCol, oldDoc.id));
-                        finalData = mergedData;
-                    } else {
-                        // Ya tiene el masterId correcto, solo actualizamos
-                        await updateDoc(doc(clientsCol, masterId), payload);
-                        finalData = { ...oldDoc.data(), ...payload, id: masterId };
-                    }
+            if (existingDoc) {
+                if (existingDoc.id !== masterId) {
+                    // MIGRACIÓN: Tiene un ID antiguo aleatorio. Creamos el nuevo con masterId y borramos el viejo.
+                    const mergedData = { ...existingDoc.data(), ...payload, id: masterId, client_number: masterId };
+                    await setDoc(doc(clientsCol, masterId), mergedData);
+                    await deleteDoc(doc(clientsCol, existingDoc.id));
+                    finalData = mergedData;
                 } else {
-                    // Documento nuevo en este tenant
-                    payload.created_at = new Date().toISOString();
-                    await setDoc(doc(clientsCol, masterId), payload);
-                    finalData = payload;
+                    // Ya tiene el masterId correcto, solo actualizamos
+                    await updateDoc(doc(clientsCol, masterId), payload);
+                    finalData = { ...existingDoc.data(), ...payload, id: masterId };
                 }
+            } else {
+                // Documento nuevo en este tenant
+                payload.created_at = new Date().toISOString();
+                await setDoc(doc(clientsCol, masterId), payload);
+                finalData = payload;
             }
 
             return { success: true, id: masterId, data: finalData };
         } catch (err) {
-            console.error("Error in upsertMember (dual-tenant unified ID):", err);
+            console.error("Error in upsertMember (single-tenant unified ID):", err);
             return { success: false, error: err.message };
         }
-    }, []);
+    }, [tenantId]);
 
     const saveWebCheckout = useCallback(async (draftData) => {
         try {

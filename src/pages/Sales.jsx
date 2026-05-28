@@ -85,7 +85,8 @@ const Orders = ({ orders }) => {
         address: '',
         city: 'Bogotá D.C.',
         email: '',
-        type: 'Natural'
+        type: 'NIT',
+        sub_type: 'B2B'
     });
     const [clientSearchTerm, setClientSearchTerm] = useState('');
     const [showClientDropdown, setShowClientDropdown] = useState(false);
@@ -124,18 +125,34 @@ const Orders = ({ orders }) => {
     }, [clients, clientSearchTerm]);
 
     const handleCreateQuickClient = async () => {
-        if (!newClientData.name || !newClientData.nit) {
-            alert("El nombre y NIT/ID son obligatorios.");
+        if (!newClientData.name) {
+            alert("El nombre del cliente es obligatorio.");
             return;
         }
         setIsLoading(true);
-        const res = await addClient(newClientData);
+        const isNit = newClientData.type === 'NIT';
+        const clientPayload = {
+            name: newClientData.name,
+            nit: newClientData.nit || 'PENDIENTE',
+            phone: newClientData.phone || '',
+            address: newClientData.address || '',
+            city: newClientData.city || 'Bogotá D.C.',
+            email: newClientData.email || '',
+            id_type: isNit ? 'NIT' : 'Cédula de ciudadanía',
+            type: newClientData.sub_type === 'B2C' ? 'Natural' : 'Jurídica',
+            sub_type: newClientData.sub_type || (isNit ? 'B2B' : 'B2C'),
+            source: 'Manual',
+            status: 'Active',
+            balance: 0,
+            audit_status: 'pending'
+        };
+        const res = await addClient(clientPayload);
         if (res.success) {
             setNewOrder({ ...newOrder, client: newClientData.name, clientId: res.id });
             setShowNewClientForm(false);
             setClientSearchTerm(newClientData.name);
             setShowClientDropdown(false);
-            setNewClientData({ name: '', nit: '', phone: '', address: '', city: 'Bogotá D.C.', email: '', type: 'Natural' });
+            setNewClientData({ name: '', nit: '', phone: '', address: '', city: 'Bogotá D.C.', email: '', type: 'NIT', sub_type: 'B2B' });
         } else {
             alert(`Error: ${res.error}`);
         }
@@ -152,9 +169,10 @@ const Orders = ({ orders }) => {
             nit: '',
             phone: '',
             address: '',
-            city: '',
+            city: 'Bogotá D.C.',
             email: '',
-            type: 'Natural'
+            type: 'NIT',
+            sub_type: 'B2B'
         });
     };
 
@@ -1802,79 +1820,204 @@ const Orders = ({ orders }) => {
                                                     <h4 style={{ margin: 0, fontSize: '0.85rem', color: deepTeal, fontWeight: '900' }}>REGISTRO RÁPIDO</h4>
                                                     <button onClick={handleCancelNewClient} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={16} /></button>
                                                 </div>
-                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                                    <input 
-                                                        placeholder="Nombre Completo" 
-                                                        value={newClientData.name}
-                                                        onChange={(e) => setNewClientData({...newClientData, name: e.target.value})}
-                                                        style={{ padding: '0.8rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '0.85rem', fontWeight: '700' }}
-                                                    />
-                                                    <input 
-                                                        placeholder="NIT / Cédula" 
-                                                        value={newClientData.nit}
-                                                        onChange={(e) => setNewClientData({...newClientData, nit: e.target.value})}
-                                                        style={{ padding: '0.8rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '0.85rem', fontWeight: '700' }}
-                                                    />
-                                                    <input 
-                                                        placeholder="Teléfono" 
-                                                        value={newClientData.phone}
-                                                        onChange={(e) => setNewClientData({...newClientData, phone: e.target.value})}
-                                                        style={{ padding: '0.8rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '0.85rem', fontWeight: '700' }}
-                                                    />
-                                                    {/* Searchable City Select */}
-                                                    <div style={{ position: 'relative' }}>
-                                                        <input 
-                                                            placeholder="Ciudad / Municipio" 
-                                                            value={citySearch}
-                                                            onFocus={() => setShowCityDropdown(true)}
-                                                            onChange={(e) => {
-                                                                setCitySearch(e.target.value);
-                                                                setShowCityDropdown(true);
-                                                            }}
-                                                            style={{ width: '100%', padding: '0.8rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '0.85rem', fontWeight: '700' }}
-                                                        />
-                                                        {showCityDropdown && filteredCities.length > 0 && (
-                                                            <div style={{
-                                                                position: 'absolute',
-                                                                top: '100%', left: 0, right: 0,
-                                                                background: '#fff',
-                                                                borderRadius: '12px',
-                                                                boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
-                                                                zIndex: 1000,
-                                                                marginTop: '4px',
-                                                                maxHeight: '200px',
-                                                                overflowY: 'auto',
-                                                                border: '1px solid #f1f5f9'
-                                                            }}>
-                                                                {filteredCities.map((c, idx) => (
-                                                                    <div 
-                                                                        key={idx}
-                                                                        onClick={() => {
-                                                                            const selection = `${c.city}, ${c.state}`;
-                                                                            setNewClientData({ ...newClientData, city: selection });
-                                                                            setCitySearch(selection);
-                                                                            setShowCityDropdown(false);
-                                                                        }}
-                                                                        style={{ padding: '0.8rem 1rem', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '700', borderBottom: '1px solid #f1f5f9' }}
-                                                                        onMouseEnter={(e) => (e.target.style.background = '#f8fafc')}
-                                                                        onMouseLeave={(e) => (e.target.style.background = 'transparent')}
-                                                                    >
-                                                                        {c.city} <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>({c.state})</span>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                    <input 
-                                                        placeholder="Dirección" 
-                                                        value={newClientData.address}
-                                                        onChange={(e) => setNewClientData({...newClientData, address: e.target.value})}
-                                                        style={{ padding: '0.8rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '0.85rem', fontWeight: '700', gridColumn: 'span 2' }}
-                                                    />
-                                                </div>
+                                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                                     {/* 1. Tipo de Documento */}
+                                                     <div>
+                                                         <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: '900', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.4rem' }}>Tipo de Documento</label>
+                                                         <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                             <button 
+                                                                 type="button" 
+                                                                 onClick={() => setNewClientData({...newClientData, type: 'NIT', sub_type: 'B2B'})} 
+                                                                 style={{
+                                                                     flex: 1,
+                                                                     padding: '0.8rem',
+                                                                     borderRadius: '12px',
+                                                                     border: '1px solid ' + (newClientData.type === 'NIT' ? deepTeal : '#e2e8f0'),
+                                                                     background: newClientData.type === 'NIT' ? deepTeal : '#fff',
+                                                                     color: newClientData.type === 'NIT' ? '#fff' : '#64748b',
+                                                                     fontWeight: '900',
+                                                                     fontSize: '0.8rem',
+                                                                     cursor: 'pointer',
+                                                                     transition: 'all 0.2s',
+                                                                     textTransform: 'uppercase'
+                                                                 }}
+                                                             >
+                                                                 NIT
+                                                             </button>
+                                                             <button 
+                                                                 type="button" 
+                                                                 onClick={() => setNewClientData({...newClientData, type: 'Cédula', sub_type: 'B2C'})} 
+                                                                 style={{
+                                                                     flex: 1,
+                                                                     padding: '0.8rem',
+                                                                     borderRadius: '12px',
+                                                                     border: '1px solid ' + (newClientData.type === 'Cédula' ? deepTeal : '#e2e8f0'),
+                                                                     background: newClientData.type === 'Cédula' ? deepTeal : '#fff',
+                                                                     color: newClientData.type === 'Cédula' ? '#fff' : '#64748b',
+                                                                     fontWeight: '900',
+                                                                     fontSize: '0.8rem',
+                                                                     cursor: 'pointer',
+                                                                     transition: 'all 0.2s',
+                                                                     textTransform: 'uppercase'
+                                                                 }}
+                                                             >
+                                                                 Cédula
+                                                             </button>
+                                                         </div>
+                                                     </div>
+
+                                                     {/* 2. Número de Documento */}
+                                                     <div>
+                                                         <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: '900', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.4rem' }}>{newClientData.type === 'NIT' ? 'NIT (Sin dígito verif.)' : 'Cédula de Ciudadanía'}</label>
+                                                         <input 
+                                                             placeholder={newClientData.type === 'NIT' ? 'Ej: 901531875' : 'Ej: 1022345...'} 
+                                                             value={newClientData.nit}
+                                                             onChange={(e) => {
+                                                                 const val = e.target.value.replace(/[^0-9]/g, '');
+                                                                 setNewClientData({...newClientData, nit: val});
+                                                             }}
+                                                             style={{ width: '100%', padding: '0.8rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '0.85rem', fontWeight: '700' }}
+                                                         />
+                                                     </div>
+
+                                                     {/* 3. Nombre Completo / Razón Social */}
+                                                     <div style={{ gridColumn: 'span 2' }}>
+                                                         <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: '900', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.4rem' }}>Nombre Completo / Razón Social</label>
+                                                         <input 
+                                                             placeholder="Nombre del cliente..." 
+                                                             value={newClientData.name}
+                                                             onChange={(e) => setNewClientData({...newClientData, name: e.target.value})}
+                                                             style={{ width: '100%', padding: '0.8rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '0.85rem', fontWeight: '700' }}
+                                                         />
+                                                     </div>
+
+                                                     {/* 4. Segmento (Tipo de Cliente) */}
+                                                     <div style={{ gridColumn: 'span 2' }}>
+                                                         <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: '900', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.4rem' }}>Segmento (Tipo de Cliente)</label>
+                                                         <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                             <button 
+                                                                 type="button" 
+                                                                 onClick={() => setNewClientData({...newClientData, sub_type: 'B2B'})} 
+                                                                 style={{
+                                                                     flex: 1,
+                                                                     padding: '0.8rem',
+                                                                     borderRadius: '12px',
+                                                                     border: '1px solid ' + (newClientData.sub_type === 'B2B' ? deepTeal : '#e2e8f0'),
+                                                                     background: newClientData.sub_type === 'B2B' ? '#e6f4f4' : '#fff',
+                                                                     color: newClientData.sub_type === 'B2B' ? deepTeal : '#64748b',
+                                                                     fontWeight: '900',
+                                                                     fontSize: '0.8rem',
+                                                                     cursor: 'pointer',
+                                                                     transition: 'all 0.2s',
+                                                                     textTransform: 'uppercase'
+                                                                 }}
+                                                             >
+                                                                 B2B (Corporativo)
+                                                             </button>
+                                                             <button 
+                                                                 type="button" 
+                                                                 onClick={() => setNewClientData({...newClientData, sub_type: 'B2C'})} 
+                                                                 style={{
+                                                                     flex: 1,
+                                                                     padding: '0.8rem',
+                                                                     borderRadius: '12px',
+                                                                     border: '1px solid ' + (newClientData.sub_type === 'B2C' ? '#d97706' : '#e2e8f0'),
+                                                                     background: newClientData.sub_type === 'B2C' ? '#fff7ed' : '#fff',
+                                                                     color: newClientData.sub_type === 'B2C' ? '#d97706' : '#64748b',
+                                                                     fontWeight: '900',
+                                                                     fontSize: '0.8rem',
+                                                                     cursor: 'pointer',
+                                                                     transition: 'all 0.2s',
+                                                                     textTransform: 'uppercase'
+                                                                 }}
+                                                             >
+                                                                 B2C (Consumo)
+                                                             </button>
+                                                         </div>
+                                                     </div>
+
+                                                     {/* 5. Teléfono */}
+                                                     <div>
+                                                         <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: '900', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.4rem' }}>Teléfono</label>
+                                                         <input 
+                                                             placeholder="Celular/Fijo..." 
+                                                             value={newClientData.phone}
+                                                             onChange={(e) => setNewClientData({...newClientData, phone: e.target.value})}
+                                                             style={{ width: '100%', padding: '0.8rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '0.85rem', fontWeight: '700' }}
+                                                         />
+                                                     </div>
+
+                                                     {/* 6. Correo Electrónico */}
+                                                     <div>
+                                                         <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: '900', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.4rem' }}>Correo Electrónico</label>
+                                                         <input 
+                                                             placeholder="ejemplo@correo.com" 
+                                                             value={newClientData.email}
+                                                             onChange={(e) => setNewClientData({...newClientData, email: e.target.value})}
+                                                             style={{ width: '100%', padding: '0.8rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '0.85rem', fontWeight: '700' }}
+                                                         />
+                                                     </div>
+
+                                                     {/* 7. Ciudad / Municipio */}
+                                                     <div style={{ gridColumn: 'span 2', position: 'relative' }}>
+                                                         <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: '900', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.4rem' }}>Ciudad / Municipio</label>
+                                                         <input 
+                                                             placeholder="Buscar municipio..." 
+                                                             value={citySearch}
+                                                             onFocus={() => setShowCityDropdown(true)}
+                                                             onChange={(e) => {
+                                                                 setCitySearch(e.target.value);
+                                                                 setShowCityDropdown(true);
+                                                             }}
+                                                             style={{ width: '100%', padding: '0.8rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '0.85rem', fontWeight: '700' }}
+                                                         />
+                                                         {showCityDropdown && filteredCities.length > 0 && (
+                                                             <div style={{
+                                                                 position: 'absolute',
+                                                                 top: '100%', left: 0, right: 0,
+                                                                 background: '#fff',
+                                                                 borderRadius: '12px',
+                                                                 boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
+                                                                 zIndex: 1000,
+                                                                 marginTop: '4px',
+                                                                 maxHeight: '200px',
+                                                                 overflowY: 'auto',
+                                                                 border: '1px solid #f1f5f9'
+                                                             }}>
+                                                                 {filteredCities.map((c, idx) => (
+                                                                     <div 
+                                                                         key={idx}
+                                                                         onClick={() => {
+                                                                             const selection = `${c.city}, ${c.state}`;
+                                                                             setNewClientData({ ...newClientData, city: selection });
+                                                                             setCitySearch(selection);
+                                                                             setShowCityDropdown(false);
+                                                                         }}
+                                                                         style={{ padding: '0.8rem 1rem', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '700', borderBottom: '1px solid #f1f5f9' }}
+                                                                         onMouseEnter={(e) => (e.target.style.background = '#f8fafc')}
+                                                                         onMouseLeave={(e) => (e.target.style.background = 'transparent')}
+                                                                     >
+                                                                         {c.city} <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>({c.state})</span>
+                                                                     </div>
+                                                                 ))}
+                                                             </div>
+                                                         )}
+                                                     </div>
+
+                                                     {/* 8. Dirección */}
+                                                     <div style={{ gridColumn: 'span 2' }}>
+                                                         <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: '900', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.4rem' }}>Dirección de Entrega</label>
+                                                         <input 
+                                                             placeholder="Calle, Carrera, Apto..." 
+                                                             value={newClientData.address}
+                                                             onChange={(e) => setNewClientData({...newClientData, address: e.target.value})}
+                                                             style={{ width: '100%', padding: '0.8rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '0.85rem', fontWeight: '700' }}
+                                                         />
+                                                     </div>
+                                                 </div>
                                                 <button 
                                                     onClick={handleCreateQuickClient}
-                                                    disabled={isLoading || !newClientData.name || !newClientData.nit}
+                                                    disabled={isLoading || !newClientData.name}
                                                     style={{ 
                                                         width: '100%', 
                                                         marginTop: '1.2rem', 

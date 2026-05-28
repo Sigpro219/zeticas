@@ -5,6 +5,7 @@ import { useBusiness } from '../context/BusinessContext';
 import { ArrowLeft, CreditCard, Wallet, ShieldCheck, CheckCircle, Truck, MapPin, Settings2, Info } from 'lucide-react';
 import { colombia_cities } from '../data/colombia_cities';
 import CryptoJS from 'crypto-js';
+import { addDoc } from 'firebase/firestore';
 
 import { useMediaQuery } from '../hooks/useMediaQuery';
 
@@ -15,7 +16,7 @@ const Checkout = () => {
     const { 
         addOrder, addClient, clients, siteContent, saveWebCheckout, 
         getWebCheckout, updateWebCheckoutStatus, banks, updateBankBalance,
-        addBank
+        addBank, tCol
     } = useBusiness();
     const navigate = useNavigate();
     const [step, setStep] = useState(1); // 1: Info, 2: Payment, 3: Success
@@ -336,6 +337,22 @@ const Checkout = () => {
                     `Comisión Bold - ${finalOrderNumber}`, 
                     'Comisiones'
                 );
+
+                // Registrar egreso por comisión de Bold para consistencia contable en P&G
+                try {
+                    await addDoc(tCol('expenses'), {
+                        date: new Date().toLocaleDateString('en-CA'),
+                        category: 'Comisiones Bancarias',
+                        description: `Comisión Bold - ${finalOrderNumber}`,
+                        amount: Number(commissionFee),
+                        payment_method: 'Descuento Automático',
+                        bank_id: bbvaBank ? bbvaBank.id : null,
+                        status: 'Pagado',
+                        created_at: new Date().toISOString()
+                    });
+                } catch (expErr) {
+                    console.error("Error al registrar gasto de comisión de Bold:", expErr);
+                }
             }
 
             if (shippingBank && shippingPaid > 0) {

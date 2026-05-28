@@ -6,10 +6,86 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../lib/firebase';
 import { formatQty, formatPrice } from '../utils/format';
 
+const InlinePriceInput = ({ value, onSave, color }) => {
+    const [isEditing, setIsEditing] = React.useState(false);
+    const [tempValue, setTempValue] = React.useState(value);
+
+    React.useEffect(() => {
+        setTempValue(value);
+    }, [value]);
+
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            onSave(parseFloat(tempValue) || 0);
+            setIsEditing(false);
+        } else if (e.key === 'Escape') {
+            setTempValue(value);
+            setIsEditing(false);
+        }
+    };
+
+    const handleBlur = () => {
+        onSave(parseFloat(tempValue) || 0);
+        setIsEditing(false);
+    };
+
+    if (isEditing) {
+        return (
+            <input
+                type="number"
+                value={tempValue}
+                onChange={(e) => setTempValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onBlur={handleBlur}
+                autoFocus
+                style={{
+                    width: '90px',
+                    padding: '0.3rem 0.6rem',
+                    borderRadius: '8px',
+                    border: `2px solid ${color || '#023636'}`,
+                    outline: 'none',
+                    fontWeight: 'bold',
+                    color: color || '#023636',
+                    textAlign: 'right',
+                    fontSize: '0.85rem'
+                }}
+            />
+        );
+    }
+
+    return (
+        <div 
+            onClick={() => setIsEditing(true)}
+            style={{ 
+                cursor: 'pointer', 
+                padding: '4px 8px', 
+                borderRadius: '8px',
+                transition: 'all 0.2s',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                border: '1px solid transparent'
+            }}
+            onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#f8fafc';
+                e.currentTarget.style.borderColor = '#cbd5e1';
+            }}
+            onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.borderColor = 'transparent';
+            }}
+            title="Haga clic para editar"
+        >
+            <span style={{ fontWeight: 'bold' }}>${formatPrice(value || 0)}</span>
+            <Edit3 size={12} style={{ opacity: 0.4, color: '#64748b' }} />
+        </div>
+    );
+};
+
 const Products = () => {
     const { items, refreshData, loading, recalculatePTCosts, addItem, updateItem, deleteItem } = useBusiness();
     const [searchTerm, setSearchTerm] = useState('');
-    const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('Todos');
+    const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('Producto Terminado');
     const [selectedLineFilter, setSelectedLineFilter] = useState('Todos');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -43,6 +119,7 @@ const Products = () => {
         category: 'Producto Terminado',
         product_type: 'Sal',
         price: '',
+        distributor_price: '',
         cost: '',
         stock: '0',
         unit_measure: 'und',
@@ -116,6 +193,7 @@ const Products = () => {
         category: i.category || i.group || 'Otros',
         product_type: i.product_type || 'Kit',
         price: i.price || 0,
+        distributor_price: i.distributor_price || 0,
         cost: i.avgCost || 0,
         stock: i.initial || 0,
         unit_measure: i.unit_measure || i.unit || 'unidad',
@@ -142,7 +220,7 @@ const Products = () => {
             (p.product_type?.toLowerCase().includes(srch)) ||
             (p.category?.toLowerCase().includes(srch));
 
-        const matchesCategory = selectedCategoryFilter === 'Todos' || p.category === selectedCategoryFilter;
+        const matchesCategory = p.category === selectedCategoryFilter;
         const matchesLine = selectedLineFilter === 'Todos' || p.product_type === selectedLineFilter;
 
         return matchesSearch && matchesCategory && matchesLine;
@@ -175,7 +253,7 @@ const Products = () => {
         } else {
             setEditingProduct(null);
             setFormData({
-                sku: '', name: '', category: 'Producto Terminado', product_type: 'Sal', price: '', cost: '', purchase_cost: '', stock: '0', min_stock_level: 0, unit_measure: 'und', purchase_unit: 'und', conversion_factor: 1, type: 'PT', barcode_text: '', batch_size: 1, published: true, components: []
+                sku: '', name: '', category: 'Producto Terminado', product_type: 'Sal', price: '', distributor_price: '', cost: '', purchase_cost: '', stock: '0', min_stock_level: 0, unit_measure: 'und', purchase_unit: 'und', conversion_factor: 1, type: 'PT', barcode_text: '', batch_size: 1, published: true, components: []
             });
         }
         setSelectedFile(null);
@@ -216,6 +294,7 @@ const Products = () => {
                 category: formData.category,
                 product_type: formData.product_type,
                 price: parseFloat(formData.price) || 0,
+                distributor_price: parseFloat(formData.distributor_price) || 0,
                 cost: parseFloat(formData.cost) || 0,
                 stock: parseInt(formData.stock) || 0,
                 unit_measure: formData.unit_measure,
@@ -393,7 +472,8 @@ const Products = () => {
     };
 
     return (
-        <div className="products-module" style={{ padding: '0 0.5rem' }}>            {/* ÁREA DE IMPRESIÓN PROFESIONAL (50mm x 25mm Standard) */}
+        <div className="products-module products-container">
+            {/* ÁREA DE IMPRESIÓN PROFESIONAL (50mm x 25mm Standard) */}
             <div className="print-area">
                 {selectedForPrint.map(p => (
                     <div key={p.id} className="print-label">
@@ -417,27 +497,26 @@ const Products = () => {
             </div>
 
             <div className="no-print">
-                {/* Header and other UI content... */}
-                <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', marginTop: '1rem' }}>
+                <header className="products-header">
                     <div>
-                        <h2 className="font-serif" style={{ fontSize: '1.5rem', color: 'var(--color-primary)', margin: 0 }}>Maestro de SKU / Nube</h2>
-                        <p style={{ color: '#666', fontSize: '0.85rem', margin: 0 }}>Gestión centralizada de costos y precios.</p>
+                        <h2 className="page-title-main">Maestro de SKU / Nube</h2>
+                        <p className="page-subtitle">Gestión centralizada de costos y precios.</p>
                     </div>
-                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: window.innerWidth < 768 ? 'flex-start' : 'flex-end', width: window.innerWidth < 768 ? '100%' : 'auto' }}>
-                        {/* Compact Stats - Fixed 200px width and full text */}
-                        <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', padding: '0.4rem', borderRadius: '20px', gap: '0.8rem', marginRight: '0.5rem' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', background: '#023636', color: '#fff', padding: '0.6rem 1rem', borderRadius: '16px', gap: '0.8rem', boxShadow: '0 4px 12px rgba(2, 54, 54, 0.15)', width: '200px', flexShrink: 0 }}>
-                                <Box size={20} />
-                                <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.1' }}>
-                                    <span style={{ fontSize: '1.2rem', fontWeight: '900' }}>{mpCount}</span>
-                                    <span style={{ fontSize: '0.55rem', opacity: 0.8, fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Materias Primas</span>
+                    <div className="header-actions" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        {/* Compact Stats */}
+                        <div className="stats-container">
+                            <div className="stat-pill primary">
+                                <Box size={14} />
+                                <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                                    <span className="stat-num">{mpCount}</span>
+                                    <span className="stat-label">MP</span>
                                 </div>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', background: '#D4785A', color: '#fff', padding: '0.6rem 1rem', borderRadius: '16px', gap: '0.8rem', boxShadow: '0 4px 12px rgba(212, 120, 90, 0.15)', width: '200px', flexShrink: 0 }}>
-                                <BarcodeIcon size={20} />
-                                <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.1' }}>
-                                    <span style={{ fontSize: '1.2rem', fontWeight: '900' }}>{ptCount}</span>
-                                    <span style={{ fontSize: '0.55rem', opacity: 0.8, fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Productos Terminados</span>
+                            <div className="stat-pill secondary">
+                                <BarcodeIcon size={14} />
+                                <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                                    <span className="stat-num">{ptCount}</span>
+                                    <span className="stat-label">PT</span>
                                 </div>
                             </div>
                         </div>
@@ -445,88 +524,73 @@ const Products = () => {
                         {selectedForPrint.length > 0 && (
                             <button
                                 onClick={handlePrintSelected}
-                                style={{ background: '#D4785A', color: '#fff', padding: '0.7rem 1.5rem', borderRadius: '12px', border: 'none', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 10px 20px rgba(212, 120, 90, 0.2)', fontSize: '0.8rem', height: '42px' }}
+                                className="premium-btn secondary"
                             >
-                                <BarcodeIcon size={18} /> {window.innerWidth < 768 ? 'Imprimir' : `Imprimir ${selectedForPrint.length} Etiquetas`}
+                                <BarcodeIcon size={16} /> 
+                                <span>Imprimir ({selectedForPrint.length})</span>
                             </button>
                         )}
-                        <button onClick={() => handleOpenModal()} style={{ background: '#023636', color: '#fff', padding: '0.7rem 1.5rem', borderRadius: '12px', border: 'none', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 10px 20px rgba(2, 54, 54, 0.15)', whiteSpace: 'nowrap', height: '42px' }}>
-                            <Plus size={18} /> {window.innerWidth < 768 ? 'Nuevo' : 'Nuevo SKU'}
+                        <button onClick={() => handleOpenModal()} className="premium-btn primary">
+                            <Plus size={16} /> 
+                            <span>Nuevo SKU</span>
                         </button>
                     </div>
                 </header>
 
-                <div style={{ background: '#fff', padding: '1.2rem', borderRadius: '25px', marginBottom: '2.5rem', display: 'flex', gap: '1.5rem', alignItems: 'center', boxShadow: '0 15px 35px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
-                    <div style={{ flex: 1, position: 'relative', minWidth: window.innerWidth < 768 ? '100%' : '300px' }}>
-                        <Search size={22} style={{ position: 'absolute', left: '1.5rem', top: '50%', transform: 'translateY(-50%)', color: '#023636', opacity: 0.4 }} />
+                <div className="glass-panel filters-panel">
+                    <div className="search-wrapper">
+                        <Search size={18} style={{ position: 'absolute', left: '1.25rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-primary)', opacity: 0.6 }} />
                         <input
                             placeholder="Buscar SKU, Nombre..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            style={{ width: '100%', padding: '1rem 3rem 1rem 4rem', borderRadius: '20px', border: '1px solid #f1f5f9', outline: 'none', fontSize: '1rem', fontWeight: '500', background: '#f8fafc', transition: 'all 0.3s', boxSizing: 'border-box' }}
-                            onFocus={(e) => { e.target.style.borderColor = '#023636'; e.target.style.background = '#fff'; }}
-                            onBlur={(e) => { e.target.style.borderColor = '#f1f5f9'; e.target.style.background = '#f8fafc'; }}
+                            className="search-input-field"
                         />
                         {searchTerm && (
-                            <button onClick={() => setSearchTerm('')} style={{ position: 'absolute', right: '1.2rem', top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.05)', border: 'none', width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}><X size={16} /></button>
+                            <button onClick={() => setSearchTerm('')} style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.05)', border: 'none', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}><X size={14} /></button>
                         )}
                     </div>
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginRight: '4px' }}>Tipo:</span>
-                        {['Todos', 'Materia Prima', 'Producto Terminado'].map(cat => (
-                            <button
-                                key={cat}
-                                onClick={() => setSelectedCategoryFilter(cat)}
-                                style={{
-                                    padding: '0.6rem 1.2rem',
-                                    borderRadius: '12px',
-                                    border: '1px solid #e2e8f0',
-                                    background: selectedCategoryFilter === cat ? '#023636' : '#fff',
-                                    color: selectedCategoryFilter === cat ? '#fff' : '#64748b',
-                                    fontSize: '0.75rem',
-                                    fontWeight: '900',
-                                    cursor: 'pointer',
-                                    textTransform: 'uppercase',
-                                    transition: 'all 0.3s'
-                                }}
-                            >
-                                {cat}
-                            </button>
-                        ))}
+                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span style={{ fontSize: '0.65rem', fontWeight: '700', color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tipo:</span>
+                            <div className="filter-group">
+                                {['Materia Prima', 'Producto Terminado'].map(cat => (
+                                    <button
+                                        key={cat}
+                                        onClick={() => setSelectedCategoryFilter(cat)}
+                                        className={`filter-btn primary ${selectedCategoryFilter === cat ? 'active' : ''}`}
+                                    >
+                                        {cat}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
 
-                        <div style={{ width: '1px', height: '24px', background: '#e2e8f0', margin: '0 12px' }} />
+                        <div className="responsive-divider" style={{ width: '1px', height: '20px', background: 'rgba(229, 231, 235, 0.8)' }} />
 
-                        <span style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginRight: '4px' }}>Línea:</span>
-                        {['Todos', 'Sal', 'Dulce', 'Kit'].map(line => (
-                            <button
-                                key={line}
-                                onClick={() => setSelectedLineFilter(line)}
-                                style={{
-                                    padding: '0.6rem 1.2rem',
-                                    borderRadius: '12px',
-                                    border: '1px solid #e2e8f0',
-                                    background: selectedLineFilter === line ? '#D4785A' : '#fff',
-                                    color: selectedLineFilter === line ? '#fff' : '#64748b',
-                                    fontSize: '0.75rem',
-                                    fontWeight: '900',
-                                    cursor: 'pointer',
-                                    textTransform: 'uppercase',
-                                    transition: 'all 0.3s'
-                                }}
-                            >
-                                {line}
-                            </button>
-                        ))}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span style={{ fontSize: '0.65rem', fontWeight: '700', color: 'var(--color-text-light)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Línea:</span>
+                            <div className="filter-group">
+                                {['Todos', 'Sal', 'Dulce', 'Kit'].map(line => (
+                                    <button
+                                        key={line}
+                                        onClick={() => setSelectedLineFilter(line)}
+                                        className={`filter-btn secondary ${selectedLineFilter === line ? 'active' : ''}`}
+                                    >
+                                        {line}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
                     </div>
-
                 </div>
 
-                <div style={{ background: '#fff', borderRadius: '20px', border: '1px solid #f1f5f9', overflow: 'hidden' }}>
-                    <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', minWidth: '800px', borderCollapse: 'collapse' }}>
-                            <thead style={{ background: '#f8fafc' }}>
+                <div className="glass-panel table-panel">
+                    <div style={{ overflowX: 'auto' }} className="overflow-x-auto">
+                        <table className="premium-table">
+                            <thead>
                                 <tr>
-                                    <th style={{ padding: '1.2rem', textAlign: 'center', width: '50px' }}>
+                                    <th style={{ textAlign: 'center', width: '60px' }}>
                                         <input
                                             type="checkbox"
                                             checked={selectedForPrint.length === filteredProducts.length && filteredProducts.length > 0}
@@ -534,110 +598,152 @@ const Products = () => {
                                                 if (e.target.checked) setSelectedForPrint(filteredProducts);
                                                 else setSelectedForPrint([]);
                                             }}
-                                            style={{ cursor: 'pointer' }}
+                                            style={{ cursor: 'pointer', accentColor: 'var(--color-primary)' }}
                                         />
                                     </th>
-                                    <th style={{ padding: '1.2rem', textAlign: 'left', fontSize: '0.7rem' }}>SKU</th>
-                                    <th style={{ padding: '1.2rem', textAlign: 'left', fontSize: '0.7rem' }}>PRODUCTO</th>
-                                    <th style={{ padding: '1.2rem', textAlign: 'left', fontSize: '0.7rem' }}>LÍNEA</th>
-                                    <th style={{ padding: '1.2rem', textAlign: 'left', fontSize: '0.7rem' }}>TIPO / CATEGORÍA</th>
-                                    <th style={{ padding: '1.2rem', textAlign: 'left', fontSize: '0.7rem' }}>COSTO</th>
-                                    <th style={{ padding: '1.2rem', textAlign: 'left', fontSize: '0.7rem' }}>PRECIO VENTA</th>
-                                    <th style={{ padding: '1.2rem', textAlign: 'center', fontSize: '0.7rem' }}>ACCIONES</th>
+                                    <th style={{ textAlign: 'left' }}>SKU</th>
+                                    <th style={{ textAlign: 'left' }}>Producto</th>
+                                    <th style={{ textAlign: 'left' }}>Línea</th>
+                                    <th style={{ textAlign: 'left' }}>Categoría</th>
+                                    <th style={{ textAlign: 'left' }}>Costo</th>
+                                    <th style={{ textAlign: 'left' }}>Precio Venta</th>
+                                    <th style={{ textAlign: 'left' }}>Precio Dist.</th>
+                                    <th style={{ textAlign: 'center', width: '120px' }}>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredProducts.map(p => (
-                                    <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9', background: selectedForPrint.find(s => s.id === p.id) ? '#fff7ed' : 'transparent' }}>
-                                        <td style={{ padding: '1rem', textAlign: 'center' }}>
-                                            <input
-                                                type="checkbox"
-                                                checked={!!selectedForPrint.find(s => s.id === p.id)}
-                                                onChange={() => toggleSelection(p)}
-                                                style={{ cursor: 'pointer' }}
-                                            />
-                                        </td>
-                                        <td style={{ padding: '1rem', fontWeight: 'bold', fontSize: '0.85rem' }}>{p.sku}</td>
-                                        <td style={{ padding: '1rem' }}>
-                                            <div 
-                                                onClick={() => p.category !== 'Materia Prima' && handleTableImageClick(p)}
-                                                className={p.category !== 'Materia Prima' ? "table-image-cell" : ""}
-                                                style={{ 
-                                                    display: 'flex', 
-                                                    gap: '1rem', 
-                                                    alignItems: 'center', 
-                                                    cursor: p.category !== 'Materia Prima' ? 'pointer' : 'default',
-                                                    position: 'relative'
-                                                }}
-                                                title={p.category !== 'Materia Prima' ? "Haga clic para subir fotografía" : ""}
-                                            >
-                                                {p.category !== 'Materia Prima' && (
-                                                    p.image_url ? (
-                                                        <div style={{ width: '40px', height: '40px', borderRadius: '8px', overflow: 'hidden', border: `2px solid ${p.published ? '#22c55e' : '#ef4444'}`, background: '#f8f9fa', flexShrink: 0, position: 'relative' }}>
-                                                            <img src={p.image_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                            <div className="img-overlay" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 0.2s' }}>
-                                                                <Plus size={14} color="#fff" />
+                                {filteredProducts.map(p => {
+                                    const isSelected = !!selectedForPrint.find(s => s.id === p.id);
+                                    return (
+                                        <tr key={p.id} className={isSelected ? 'selected' : ''}>
+                                            <td style={{ textAlign: 'center' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isSelected}
+                                                    onChange={() => toggleSelection(p)}
+                                                    style={{ cursor: 'pointer', accentColor: 'var(--color-primary)' }}
+                                                />
+                                            </td>
+                                            <td style={{ fontWeight: '700', fontSize: '0.85rem', color: 'var(--color-primary)' }}>{p.sku}</td>
+                                            <td>
+                                                <div 
+                                                    onClick={() => p.category !== 'Materia Prima' && handleTableImageClick(p)}
+                                                    className={p.category !== 'Materia Prima' ? "table-image-cell" : ""}
+                                                    style={{ 
+                                                        display: 'flex', 
+                                                        gap: '0.75rem', 
+                                                        alignItems: 'center', 
+                                                        cursor: p.category !== 'Materia Prima' ? 'pointer' : 'default',
+                                                        position: 'relative'
+                                                     }}
+                                                    title={p.category !== 'Materia Prima' ? "Haga clic para subir fotografía" : ""}
+                                                >
+                                                    {p.category !== 'Materia Prima' && (
+                                                        p.image_url ? (
+                                                            <div style={{ 
+                                                                width: '38px', 
+                                                                height: '38px', 
+                                                                borderRadius: '10px', 
+                                                                overflow: 'hidden', 
+                                                                border: `2px solid ${p.published ? 'var(--color-primary)' : 'var(--color-secondary)'}`, 
+                                                                background: '#f8fafc', 
+                                                                flexShrink: 0, 
+                                                                position: 'relative',
+                                                                boxShadow: '0 2px 5px rgba(0,0,0,0.05)',
+                                                                transition: 'transform 0.2s'
+                                                            }}>
+                                                                <img src={p.image_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                                <div className="img-overlay" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(2, 83, 87, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 0.2s' }}>
+                                                                    <Plus size={12} color="#fff" />
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    ) : (
-                                                        <div style={{ width: '40px', height: '40px', borderRadius: '8px', border: `2px solid ${p.published ? '#22c55e' : '#ef4444'}`, background: '#fcfcfc', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.2s' }}>
-                                                            <Image size={14} color="#94a3b8" />
-                                                        </div>
-                                                    )
-                                                )}
-                                                <div style={{ transition: 'all 0.2s' }}>
-                                                    <div style={{ fontWeight: 'bold' }}>{p.name}</div>
-                                                    <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{p.unit_measure}</div>
+                                                        ) : (
+                                                            <div style={{ 
+                                                                width: '38px', 
+                                                                height: '38px', 
+                                                                borderRadius: '10px', 
+                                                                border: `2px solid ${p.published ? 'rgba(2, 83, 87, 0.3)' : 'rgba(243, 124, 121, 0.3)'}`, 
+                                                                background: '#fafaf9', 
+                                                                display: 'flex', 
+                                                                alignItems: 'center', 
+                                                                justifyContent: 'center', 
+                                                                flexShrink: 0, 
+                                                                transition: 'all 0.2s',
+                                                                boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                                                            }}>
+                                                                <Image size={14} color="#94a3b8" />
+                                                            </div>
+                                                        )
+                                                    )}
+                                                    <div style={{ transition: 'all 0.2s' }}>
+                                                        <div style={{ fontWeight: '600', color: 'var(--color-text)' }}>{p.name}</div>
+                                                        <div style={{ fontSize: '0.7rem', color: 'var(--color-text-light)' }}>{p.unit_measure}</div>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </td>
-
-                                        <td style={{ padding: '1rem' }}>
-                                            <span style={{ padding: '4px 10px', borderRadius: '8px', fontSize: '0.7rem', fontWeight: '900', background: p.product_type === 'Sal' ? '#f1f5f9' : p.product_type === 'Dulce' ? '#fff7ed' : p.product_type === 'Kit' ? '#f0fdfa' : '#f8fafc', color: p.product_type === 'Sal' ? '#475569' : p.product_type === 'Dulce' ? '#c2410c' : p.product_type === 'Kit' ? '#0d9488' : '#94a3b8', border: '1px solid currentColor', opacity: p.product_type === 'Kit' ? 1 : 1 }}>{p.product_type}</span>
-                                        </td>
-                                        <td style={{ padding: '1rem', fontSize: '0.85rem' }}>{p.category}</td>
-                                        <td style={{ padding: '1rem', color: '#666' }}>${formatPrice(p.cost || 0)}</td>
-                                        <td style={{ padding: '1rem', fontWeight: 'bold', color: 'var(--color-primary)' }}>
-                                            {p.category === 'Producto Terminado' ? `$${formatPrice(p.price || 0)}` : <span style={{ color: '#cbd5e1', fontWeight: 'normal' }}>-</span>}
-                                        </td>
-                                        <td style={{ padding: '1rem', textAlign: 'center' }}>
-                                            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
-                                                <button onClick={() => setBarcodeModal({ show: true, product: p })} style={{ padding: '0.4rem', border: '1px solid #eee', background: 'none', cursor: 'pointer' }}><BarcodeIcon size={14} /></button>
-                                                <button onClick={() => handleOpenModal(p)} style={{ padding: '0.4rem', border: '1px solid #eee', background: 'none', cursor: 'pointer' }}><Edit3 size={14} /></button>
-                                                <button onClick={() => setConfirmModal({ show: true, target: p, title: 'Eliminar SKU', message: '¿Eliminar permanentemente?' })} style={{ padding: '0.4rem', border: '1px solid #fee2e2', background: 'none', cursor: 'pointer', color: '#ef4444' }}><Trash2 size={14} /></button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
+                                            </td>
+                                            <td>
+                                                <span className={`line-badge ${p.product_type?.toLowerCase()}`}>
+                                                    {p.product_type}
+                                                </span>
+                                            </td>
+                                            <td style={{ fontSize: '0.8rem', color: 'var(--color-text-light)' }}>{p.category}</td>
+                                            <td style={{ fontWeight: '500', color: 'var(--color-text-light)' }}>${formatPrice(p.cost || 0)}</td>
+                                            <td>
+                                                {p.category === 'Producto Terminado' ? (
+                                                    <InlinePriceInput 
+                                                        value={p.price} 
+                                                        onSave={async (newVal) => {
+                                                            await updateItem(p.id, { price: newVal });
+                                                        }}
+                                                        color="var(--color-primary)"
+                                                    />
+                                                ) : (
+                                                    <span style={{ color: '#cbd5e1', paddingLeft: '8px' }}>-</span>
+                                                )}
+                                            </td>
+                                            <td>
+                                                {p.category === 'Producto Terminado' ? (
+                                                    <InlinePriceInput 
+                                                        value={p.distributor_price} 
+                                                        onSave={async (newVal) => {
+                                                            await updateItem(p.id, { distributor_price: newVal });
+                                                        }}
+                                                        color="var(--color-secondary)"
+                                                    />
+                                                ) : (
+                                                    <span style={{ color: '#cbd5e1', paddingLeft: '8px' }}>-</span>
+                                                )}
+                                            </td>
+                                            <td style={{ textAlign: 'center' }}>
+                                                <div style={{ display: 'flex', gap: '0.375rem', justifyContent: 'center' }}>
+                                                    <button onClick={() => setBarcodeModal({ show: true, product: p })} className="action-btn-circle" title="Ver código de barras"><BarcodeIcon size={13} /></button>
+                                                    <button onClick={() => handleOpenModal(p)} className="action-btn-circle" title="Editar"><Edit3 size={13} /></button>
+                                                    <button onClick={() => setConfirmModal({ show: true, target: p, title: 'Eliminar SKU', message: '¿Eliminar permanentemente?' })} className="action-btn-circle delete" title="Eliminar"><Trash2 size={13} /></button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
                 </div>
 
                 {isModalOpen && (
-                    <div className="no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: window.innerWidth < 768 ? 'flex-start' : 'center', justifyContent: 'center', zIndex: 3000 }}>
-                        <div style={{
-                            background: '#fff',
-                            padding: window.innerWidth < 768 ? '1.5rem' : '2rem',
-                            borderRadius: window.innerWidth < 768 ? '0' : '24px',
-                            width: '100%',
-                            maxWidth: '500px',
-                            height: window.innerWidth < 768 ? '100%' : 'auto',
-                            maxHeight: window.innerWidth < 768 ? '100%' : '90vh',
-                            overflowY: 'auto',
-                            position: 'relative'
-                        }}>
+                    <div className="modal-overlay">
+                        <div className="modal-content-card" style={{ padding: '2rem' }}>
                             <button onClick={() => setIsModalOpen(false)} style={{ position: 'absolute', right: '1.5rem', top: '1.5rem', border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={24} /></button>
-                            <h3 style={{ marginBottom: '1.5rem', color: 'var(--color-primary)', fontWeight: '800' }}>{editingProduct ? 'Editar SKU' : 'Nuevo SKU'}</h3>
-                            <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+                            <h3 style={{ marginBottom: '1.5rem', color: 'var(--color-primary)', fontWeight: '800', fontFamily: 'var(--font-serif)', fontSize: '1.5rem' }}>{editingProduct ? 'Editar SKU' : 'Nuevo SKU'}</h3>
+                            <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
 
                                 {/* 1. CATEGORÍA - PRIMER CAMPO */}
-                                <div>
-                                    <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>CATEGORÍA</label>
+                                <div className="form-group">
+                                    <label className="form-label-premium">Categoría</label>
                                     <select
                                         value={formData.category}
                                         onChange={(e) => setFormData({ ...formData, category: e.target.value, type: e.target.value === 'Materia Prima' ? 'MP' : 'PT' })}
-                                        style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', background: '#f8fafc', fontWeight: '700', color: 'var(--color-primary)', outline: 'none' }}
+                                        className="form-select-premium"
+                                        style={{ fontWeight: '700', color: 'var(--color-primary)' }}
                                     >
                                         <option value="Producto Terminado">Producto Terminado</option>
                                         <option value="Materia Prima">Materia Prima</option>
@@ -646,55 +752,53 @@ const Products = () => {
                                 </div>
 
                                 {/* 2. Identificación básica */}
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-                                    <div>
-                                        <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>SKU / REFERENCIA</label>
-                                        <input placeholder="Ej: PT-VINAGRETA" value={formData.sku} onChange={(e) => setFormData({ ...formData, sku: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', outline: 'none', fontWeight: 'bold' }} />
+                                <div className="responsive-grid-col2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                    <div className="form-group">
+                                        <label className="form-label-premium">SKU / Referencia</label>
+                                        <input placeholder="Ej: PT-VINAGRETA" value={formData.sku} onChange={(e) => setFormData({ ...formData, sku: e.target.value })} className="form-input-premium" style={{ fontWeight: '700' }} />
                                     </div>
-                                    <div>
-                                        <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>NOMBRE DEL PRODUCTO</label>
-                                        <input placeholder="Nombre descriptivo" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', outline: 'none', fontWeight: 'bold' }} />
+                                    <div className="form-group">
+                                        <label className="form-label-premium">Nombre del Producto</label>
+                                        <input placeholder="Nombre descriptivo" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="form-input-premium" style={{ fontWeight: '700' }} />
                                     </div>
                                 </div>
 
                                 {/* FOTOGRAFÍAS - DISPONIBLES SOLO PARA PRODUCTO TERMINADO / OTROS */}
                                 {formData.category !== 'Materia Prima' && (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                        <div style={{ background: '#f8fafc', padding: '1.2rem', borderRadius: '20px', border: '1px solid #e2e8f0', display: 'flex', gap: '1.2rem', alignItems: 'center' }}>
+                                        <div style={{ background: 'rgba(248, 250, 252, 0.65)', backdropFilter: 'blur(4px)', padding: '1rem', borderRadius: '16px', border: '1px solid rgba(229, 231, 235, 0.6)', display: 'flex', gap: '1rem', alignItems: 'center' }}>
                                             <div style={{ 
-                                                width: '80px', 
-                                                height: '80px', 
-                                                borderRadius: '16px', 
+                                                width: '70px', 
+                                                height: '70px', 
+                                                borderRadius: '12px', 
                                                 border: '2px dashed #cbd5e1', 
                                                 overflow: 'hidden', 
                                                 background: '#fff', 
                                                 display: 'flex', 
                                                 alignItems: 'center', 
                                                 justifyContent: 'center',
-                                                boxShadow: '0 8px 20px rgba(0,0,0,0.05)',
+                                                boxShadow: '0 4px 10px rgba(0,0,0,0.03)',
                                                 flexShrink: 0
                                             }}>
                                                 {previewUrl || formData.image_url ? (
                                                     <img src={previewUrl || formData.image_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                                 ) : (
-                                                    <Image size={24} color="#cbd5e1" />
+                                                    <Image size={20} color="#cbd5e1" />
                                                 )}
                                             </div>
                                             <div style={{ flex: 1 }}>
-                                                <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.2rem', display: 'block', textTransform: 'uppercase' }}>Fotografía Principal</label>
+                                                <label className="form-label-premium" style={{ marginBottom: '0.25rem', display: 'block' }}>Fotografía Principal</label>
                                                 <input type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} id="img-main-upload" />
                                                 <label 
                                                     htmlFor="img-main-upload" 
+                                                    className="premium-btn primary"
                                                     style={{ 
                                                         display: 'inline-block',
-                                                        padding: '0.5rem 1rem', 
-                                                        background: '#023636', 
-                                                        color: '#fff', 
-                                                        borderRadius: '10px', 
+                                                        padding: '0.4rem 0.8rem', 
+                                                        borderRadius: '8px', 
                                                         fontSize: '0.65rem', 
-                                                        fontWeight: '800', 
-                                                        cursor: 'pointer',
-                                                        boxShadow: '0 4px 10px rgba(2, 54, 54, 0.2)'
+                                                        fontWeight: '700', 
+                                                        cursor: 'pointer'
                                                     }}
                                                 >
                                                     CAMBIAR IMAGEN 1
@@ -702,41 +806,39 @@ const Products = () => {
                                             </div>
                                         </div>
 
-                                        <div style={{ background: '#f8fafc', padding: '1.2rem', borderRadius: '20px', border: '1px solid #e2e8f0', display: 'flex', gap: '1.2rem', alignItems: 'center' }}>
+                                        <div style={{ background: 'rgba(248, 250, 252, 0.65)', backdropFilter: 'blur(4px)', padding: '1rem', borderRadius: '16px', border: '1px solid rgba(229, 231, 235, 0.6)', display: 'flex', gap: '1rem', alignItems: 'center' }}>
                                             <div style={{ 
-                                                width: '80px', 
-                                                height: '80px', 
-                                                borderRadius: '16px', 
+                                                width: '70px', 
+                                                height: '70px', 
+                                                borderRadius: '12px', 
                                                 border: '2px dashed #cbd5e1', 
                                                 overflow: 'hidden', 
                                                 background: '#fff', 
                                                 display: 'flex', 
                                                 alignItems: 'center', 
                                                 justifyContent: 'center',
-                                                boxShadow: '0 8px 20px rgba(0,0,0,0.05)',
+                                                boxShadow: '0 4px 10px rgba(0,0,0,0.03)',
                                                 flexShrink: 0
                                             }}>
                                                 {previewUrl2 || formData.image_url_2 ? (
                                                     <img src={previewUrl2 || formData.image_url_2} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                                 ) : (
-                                                    <Image size={24} color="#cbd5e1" />
+                                                    <Image size={20} color="#cbd5e1" />
                                                 )}
                                             </div>
                                             <div style={{ flex: 1 }}>
-                                                <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.2rem', display: 'block', textTransform: 'uppercase' }}>Fotografía de Referencia / Uso</label>
+                                                <label className="form-label-premium" style={{ marginBottom: '0.25rem', display: 'block' }}>Fotografía de Referencia / Uso</label>
                                                 <input type="file" accept="image/*" onChange={handleFileChange2} style={{ display: 'none' }} id="img-secondary-upload" />
                                                 <label 
                                                     htmlFor="img-secondary-upload" 
+                                                    className="premium-btn secondary"
                                                     style={{ 
                                                         display: 'inline-block',
-                                                        padding: '0.5rem 1rem', 
-                                                        background: '#D4785A', 
-                                                        color: '#fff', 
-                                                        borderRadius: '10px', 
+                                                        padding: '0.4rem 0.8rem', 
+                                                        borderRadius: '8px', 
                                                         fontSize: '0.65rem', 
-                                                        fontWeight: '800', 
-                                                        cursor: 'pointer',
-                                                        boxShadow: '0 4px 10px rgba(212, 120, 90, 0.2)'
+                                                        fontWeight: '700', 
+                                                        cursor: 'pointer'
                                                     }}
                                                 >
                                                     CAMBIAR IMAGEN 2
@@ -746,27 +848,27 @@ const Products = () => {
                                     </div>
                                 )}
 
-
                                 {formData.category !== 'Producto Terminado' ? (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                                         {/* Row 1: Units */}
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                            <div>
-                                                <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>UNIDAD DE COMPRA</label>
+                                        <div className="responsive-grid-col2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                            <div className="form-group">
+                                                <label className="form-label-premium">Unidad de Compra</label>
                                                 <select
                                                     value={formData.purchase_unit || formData.unit_measure}
                                                     onChange={(e) => setFormData({ ...formData, purchase_unit: e.target.value })}
-                                                    style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '2px solid #D4785A', background: '#fff', fontWeight: 'bold' }}
+                                                    className="form-select-premium"
+                                                    style={{ borderColor: 'var(--color-secondary)' }}
                                                 >
                                                     {finalUnitOptions.map(u => <option key={u} value={u}>{u}</option>)}
                                                 </select>
                                             </div>
-                                            <div>
-                                                <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>UNIDAD DE USO / RECETA</label>
+                                            <div className="form-group">
+                                                <label className="form-label-premium">Unidad de Uso / Receta</label>
                                                 <select
                                                     value={formData.unit_measure}
                                                     onChange={(e) => setFormData({ ...formData, unit_measure: e.target.value })}
-                                                    style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', background: '#f8fafc', fontWeight: 'bold' }}
+                                                    className="form-select-premium"
                                                 >
                                                     {finalUnitOptions.map(u => <option key={u} value={u}>{u}</option>)}
                                                 </select>
@@ -774,16 +876,16 @@ const Products = () => {
                                         </div>
 
                                         {/* Row 2: Costs (Crossed to match units) */}
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                        <div className="responsive-grid-col2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                                                 <div style={{ flex: 1 }}>
-                                                    <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#10b981', marginBottom: '0.4rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>COSTO TOTAL COMPRA</label>
-                                                    <div style={{ fontSize: '0.65rem', color: '#047857', marginBottom: '0.6rem', fontWeight: '600', minHeight: '1.5rem' }}>
+                                                    <label className="form-label-premium" style={{ color: '#10b981', display: 'block' }}>Costo Total Compra</label>
+                                                    <div style={{ fontSize: '0.65rem', color: '#047857', marginBottom: '0.4rem', fontWeight: '600', minHeight: '1rem' }}>
                                                         {`Valor por 1 ${formData.purchase_unit || 'unidad'}`}
                                                     </div>
                                                 </div>
                                                 <div style={{ position: 'relative', marginTop: 'auto' }}>
-                                                    <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', fontWeight: '900', color: '#059669' }}>$</span>
+                                                    <span style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', fontWeight: '700', color: '#059669', fontSize: '0.875rem' }}>$</span>
                                                     <input
                                                         type="number"
                                                         step="any"
@@ -797,16 +899,13 @@ const Products = () => {
                                                                 cost: newVal ? Number((parseFloat(newVal) / factor).toFixed(4)) : '' 
                                                             });
                                                         }}
+                                                        className="form-input-premium"
                                                         style={{
-                                                            width: '100%',
-                                                            padding: '1rem 1rem 1rem 2rem',
-                                                            borderRadius: '16px',
-                                                            background: '#ecfdf5',
-                                                            border: '2px solid rgba(16, 185, 129, 0.4)',
+                                                            paddingLeft: '1.75rem',
+                                                            background: 'rgba(16, 185, 129, 0.05)',
+                                                            borderColor: 'rgba(16, 185, 129, 0.25)',
                                                             color: '#059669',
-                                                            fontWeight: '900',
-                                                            boxSizing: 'border-box',
-                                                            outline: 'none'
+                                                            fontWeight: '700'
                                                         }}
                                                     />
                                                 </div>
@@ -814,13 +913,13 @@ const Products = () => {
 
                                             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                                                 <div style={{ flex: 1 }}>
-                                                    <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.4rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>COSTO UNITARIO RECETA</label>
-                                                    <div style={{ fontSize: '0.65rem', color: '#64748b', marginBottom: '0.6rem', fontWeight: '600', minHeight: '1.5rem' }}>
+                                                    <label className="form-label-premium" style={{ display: 'block' }}>Costo Unitario Receta</label>
+                                                    <div style={{ fontSize: '0.65rem', color: 'var(--color-text-light)', marginBottom: '0.4rem', fontWeight: '600', minHeight: '1rem' }}>
                                                         {`Valor por 1 ${formData.unit_measure || 'unidad de uso'}`}
                                                     </div>
                                                 </div>
                                                 <div style={{ position: 'relative', marginTop: 'auto' }}>
-                                                    <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', fontWeight: '900', color: '#94a3b8' }}>$</span>
+                                                    <span style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', fontWeight: '700', color: 'var(--color-text-light)', fontSize: '0.875rem' }}>$</span>
                                                     <input 
                                                         type="number" 
                                                         step="any"
@@ -834,20 +933,21 @@ const Products = () => {
                                                                 purchase_cost: newVal ? Number((parseFloat(newVal) * factor).toFixed(2)) : '' 
                                                             });
                                                         }} 
-                                                        style={{ width: '100%', padding: '1rem 1rem 1rem 2rem', borderRadius: '16px', border: '1px solid #e2e8f0', fontWeight: '700', boxSizing: 'border-box' }} 
+                                                        className="form-input-premium"
+                                                        style={{ paddingLeft: '1.75rem' }}
                                                     />
                                                 </div>
                                             </div>
                                         </div>
 
                                         {formData.purchase_unit && formData.unit_measure && formData.purchase_unit !== formData.unit_measure && (
-                                            <div style={{ background: '#f8fafc', padding: '1.2rem', borderRadius: '16px', border: '1px dashed #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', animation: 'fadeIn 0.3s' }}>
-                                                <div style={{ fontSize: '0.75rem', color: '#64748b', lineHeight: '1.4' }}>
-                                                    <b style={{ color: '#023636', display: 'block', marginBottom: '2px' }}>EQUIVALENCIA:</b>
+                                            <div style={{ background: 'rgba(243, 124, 121, 0.03)', backdropFilter: 'blur(4px)', padding: '1rem', borderRadius: '14px', border: '1px solid rgba(243, 124, 121, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', animation: 'fadeIn 0.3s' }}>
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-light)', lineHeight: '1.4' }}>
+                                                    <b style={{ color: 'var(--color-primary)', display: 'block', marginBottom: '2px' }}>EQUIVALENCIA:</b>
                                                     ¿Cuántos <b>{formData.unit_measure}</b> rinde 1 <b>{formData.purchase_unit}</b>?
                                                 </div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: '#fff', padding: '0.5rem 1rem', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.02)', border: '1px solid #e2e8f0' }}>
-                                                    <span style={{ fontSize: '0.8rem', fontWeight: '900', color: '#94a3b8' }}>1 {formData.purchase_unit} = </span>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255, 255, 255, 0.7)', padding: '0.4rem 0.75rem', borderRadius: '10px', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', border: '1px solid rgba(229, 231, 235, 0.6)' }}>
+                                                    <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#94a3b8' }}>1 {formData.purchase_unit} = </span>
                                                     <input
                                                         type="number"
                                                         min="0.0001"
@@ -862,142 +962,165 @@ const Products = () => {
                                                                 purchase_cost: currentCost ? Number((currentCost * parseFloat(newFactor)).toFixed(2)) : formData.purchase_cost
                                                             });
                                                         }}
-                                                        style={{ width: '80px', padding: '0.6rem', borderRadius: '8px', border: '2px solid #D4785A', fontWeight: '900', textAlign: 'center', color: '#023636', outline: 'none' }}
+                                                        style={{ width: '70px', padding: '0.4rem', borderRadius: '6px', border: '2px solid var(--color-secondary)', fontWeight: '700', textAlign: 'center', color: 'var(--color-primary)', outline: 'none' }}
                                                     />
-                                                    <span style={{ fontSize: '0.8rem', fontWeight: '900', color: '#023636' }}>{formData.unit_measure}</span>
+                                                    <span style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--color-primary)' }}>{formData.unit_measure}</span>
                                                 </div>
                                             </div>
                                         )}
                                     </div>
                                 ) : (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                                        {/* Cost and Unit Row */}
+                                        <div className="responsive-grid-col2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                                                 <div style={{ flex: 1 }}>
-                                                    <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.4rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>COSTO DE PRODUCCIÓN</label>
-                                                    <div style={{ fontSize: '0.65rem', color: '#64748b', marginBottom: '0.6rem', fontWeight: '600', minHeight: '1.5rem' }}>
+                                                    <label className="form-label-premium" style={{ display: 'block' }}>Costo de Producción</label>
+                                                    <div style={{ fontSize: '0.65rem', color: 'var(--color-text-light)', marginBottom: '0.4rem', fontWeight: '600', minHeight: '1rem' }}>
                                                         Precio base calculado
                                                     </div>
                                                 </div>
                                                 <div style={{ position: 'relative', marginTop: 'auto' }}>
-                                                    <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', fontWeight: '900', color: '#94a3b8' }}>$</span>
-                                                    <input type="number" value={formData.cost} onChange={(e) => setFormData({ ...formData, cost: e.target.value })} style={{ width: '100%', padding: '1rem 1rem 1rem 2rem', borderRadius: '16px', border: '1px solid #e2e8f0', fontWeight: '700', boxSizing: 'border-box' }} />
+                                                    <span style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', fontWeight: '700', color: 'var(--color-text-light)', fontSize: '0.875rem' }}>$</span>
+                                                    <input type="number" value={formData.cost} onChange={(e) => setFormData({ ...formData, cost: e.target.value })} className="form-input-premium" style={{ paddingLeft: '1.75rem' }} />
                                                 </div>
                                             </div>
 
                                             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                                                 <div style={{ flex: 1 }}>
-                                                    <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.4rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>PRECIO VENTA</label>
-                                                    <div style={{ fontSize: '0.65rem', color: '#64748b', marginBottom: '0.6rem', fontWeight: '600', minHeight: '1.5rem' }}>
-                                                        Precio final al cliente
+                                                    <label className="form-label-premium" style={{ display: 'block' }}>Unidad de Medida</label>
+                                                    <div style={{ fontSize: '0.65rem', color: 'var(--color-text-light)', marginBottom: '0.4rem', fontWeight: '600', minHeight: '1rem' }}>
+                                                        Presentación comercial
                                                     </div>
                                                 </div>
-                                                <div style={{ marginTop: 'auto' }}>
-                                                    <input type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', fontWeight: '700', boxSizing: 'border-box' }} />
+                                                <div style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto' }}>
+                                                    <select value={formData.unit_measure} onChange={(e) => setFormData({ ...formData, unit_measure: e.target.value })} className="form-select-premium" style={{ flex: 1 }}>
+                                                        {finalUnitOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                                                    </select>
+                                                    <button type="button" onClick={() => setShowUnitManager(!showUnitManager)} className="action-btn-circle" style={{ width: '42px', height: '42px', borderRadius: '12px' }}><Plus size={18} /></button>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <div>
-                                            <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>UNIDAD DE MEDIDA</label>
-                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                <select value={formData.unit_measure} onChange={(e) => setFormData({ ...formData, unit_measure: e.target.value })} style={{ flex: 1, padding: '1rem', borderRadius: '16px', border: '1px solid #ddd', background: '#fff', fontWeight: 'bold' }}>
-                                                    {finalUnitOptions.map(u => <option key={u} value={u}>{u}</option>)}
-                                                </select>
-                                                <button type="button" onClick={() => setShowUnitManager(!showUnitManager)} style={{ padding: '0 1.2rem', borderRadius: '16px', border: '1px solid #ddd', background: '#fff', cursor: 'pointer' }}><Plus size={20} /></button>
+                                        {/* Sales and Distributor Prices Row */}
+                                        <div className="responsive-grid-col2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                                                <div style={{ flex: 1 }}>
+                                                    <label className="form-label-premium" style={{ display: 'block' }}>Precio Venta</label>
+                                                    <div style={{ fontSize: '0.65rem', color: 'var(--color-text-light)', marginBottom: '0.4rem', fontWeight: '600', minHeight: '1rem' }}>
+                                                        Precio final al cliente
+                                                    </div>
+                                                </div>
+                                                <div style={{ position: 'relative', marginTop: 'auto' }}>
+                                                    <span style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', fontWeight: '700', color: 'var(--color-text-light)', fontSize: '0.875rem' }}>$</span>
+                                                    <input type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: e.target.value })} className="form-input-premium" style={{ paddingLeft: '1.75rem' }} />
+                                                </div>
+                                            </div>
+
+                                            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                                                <div style={{ flex: 1 }}>
+                                                    <label className="form-label-premium" style={{ display: 'block' }}>Precio Distribuidor</label>
+                                                    <div style={{ fontSize: '0.65rem', color: 'var(--color-text-light)', marginBottom: '0.4rem', fontWeight: '600', minHeight: '1rem' }}>
+                                                        Precio a distribuidores
+                                                    </div>
+                                                </div>
+                                                <div style={{ position: 'relative', marginTop: 'auto' }}>
+                                                    <span style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', fontWeight: '700', color: 'var(--color-text-light)', fontSize: '0.875rem' }}>$</span>
+                                                    <input type="number" value={formData.distributor_price} onChange={(e) => setFormData({ ...formData, distributor_price: e.target.value })} className="form-input-premium" style={{ paddingLeft: '1.75rem' }} />
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
                                 )}
 
                                 {/* Stock de Seguridad - Política Centralizada */}
-                                <div style={{ background: '#fef2f2', padding: '1.2rem', borderRadius: '16px', border: '1px solid #fee2e2' }}>
-                                    <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#dc2626', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                <div style={{ background: 'rgba(248, 250, 252, 0.65)', backdropFilter: 'blur(4px)', padding: '1.25rem', borderRadius: '16px', border: '1px solid rgba(239, 68, 68, 0.18)' }}>
+                                    <label className="form-label-premium" style={{ color: '#dc2626', marginBottom: '0.5rem', display: 'block' }}>
                                         🚨 Política de Stock de Seguridad (Mínimo)
                                     </label>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                                         <input
                                             type="number"
                                             value={formData.min_stock_level}
                                             onChange={(e) => setFormData({ ...formData, min_stock_level: e.target.value })}
-                                            style={{ width: '120px', padding: '0.8rem', borderRadius: '12px', border: '2px solid #ef4444', fontWeight: '900', fontSize: '1.1rem', textAlign: 'center', color: '#b91c1c' }}
+                                            className="form-input-premium"
+                                            style={{ width: '90px', padding: '0.6rem', textAlign: 'center', borderColor: 'rgba(239, 68, 68, 0.25)', color: '#dc2626', fontSize: '1.05rem', fontWeight: '700' }}
                                         />
-                                        <span style={{ fontSize: '1.1rem', fontWeight: '900', color: '#b91c1c' }}>{formData.unit_measure}</span>
-                                        <div style={{ fontSize: '0.8rem', color: '#7f1d1d', fontWeight: '500', lineHeight: '1.3', marginLeft: '0.5rem' }}>
+                                        <span style={{ fontSize: '1rem', fontWeight: '700', color: '#dc2626' }}>{formData.unit_measure}</span>
+                                        <div style={{ fontSize: '0.78rem', color: '#991b1b', fontWeight: '500', lineHeight: '1.3', flex: 1, minWidth: '180px' }}>
                                             Nivel crítico donde el sistema activará señales de reposición.
                                         </div>
                                     </div>
                                 </div>
 
                                 {showUnitManager && (
-                                    <div style={{ padding: '1.2rem', background: '#f8fafc', borderRadius: '20px', border: '1px solid #e2e8f0', animation: 'fadeIn 0.3s' }}>
-                                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-                                            <input placeholder="Nueva unidad" value={newUnitType} onChange={(e) => setNewUnitType(e.target.value)} style={{ flex: 1, padding: '0.6rem', borderRadius: '10px', border: '1px solid #ddd' }} />
-                                            <button type="button" onClick={handleAddUnit} style={{ padding: '0.6rem 1.2rem', background: '#023636', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 'BOLD', cursor: 'pointer' }}>Añadir</button>
+                                    <div style={{ padding: '1rem', background: 'rgba(248, 250, 252, 0.65)', backdropFilter: 'blur(4px)', borderRadius: '16px', border: '1px solid rgba(229, 231, 235, 0.6)', animation: 'fadeIn 0.3s' }}>
+                                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                                            <input placeholder="Nueva unidad" value={newUnitType} onChange={(e) => setNewUnitType(e.target.value)} className="form-input-premium" style={{ flex: 1 }} />
+                                            <button type="button" onClick={handleAddUnit} className="premium-btn primary" style={{ padding: '0.5rem 1rem', borderRadius: '10px' }}>Añadir</button>
                                         </div>
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
                                             {unitOptions.map(u => (
-                                                <div key={u} style={{ padding: '0.4rem 0.8rem', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
+                                                <div key={u} style={{ padding: '0.3rem 0.6rem', background: 'rgba(255, 255, 255, 0.7)', border: '1px solid rgba(229, 231, 235, 0.6)', borderRadius: '8px', fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: '0.375rem', fontWeight: '600' }}>
                                                     {u}
-                                                    <X size={12} style={{ cursor: 'pointer', color: '#ef4444' }} onClick={() => handleRemoveUnit(u)} />
+                                                    <X size={10} style={{ cursor: 'pointer', color: '#ef4444' }} onClick={() => handleRemoveUnit(u)} />
                                                 </div>
                                             ))}
                                         </div>
                                     </div>
                                 )}
 
-                                {/* 5. Clasificación y Etiquetas */}
-                                
                                 {/* 5.5 COMPOSICIÓN DEL KIT - SOLO SI ES KIT */}
                                 {formData.product_type === 'Kit' && (
-                                    <div style={{ background: '#f0fdfa', padding: '1.5rem', borderRadius: '20px', border: '1px solid #ccfbf1', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <label style={{ fontSize: '0.7rem', fontWeight: '900', color: '#0d9488', textTransform: 'uppercase', letterSpacing: '1px' }}>🛠️ COMPOSICIÓN DEL KIT</label>
-                                            <span style={{ fontSize: '0.65rem', background: '#0d9488', color: '#fff', padding: '2px 8px', borderRadius: '6px' }}>COSTO AUTO-CALCULADO</span>
+                                    <div style={{ background: 'rgba(248, 250, 252, 0.6)', backdropFilter: 'blur(4px)', padding: '1.25rem', borderRadius: '20px', border: '1px solid rgba(2, 83, 87, 0.15)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                            <label className="form-label-premium" style={{ color: 'var(--color-primary)' }}>🛠️ Composición del Kit</label>
+                                            <span style={{ fontSize: '0.6rem', fontWeight: '700', background: 'var(--color-primary)', color: '#fff', padding: '2px 8px', borderRadius: '6px' }}>COSTO AUTO-CALCULADO</span>
                                         </div>
 
                                         <div style={{ position: 'relative' }}>
-                                            <Search size={16} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: '#0d9488', opacity: 0.5 }} />
+                                            <Search size={14} style={{ position: 'absolute', left: '0.875rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-primary)', opacity: 0.6 }} />
                                             <input 
                                                 placeholder="Buscar producto o insumo para añadir..." 
                                                 value={compSearch}
                                                 onChange={(e) => setCompSearch(e.target.value)}
-                                                style={{ width: '100%', padding: '0.8rem 1rem 0.8rem 2.5rem', borderRadius: '12px', border: '1px solid #99f6e4', outline: 'none', fontSize: '0.85rem' }} 
+                                                className="form-input-premium"
+                                                style={{ paddingLeft: '2.25rem' }} 
                                             />
                                             {availableForKit.length > 0 && (
-                                                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #ccfbf1', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', zIndex: 10, marginTop: '4px', overflow: 'hidden' }}>
+                                                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid rgba(229, 231, 235, 0.9)', borderRadius: '12px', boxShadow: '0 10px 25px rgba(2, 83, 87, 0.1)', zIndex: 10, marginTop: '4px', overflow: 'hidden' }}>
                                                     {availableForKit.map(p => (
-                                                        <div key={p.id} onClick={() => addComponentToKit(p)} style={{ padding: '0.8rem 1rem', cursor: 'pointer', borderBottom: '1px solid #f0fdfa', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'background 0.2s' }} onMouseEnter={(e) => e.target.style.background = '#f0fdfa'} onMouseLeave={(e) => e.target.style.background = 'transparent'}>
-                                                            <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#0f172a' }}>{p.name} <span style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 'normal' }}>({p.sku})</span></div>
-                                                            <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#0d9488' }}>${p.cost}</div>
+                                                        <div key={p.id} onClick={() => addComponentToKit(p)} style={{ padding: '0.75rem 1rem', cursor: 'pointer', borderBottom: '1px solid rgba(229, 231, 235, 0.5)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'background 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(2, 83, 87, 0.04)'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                                                            <div style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--color-text)' }}>{p.name} <span style={{ fontSize: '0.65rem', color: 'var(--color-text-light)', fontWeight: 'normal' }}>({p.sku})</span></div>
+                                                            <div style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--color-primary)' }}>${p.cost}</div>
                                                         </div>
                                                     ))}
                                                 </div>
                                             )}
                                         </div>
 
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '0.5rem' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.25rem' }}>
                                             {formData.components.length === 0 && (
-                                                <div style={{ padding: '1rem', textAlign: 'center', color: '#64748b', fontSize: '0.75rem', fontStyle: 'italic', background: 'rgba(255,255,255,0.5)', borderRadius: '12px' }}>
+                                                <div style={{ padding: '0.75rem', textAlign: 'center', color: 'var(--color-text-light)', fontSize: '0.75rem', fontStyle: 'italic', background: 'rgba(255, 255, 255, 0.45)', borderRadius: '10px', border: '1px dashed rgba(2, 83, 87, 0.1)' }}>
                                                     No hay componentes añadidos. Busque arriba para empezar.
                                                 </div>
                                             )}
                                             {formData.components.map(c => (
-                                                <div key={c.id} style={{ display: 'flex', alignItems: 'center', background: '#fff', padding: '0.6rem 1rem', borderRadius: '12px', gap: '1rem', border: '1px solid #ccfbf1', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                                                <div key={c.id} style={{ display: 'flex', alignItems: 'center', background: 'rgba(255, 255, 255, 0.75)', padding: '0.5rem 0.75rem', borderRadius: '10px', gap: '0.75rem', border: '1px solid rgba(2, 83, 87, 0.12)', boxShadow: '0 2px 4px rgba(0,0,0,0.01)' }}>
                                                     <div style={{ flex: 1 }}>
-                                                        <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#0f172a' }}>{c.name}</div>
-                                                        <div style={{ fontSize: '0.6rem', color: '#64748b' }}>Costo: ${c.cost} / {c.unit}</div>
+                                                        <div style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--color-text)' }}>{c.name}</div>
+                                                        <div style={{ fontSize: '0.65rem', color: 'var(--color-text-light)' }}>Costo: ${c.cost} / {c.unit}</div>
                                                     </div>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
                                                         <input 
                                                             type="number" 
                                                             value={c.qty} 
                                                             onChange={(e) => updateComponentQty(c.id, e.target.value)}
-                                                            style={{ width: '60px', padding: '0.4rem', borderRadius: '8px', border: '1px solid #99f6e4', textAlign: 'center', fontWeight: '900', color: '#0d9488' }} 
+                                                            style={{ width: '50px', padding: '0.35rem', borderRadius: '6px', border: '1px solid rgba(2, 83, 87, 0.2)', textAlign: 'center', fontWeight: '700', color: 'var(--color-primary)', outline: 'none' }} 
                                                         />
-                                                        <span style={{ fontSize: '0.7rem', color: '#64748b', width: '30px' }}>{c.unit}</span>
-                                                        <button type="button" onClick={() => removeComponentFromKit(c.id)} style={{ padding: '0.4rem', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
-                                                            <Trash2 size={14} />
+                                                        <span style={{ fontSize: '0.7rem', color: 'var(--color-text-light)', width: '25px' }}>{c.unit}</span>
+                                                        <button type="button" onClick={() => removeComponentFromKit(c.id)} className="action-btn-circle delete" style={{ width: '28px', height: '28px' }}>
+                                                            <Trash2 size={12} />
                                                         </button>
                                                     </div>
                                                 </div>
@@ -1005,52 +1128,54 @@ const Products = () => {
                                         </div>
                                         
                                         {formData.components.length > 0 && (
-                                            <div style={{ marginTop: '0.5rem', borderTop: '1px dashed #99f6e4', paddingTop: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <span style={{ fontSize: '0.75rem', fontWeight: '800', color: '#0d9488' }}>COSTO TOTAL DEL KIT:</span>
-                                                <span style={{ fontSize: '1rem', fontWeight: '900', color: '#0d9488' }}>${formData.cost}</span>
+                                            <div style={{ marginTop: '0.25rem', borderTop: '1px dashed rgba(2, 83, 87, 0.2)', paddingTop: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <span style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--color-primary)' }}>COSTO TOTAL DEL KIT:</span>
+                                                <span style={{ fontSize: '0.95rem', fontWeight: '800', color: 'var(--color-primary)' }}>${formData.cost}</span>
                                             </div>
                                         )}
                                     </div>
                                 )}
 
-                                {/* 5.6 Línea y EAN (Restored) */}
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                    <div>
-                                        <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>LÍNEA DE PRODUCTO</label>
-                                        <select value={formData.product_type} onChange={(e) => setFormData({ ...formData, product_type: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', background: '#fff', fontWeight: '700' }}>
+                                {/* 5.6 Línea y EAN */}
+                                <div className="responsive-grid-col2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                    <div className="form-group">
+                                        <label className="form-label-premium">Línea de Producto</label>
+                                        <select value={formData.product_type} onChange={(e) => setFormData({ ...formData, product_type: e.target.value })} className="form-select-premium">
                                             <option value="Sal">Sal</option>
                                             <option value="Dulce">Dulce</option>
                                             <option value="Kit">Kit (Bundle)</option>
                                         </select>
                                     </div>
-                                    <div>
-                                        <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>EAN / BARRAS</label>
-                                        <input placeholder="Ej: ZT001500" value={formData.barcode_text} onChange={(e) => setFormData({ ...formData, barcode_text: e.target.value })} style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', outline: 'none' }} />
+                                    <div className="form-group">
+                                        <label className="form-label-premium">EAN / Barras</label>
+                                        <input placeholder="Ej: ZT001500" value={formData.barcode_text} onChange={(e) => setFormData({ ...formData, barcode_text: e.target.value })} className="form-input-premium" />
                                     </div>
                                 </div>
 
                                 {/* DESCRIPCIÓN Y BENEFICIOS - SOLO PARA PRODUCTO TERMINADO / OTROS */}
                                 {formData.category !== 'Materia Prima' && (
                                     <>
-                                        <div>
-                                            <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>DESCRIPCIÓN COMERCIAL (TIENDA)</label>
+                                        <div className="form-group">
+                                            <label className="form-label-premium">Descripción Comercial (Tienda)</label>
                                             <textarea
                                                 rows="2"
                                                 placeholder="Ej: Mermelada gourmet..."
                                                 value={formData.description}
                                                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                                style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', outline: 'none', fontFamily: 'inherit', fontSize: '0.85rem' }}
+                                                className="form-input-premium"
+                                                style={{ fontFamily: 'inherit', fontSize: '0.85rem', resize: 'vertical' }}
                                             />
                                         </div>
 
-                                        <div>
-                                            <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>NOTAS Y BENEFICIOS (TIENDA)</label>
+                                        <div className="form-group">
+                                            <label className="form-label-premium">Notas y Beneficios (Tienda)</label>
                                             <textarea
                                                 rows="2"
                                                 placeholder="Ej: Rico en antioxidantes..."
                                                 value={formData.benefits}
                                                 onChange={(e) => setFormData({ ...formData, benefits: e.target.value })}
-                                                style={{ width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #e2e8f0', outline: 'none', fontFamily: 'inherit', fontSize: '0.85rem' }}
+                                                className="form-input-premium"
+                                                style={{ fontFamily: 'inherit', fontSize: '0.85rem', resize: 'vertical' }}
                                             />
                                         </div>
                                     </>
@@ -1058,31 +1183,30 @@ const Products = () => {
 
                                 {/* 6. Campos Pro (Producto Terminado) */}
                                 {formData.category === 'Producto Terminado' && (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
 
                                         {/* TAMAÑO DEL LOTE */}
-                                        <div style={{ background: '#f0fdf4', padding: '1rem', borderRadius: '16px', border: '1px solid #bbf7d0' }}>
-                                            <label style={{ fontSize: '0.65rem', fontWeight: '900', color: '#166534', marginBottom: '0.6rem', display: 'block', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                        <div style={{ background: 'rgba(248, 250, 252, 0.65)', backdropFilter: 'blur(4px)', padding: '1.25rem', borderRadius: '16px', border: '1px solid rgba(2, 83, 87, 0.15)' }}>
+                                            <label className="form-label-premium" style={{ color: 'var(--color-primary)', marginBottom: '0.5rem', display: 'block' }}>
                                                 🧴 Tamaño del Lote (frascos / batch)
                                             </label>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                                                 <input
                                                     type="number"
                                                     min="1"
                                                     value={formData.batch_size}
                                                     onChange={(e) => setFormData({ ...formData, batch_size: e.target.value })}
-                                                    style={{ width: '100px', padding: '0.8rem', borderRadius: '12px', border: '2px solid #16a34a', fontWeight: '900', fontSize: '1.1rem', textAlign: 'center', outline: 'none', color: '#166534' }}
+                                                    className="form-input-premium"
+                                                    style={{ width: '90px', padding: '0.6rem', textAlign: 'center', fontSize: '1.05rem', fontWeight: '700', color: 'var(--color-primary)' }}
                                                 />
-                                                <span style={{ fontSize: '0.8rem', color: '#64748b' }}>unidades producidas por lote de producción</span>
+                                                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-light)' }}>unidades producidas por lote de producción</span>
                                             </div>
                                         </div>
 
-
-
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f0fdf4', padding: '1rem', borderRadius: '16px', border: '1px solid #bcf0da' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(248, 250, 252, 0.65)', backdropFilter: 'blur(4px)', padding: '1rem 1.25rem', borderRadius: '16px', border: '1px solid rgba(2, 83, 87, 0.15)' }}>
                                             <div>
-                                                <span style={{ fontSize: '0.8rem', fontWeight: '800', color: '#025357', display: 'block' }}>Publicar en Tienda</span>
-                                                <span style={{ fontSize: '0.65rem', color: '#64748b' }}>¿Mostrar este producto en el catálogo digital?</span>
+                                                <span style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--color-primary)', display: 'block' }}>Publicar en Tienda</span>
+                                                <span style={{ fontSize: '0.65rem', color: 'var(--color-text-light)' }}>¿Mostrar este producto en el catálogo digital?</span>
                                             </div>
                                             <div
                                                 onClick={() => setFormData({ ...formData, published: !formData.published })}
@@ -1090,7 +1214,7 @@ const Products = () => {
                                                     width: '50px',
                                                     height: '26px',
                                                     borderRadius: '13px',
-                                                    background: formData.published ? '#10b981' : '#cbd5e1',
+                                                    background: formData.published ? 'var(--color-primary)' : '#cbd5e1',
                                                     position: 'relative',
                                                     cursor: 'pointer',
                                                     transition: 'all 0.3s ease'
@@ -1112,7 +1236,7 @@ const Products = () => {
                                     </div>
                                 )}
 
-                                <button type="submit" disabled={isSaving} style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', padding: '1.2rem', borderRadius: '16px', fontWeight: '900', cursor: 'pointer', marginTop: '1rem', transition: 'all 0.3s' }}>
+                                <button type="submit" disabled={isSaving} className="premium-btn primary" style={{ width: '100%', padding: '1rem', justifyContent: 'center', marginTop: '0.5rem' }}>
                                     {isSaving ? 'Guardando...' : editingProduct ? 'ACTUALIZAR PRODUCTO' : 'REGISTRAR NUEVO SKU'}
                                 </button>
                             </form>
@@ -1121,27 +1245,28 @@ const Products = () => {
                 )}
 
                 {barcodeModal.show && (
-                    <div className="no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4000 }}>
-                        <div style={{ background: '#fff', padding: '2.5rem', borderRadius: '24px', maxWidth: '400px', textAlign: 'center', position: 'relative' }}>
+                    <div className="modal-overlay">
+                        <div className="modal-content-card" style={{ maxWidth: '400px', padding: '2.5rem', textAlign: 'center' }}>
                             <button onClick={() => setBarcodeModal({ show: false, product: null })} style={{ position: 'absolute', right: '1.5rem', top: '1.5rem', border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={24} /></button>
-                            <h3 style={{ marginBottom: '1.5rem' }}>Generador de Etiqueta Individual</h3>
-                            <div style={{ padding: '1rem', border: '2px dashed #e2e8f0', background: '#f8fafc', borderRadius: '16px', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                            <h3 style={{ marginBottom: '1.5rem', fontFamily: 'var(--font-serif)', color: 'var(--color-primary)', fontSize: '1.5rem', fontWeight: '700' }}>Generador de Etiqueta Individual</h3>
+                            <div style={{ padding: '1.5rem 1rem', border: '1px dashed rgba(2, 83, 87, 0.3)', background: 'rgba(248, 250, 252, 0.6)', backdropFilter: 'blur(4px)', borderRadius: '16px', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                 <Barcode
                                     value={barcodeModal.product?.barcode_text || barcodeModal.product?.sku || 'ERROR'}
                                     format="CODE128"
                                     width={1.5}
                                     height={60}
                                     fontSize={14}
-                                    background="#f8fafc"
+                                    background="#fafaf9"
                                 />
-                                <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.5rem' }}>{barcodeModal.product?.name}</div>
+                                <div style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--color-text)', marginTop: '0.75rem' }}>{barcodeModal.product?.name}</div>
                             </div>
                             <button
                                 onClick={() => {
                                     setSelectedForPrint([barcodeModal.product]);
                                     setTimeout(() => window.print(), 100);
                                 }}
-                                style={{ width: '100%', padding: '1rem', borderRadius: '12px', background: 'var(--color-primary)', color: '#fff', border: 'none', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                                className="premium-btn primary"
+                                style={{ width: '100%', padding: '1rem', justifyContent: 'center' }}
                             >
                                 <BarcodeIcon size={18} /> Imprimir Etiqueta Sola
                             </button>
@@ -1150,14 +1275,14 @@ const Products = () => {
                 )}
 
                 {confirmModal.show && (
-                    <div className="no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4000 }}>
-                        <div style={{ background: '#fff', padding: '2.5rem', borderRadius: '24px', maxWidth: '400px', textAlign: 'center' }}>
+                    <div className="modal-overlay">
+                        <div className="modal-content-card" style={{ maxWidth: '400px', padding: '2.5rem', textAlign: 'center' }}>
                             <div style={{ background: '#fee2e2', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}><Trash2 size={32} color="#ef4444" /></div>
-                            <h3>{confirmModal.title}</h3>
-                            <p style={{ color: '#64748b', marginBottom: '2rem' }}>{confirmModal.message}</p>
-                            <div style={{ display: 'flex', gap: '1rem' }}>
-                                <button onClick={() => setConfirmModal({ show: false, target: null })} style={{ flex: 1, padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer' }}>Cancelar</button>
-                                <button onClick={executeDeletion} style={{ flex: 1, padding: '1rem', borderRadius: '12px', border: 'none', background: '#ef4444', color: '#fff', fontWeight: '800', cursor: 'pointer' }}>Si, Eliminar</button>
+                            <h3 style={{ fontSize: '1.25rem', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontWeight: '700' }}>{confirmModal.title}</h3>
+                            <p style={{ color: 'var(--color-text-light)', marginBottom: '2rem', fontSize: '0.875rem' }}>{confirmModal.message}</p>
+                            <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                <button onClick={() => setConfirmModal({ show: false, target: null })} className="premium-btn" style={{ flex: 1, border: '1px solid rgba(229, 231, 235, 0.8)', background: '#fff', color: 'var(--color-text)', justifyContent: 'center' }}>Cancelar</button>
+                                <button onClick={executeDeletion} className="premium-btn" style={{ flex: 1, background: '#ef4444', color: '#fff', fontWeight: '700', justifyContent: 'center' }}>Sí, Eliminar</button>
                             </div>
                         </div>
                     </div>
@@ -1170,6 +1295,273 @@ const Products = () => {
                 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
                 .print-area { display: none; }
+
+                /* Zeticas Premium Styling Rules */
+                .products-container {
+                    width: 100%;
+                    padding: 0.75rem 1rem;
+                    box-sizing: border-box;
+                }
+
+                .products-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    gap: 1rem;
+                    margin-bottom: 1.25rem;
+                }
+
+                /* Stats Pill Indicators */
+                .stats-container {
+                    display: flex;
+                    align-items: center;
+                    background: rgba(248, 250, 252, 0.65);
+                    backdrop-filter: blur(8px);
+                    padding: 0.2rem;
+                    border-radius: 14px;
+                    border: 1px solid rgba(229, 231, 235, 0.8);
+                    gap: 0.25rem;
+                }
+
+                .stat-pill {
+                    display: flex;
+                    align-items: center;
+                    padding: 0.35rem 0.75rem;
+                    border-radius: 10px;
+                    gap: 0.4rem;
+                    font-weight: 600;
+                    transition: all 0.2s ease;
+                    font-size: 0.8rem;
+                }
+
+                .stat-pill:hover {
+                    transform: translateY(-1px);
+                }
+
+                .stat-pill.primary {
+                    background: rgba(2, 83, 87, 0.04);
+                    border: 1px solid rgba(2, 83, 87, 0.15);
+                    color: var(--color-primary);
+                }
+
+                .stat-pill.primary:hover {
+                    background: rgba(2, 83, 87, 0.08);
+                    border-color: rgba(2, 83, 87, 0.3);
+                }
+
+                .stat-pill.secondary {
+                    background: rgba(243, 124, 121, 0.04);
+                    border: 1px solid rgba(243, 124, 121, 0.15);
+                    color: var(--color-secondary);
+                }
+
+                .stat-pill.secondary:hover {
+                    background: rgba(243, 124, 121, 0.08);
+                    border-color: rgba(243, 124, 121, 0.3);
+                }
+
+                .stat-num {
+                    font-size: 0.95rem;
+                    font-weight: 800;
+                    line-height: 1;
+                }
+
+                .stat-label {
+                    font-size: 0.58rem;
+                    font-weight: 700;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                    opacity: 0.85;
+                    line-height: 1;
+                }
+
+                /* Filters Panel styling */
+                .filters-panel {
+                    display: flex;
+                    gap: 1.25rem;
+                    padding: 0.75rem 1rem;
+                    align-items: center;
+                    flex-wrap: wrap;
+                    margin-bottom: 1.25rem;
+                }
+
+                .search-wrapper {
+                    position: relative;
+                    flex: 1;
+                    min-width: 250px;
+                }
+
+                .search-input-field {
+                    width: 100%;
+                    padding: 0.75rem 1rem 0.75rem 2.5rem;
+                    border-radius: 12px;
+                    border: 1px solid rgba(229, 231, 235, 0.8);
+                    background: #fafaf9;
+                    outline: none;
+                    font-size: 0.875rem;
+                    font-weight: 600;
+                    color: var(--color-text);
+                    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+                }
+
+                .search-input-field:focus {
+                    border-color: var(--color-primary);
+                    background: #fff;
+                    box-shadow: 0 0 0 3px rgba(2, 83, 87, 0.06);
+                }
+
+                .filter-group {
+                    display: flex;
+                    align-items: center;
+                    background: rgba(229, 231, 235, 0.3);
+                    padding: 0.2rem;
+                    border-radius: 10px;
+                    border: 1px solid rgba(229, 231, 235, 0.4);
+                    gap: 2px;
+                }
+
+                .filter-btn {
+                    padding: 0.35rem 0.65rem;
+                    border-radius: 6px;
+                    border: none;
+                    font-size: 0.7rem;
+                    font-weight: 700;
+                    cursor: pointer;
+                    text-transform: uppercase;
+                    letter-spacing: 0.3px;
+                    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+                }
+
+                .filter-btn.primary {
+                    background: transparent;
+                    color: var(--color-text-light);
+                }
+
+                .filter-btn.primary.active {
+                    background: var(--color-primary);
+                    color: #fff;
+                    box-shadow: 0 2px 6px rgba(2, 83, 87, 0.1);
+                }
+
+                .filter-btn.secondary {
+                    background: transparent;
+                    color: var(--color-text-light);
+                }
+
+                .filter-btn.secondary.active {
+                    background: var(--color-secondary);
+                    color: #fff;
+                    box-shadow: 0 2px 6px rgba(243, 124, 121, 0.1);
+                }
+
+                .table-panel {
+                    border-radius: 16px;
+                    overflow: hidden;
+                    background: #fff;
+                    box-shadow: 0 2px 12px rgba(0,0,0,0.01);
+                    border: 1px solid rgba(229, 231, 235, 0.5);
+                    margin-bottom: 1.5rem;
+                }
+
+                .premium-table {
+                    min-width: 800px;
+                }
+
+                .premium-table tr.selected td {
+                    background-color: rgba(243, 124, 121, 0.02);
+                }
+
+                .line-badge {
+                    padding: 0.25rem 0.5rem;
+                    border-radius: 12px;
+                    font-size: 0.68rem;
+                    font-weight: 700;
+                    letter-spacing: 0.2px;
+                    border: 1px solid transparent;
+                    text-transform: uppercase;
+                    display: inline-block;
+                }
+
+                .line-badge.sal {
+                    background-color: rgba(2, 83, 87, 0.05);
+                    color: var(--color-primary);
+                    border-color: rgba(2, 83, 87, 0.1);
+                }
+
+                .line-badge.dulce {
+                    background-color: rgba(243, 124, 121, 0.05);
+                    color: #d45956;
+                    border-color: rgba(243, 124, 121, 0.1);
+                }
+
+                .line-badge.kit {
+                    background-color: rgba(175, 191, 113, 0.06);
+                    color: #798544;
+                    border-color: rgba(175, 191, 113, 0.12);
+                }
+
+                /* Premium Modals Overlay */
+                .modal-overlay {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(2, 83, 87, 0.35);
+                    backdrop-filter: blur(8px);
+                    -webkit-backdrop-filter: blur(8px);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 3000;
+                    padding: 1rem;
+                    animation: fadeInModal 0.2s ease-out;
+                }
+
+                @keyframes fadeInModal {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+
+                .modal-content-card {
+                    background: #fff;
+                    border-radius: 24px;
+                    width: 100%;
+                    max-width: 550px;
+                    max-height: 90vh;
+                    overflow-y: auto;
+                    position: relative;
+                    box-shadow: 0 25px 50px -12px rgba(2, 83, 87, 0.2), 
+                                0 0 0 1px rgba(2, 83, 87, 0.05);
+                    border: 1px solid rgba(255,255,255,0.8);
+                    animation: slideUpModal 0.25s cubic-bezier(0.34, 1.3, 0.64, 1);
+                }
+
+                @keyframes slideUpModal {
+                    from { transform: translateY(15px); opacity: 0; }
+                    to { transform: translateY(0); opacity: 1; }
+                }
+
+                .modal-content-card::-webkit-scrollbar {
+                    width: 6px;
+                }
+                .modal-content-card::-webkit-scrollbar-track {
+                    background: transparent;
+                }
+                .modal-content-card::-webkit-scrollbar-thumb {
+                    background: rgba(229, 231, 235, 0.8);
+                    border-radius: 3px;
+                }
+                .modal-content-card::-webkit-scrollbar-thumb:hover {
+                    background: rgba(203, 213, 225, 1);
+                }
+
+                /* Form Controls */
+                .form-group {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0.375rem;
+                }
 
                 @media print {
                     @page {
@@ -1250,19 +1642,47 @@ const Products = () => {
                     }
                     .no-print { display: none !important; }
                 }
-            `}</style>
 
-            <input 
-                type="file" 
-                id="direct-image-upload" 
-                accept="image/*" 
-                style={{ display: 'none' }} 
-                onChange={handleDirectFileChange} 
-            />
+                /* Responsive utilities */
+                @media (max-width: 768px) {
+                    .products-header {
+                        flex-direction: column;
+                        align-items: flex-start;
+                        gap: 1.25rem;
+                    }
+                    .stats-container {
+                        width: 100%;
+                        justify-content: space-between;
+                    }
+                    .stat-pill {
+                        flex: 1;
+                        justify-content: center;
+                    }
+                    .header-actions {
+                        width: 100%;
+                        display: flex;
+                        gap: 0.5rem;
+                    }
+                    .header-actions button {
+                        flex: 1;
+                        justify-content: center;
+                    }
+                    .modal-content-card {
+                        max-height: 100vh;
+                        border-radius: 0;
+                        height: 100%;
+                    }
+                    .responsive-grid-col2 {
+                        grid-template-columns: 1fr !important;
+                    }
+                    .responsive-divider {
+                        display: none;
+                    }
+                }
 
-            <style>{`
+                /* Image Cell Overlay */
                 .table-image-cell:hover .img-overlay { opacity: 1 !important; }
-                .table-image-cell:hover div:first-child { border-color: var(--color-primary) !important; transform: scale(1.1); }
+                .table-image-cell:hover div:first-child { border-color: var(--color-primary) !important; transform: scale(1.05); }
                 .table-image-cell:hover div:last-child div:first-child { color: var(--color-primary); }
             `}</style>
         </div>

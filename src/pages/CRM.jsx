@@ -329,104 +329,99 @@ const CRM = () => {
     const modalInputStyle = { width: '100%', padding: '0.8rem', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '0.9rem', outline: 'none' };
 
     return (
-        <div style={{ padding: '0 1rem', height: '100%', display: 'flex', flexDirection: 'column', animation: 'fadeUp 0.6s ease-out' }}>
+        <div style={{ padding: '0 0.5rem', height: '100%', display: 'flex', flexDirection: 'column', animation: 'fadeUp 0.6s ease-out' }}>
 
             {/* Top Bar with Pending Tasks Indicator */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3rem', gap: '2rem' }}>
-                <div style={{ display: 'flex', gap: '2rem', flex: 1 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', marginTop: '1.5rem', gap: '1.5rem', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '1.5rem', flex: 1, minWidth: '300px', flexWrap: 'wrap' }}>
                     {[
-                        { label: 'Ingresar Nuevo Lead', val: leads.filter(l => l.stage !== 'Clientes Ingresados' && l.status !== 'Archived').length, color: '#3b82f6', icon: <UserPlus />, action: () => setIsAddModalOpen(true) },
-                        { label: 'Conversiones', val: leads.filter(l => l.stage === 'Clientes Ingresados' && l.status !== 'Archived').length, color: '#10b981', icon: <CheckCircle2 /> }
+                        { label: 'Ingresar Nuevo Lead', val: leads.filter(l => l.stage !== 'Clientes Ingresados' && l.status !== 'Archived').length, color: '#3b82f6', icon: <UserPlus size={20} />, action: () => setIsAddModalOpen(true) },
+                        { label: 'Conversiones', val: leads.filter(l => l.stage === 'Clientes Ingresados' && l.status !== 'Archived').length, color: '#10b981', icon: <CheckCircle2 size={20} /> }
                     ].map((stat, idx) => (
                         <div 
                             key={idx} 
                             onClick={stat.action}
+                            className="glass-panel"
                             style={{ 
-                                background: '#fff', 
-                                padding: '1.5rem 2rem', 
-                                borderRadius: '25px', 
-                                border: '1px solid #f1f5f9', 
+                                padding: '1rem 1.5rem', 
                                 display: 'flex', 
                                 alignItems: 'center', 
-                                gap: '1.5rem', 
-                                boxShadow: '0 10px 25px rgba(0,0,0,0.02)', 
+                                gap: '1.2rem', 
                                 flex: 1,
                                 cursor: stat.action ? 'pointer' : 'default',
                                 transition: 'all 0.3s ease'
                             }}
-                            onMouseEnter={e => stat.action && (e.currentTarget.style.transform = 'translateY(-5px)')}
+                            onMouseEnter={e => stat.action && (e.currentTarget.style.transform = 'translateY(-2px)')}
                             onMouseLeave={e => stat.action && (e.currentTarget.style.transform = 'translateY(0)')}
                         >
-                            <div style={{ width: '48px', height: '48px', background: `${stat.color}10`, color: stat.color, borderRadius: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{stat.icon}</div>
+                            <div style={{ width: '40px', height: '40px', background: `${stat.color}10`, color: stat.color, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{stat.icon}</div>
                             <div>
-                                <div style={{ fontSize: '1.8rem', fontWeight: '900', color: deepTeal }}>{stat.val}</div>
-                                <div style={{ fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase' }}>{stat.label}</div>
+                                <div style={{ fontSize: '1.5rem', fontWeight: '900', color: deepTeal, lineHeight: 1.2 }}>{stat.val}</div>
+                                <div style={{ fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{stat.label}</div>
                             </div>
                         </div>
                     ))}
                 </div>
 
                 {/* Pending Tasks Calendar-style indicator */}
-                <div
-                    onClick={() => setShowTaskList(!showTaskList)}
-                    style={{
-                        background: pendingTasksCount > 0 ? institutionOcre : '#fff',
-                        color: pendingTasksCount > 0 ? '#fff' : deepTeal,
-                        padding: '1.5rem 2rem', borderRadius: '25px', cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', gap: '1.5rem', border: '1px solid #f1f5f9',
-                        boxShadow: '0 10px 25px rgba(0,0,0,0.05)', position: 'relative', transition: 'all 0.3s'
-                    }}
-                >
-                    <Calendar size={28} />
-                    <div>
-                        <div style={{ fontSize: '1.8rem', fontWeight: '900' }}>{pendingTasksCount}</div>
-                        <div style={{ fontSize: '0.7rem', fontWeight: '900', textTransform: 'uppercase' }}>Tareas Pendientes</div>
-                    </div>
-                    {showTaskList && (
-                        <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '1rem', width: '350px', background: '#fff', borderRadius: '20px', boxShadow: '0 15px 45px rgba(0,0,0,0.15)', zIndex: 100, padding: '1.5rem', color: deepTeal }} onClick={(e) => e.stopPropagation()}>
-                            <h4 style={{ margin: '0 0 1rem 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                Seguimientos Pendientes
-                                <X size={18} style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setShowTaskList(false); }} />
-                            </h4>
-                            <div style={{ marginBottom: '1rem' }}>
-                                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.3rem' }}>FILTRAR POR FECHA</label>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <input type="date" value={taskFilterDate} onChange={(e) => setTaskFilterDate(e.target.value)} style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.8rem', outline: 'none' }} />
-                                    {taskFilterDate && <button onClick={() => setTaskFilterDate('')} style={{ background: '#f1f5f9', border: 'none', borderRadius: '8px', padding: '0 10px', cursor: 'pointer' }} title="Limpiar Filtro"><X size={14} /></button>}
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                    <div
+                        onClick={() => setShowTaskList(!showTaskList)}
+                        className="glass-panel"
+                        style={{
+                            background: pendingTasksCount > 0 ? institutionOcre : '#fff',
+                            color: pendingTasksCount > 0 ? '#fff' : deepTeal,
+                            padding: '1rem 1.5rem', cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', gap: '1.2rem',
+                            position: 'relative', transition: 'all 0.3s'
+                        }}
+                    >
+                        <Calendar size={20} />
+                        <div>
+                            <div style={{ fontSize: '1.5rem', fontWeight: '900', lineHeight: 1.2 }}>{pendingTasksCount}</div>
+                            <div style={{ fontSize: '0.65rem', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tareas Pendientes</div>
+                        </div>
+                        {showTaskList && (
+                            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '1rem', width: '350px', background: '#fff', borderRadius: '20px', boxShadow: '0 15px 45px rgba(0,0,0,0.15)', zIndex: 100, padding: '1.5rem', color: deepTeal }} onClick={(e) => e.stopPropagation()}>
+                                <h4 style={{ margin: '0 0 1rem 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontFamily: 'var(--font-serif)', fontSize: '1.1rem' }}>
+                                    Seguimientos Pendientes
+                                    <X size={18} style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setShowTaskList(false); }} />
+                                </h4>
+                                <div style={{ marginBottom: '1rem' }}>
+                                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '900', color: '#94a3b8', marginBottom: '0.3rem' }}>FILTRAR POR FECHA</label>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <input type="date" value={taskFilterDate} onChange={(e) => setTaskFilterDate(e.target.value)} style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.8rem', outline: 'none' }} />
+                                        {taskFilterDate && <button onClick={() => setTaskFilterDate('')} style={{ background: '#f1f5f9', border: 'none', borderRadius: '8px', padding: '0 10px', cursor: 'pointer' }} title="Limpiar Filtro"><X size={14} /></button>}
+                                    </div>
+                                </div>
+                                <div style={{ maxHeight: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                                    {leads.filter(l => l.follow_up_date && !l.task_completed && l.status !== 'Archived' && (!taskFilterDate || l.follow_up_date === taskFilterDate)).map(task => (
+                                        <div key={task.id} style={{ padding: '1rem', background: '#f8fafc', borderRadius: '12px', fontSize: '0.85rem' }}>
+                                            <div style={{ fontWeight: '800' }}>{task.name} - {task.follow_up_date}</div>
+                                            <div style={{ color: '#64748b', margin: '4px 0' }}>{task.follow_up_note || 'Sin nota'}</div>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); handleCompleteTask(task.id); }}
+                                                style={{ background: '#10b981', color: '#fff', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '0.7rem', cursor: 'pointer', marginTop: '5px', fontWeight: '700' }}
+                                            >Marcar como cumplido</button>
+                                        </div>
+                                    ))}
+                                    {leads.filter(l => l.follow_up_date && !l.task_completed && l.status !== 'Archived' && (!taskFilterDate || l.follow_up_date === taskFilterDate)).length === 0 && (
+                                        <div style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem' }}>{taskFilterDate ? 'No hay tareas para esta fecha' : 'No hay tareas pendientes'}</div>
+                                    )}
                                 </div>
                             </div>
-                            <div style={{ maxHeight: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                                {leads.filter(l => l.follow_up_date && !l.task_completed && l.status !== 'Archived' && (!taskFilterDate || l.follow_up_date === taskFilterDate)).map(task => (
-                                    <div key={task.id} style={{ padding: '1rem', background: '#f8fafc', borderRadius: '12px', fontSize: '0.85rem' }}>
-                                        <div style={{ fontWeight: '800' }}>{task.name} - {task.follow_up_date}</div>
-                                        <div style={{ color: '#64748b', margin: '4px 0' }}>{task.follow_up_note || 'Sin nota'}</div>
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); handleCompleteTask(task.id); }}
-                                            style={{ background: '#10b981', color: '#fff', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '0.7rem', cursor: 'pointer', marginTop: '5px' }}
-                                        >Marcar como cumplido</button>
-                                    </div>
-                                ))}
-                                {leads.filter(l => l.follow_up_date && !l.task_completed && l.status !== 'Archived' && (!taskFilterDate || l.follow_up_date === taskFilterDate)).length === 0 && (
-                                    <div style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem' }}>{taskFilterDate ? 'No hay tareas para esta fecha' : 'No hay tareas pendientes'}</div>
-                                )}
-                            </div>
-                        </div>
-                    )}
-                </div>
+                        )}
+                    </div>
 
-                <button
-                    onClick={() => setShowArchived(!showArchived)}
-                    style={{
-                        background: showArchived ? institutionOcre : '#fff',
-                        color: showArchived ? '#fff' : deepTeal,
-                        padding: '1rem 1.5rem', borderRadius: '20px', cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', gap: '0.8rem', border: '1px solid #f1f5f9',
-                        boxShadow: '0 8px 15px rgba(0,0,0,0.03)', fontWeight: '900', fontSize: '0.8rem', transition: 'all 0.3s'
-                    }}
-                >
-                    {showArchived ? <Eye size={18} /> : <EyeOff size={18} />}
-                    {showArchived ? 'OCULTAR ARCHIVADOS' : 'MOSTRAR ARCHIVADOS'}
-                </button>
+                    <button
+                        onClick={() => setShowArchived(!showArchived)}
+                        className="premium-btn secondary"
+                        style={{ padding: '0.75rem 1.25rem', borderRadius: '16px' }}
+                    >
+                        {showArchived ? <Eye size={16} /> : <EyeOff size={16} />}
+                        <span>{showArchived ? 'OCULTAR ARCHIVADOS' : 'MOSTRAR ARCHIVADOS'}</span>
+                    </button>
+                </div>
             </div>
 
             {/* Kanban Board - Responsive Grid */}
@@ -435,44 +430,44 @@ const CRM = () => {
                     const columnLeads = leads.filter(l => l.stage === stage && (showArchived || l.status !== 'Archived'));
                     const color = getColumnColor(stage);
                     return (
-                        <div key={stage} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, stage)} style={{ background: 'rgba(241, 245, 249, 0.5)', borderRadius: '25px', border: '1px solid rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', height: '100%', minHeight: '400px', overflow: 'hidden' }}>
-                            <div style={{ padding: '1.2rem 1.5rem', borderBottom: `4px solid ${color}`, background: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: '900', color: deepTeal, textTransform: 'uppercase', letterSpacing: '1px' }}>{stage}</h3>
-                                <div style={{ background: `${color}15`, color: color, padding: '4px 12px', borderRadius: '10px', fontSize: '0.8rem', fontWeight: '900' }}>{columnLeads.length}</div>
+                        <div key={stage} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, stage)} style={{ background: 'rgba(241, 245, 249, 0.4)', borderRadius: '20px', border: '1px solid rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', height: '100%', minHeight: '400px', overflow: 'hidden' }}>
+                            <div style={{ padding: '1rem 1.25rem', borderBottom: `3px solid ${color}`, background: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <h3 style={{ margin: 0, fontSize: '0.8rem', fontWeight: '900', color: deepTeal, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{stage}</h3>
+                                <div style={{ background: `${color}15`, color: color, padding: '2px 8px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: '900' }}>{columnLeads.length}</div>
                             </div>
-                            <div style={{ padding: '1.5rem', flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div style={{ padding: '1rem', flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                                 {columnLeads.map(lead => (
                                     <div
                                         key={lead.id}
                                         draggable
                                         onDragStart={e => e.dataTransfer.setData('leadId', lead.id)}
-                                        style={{ background: '#fff', padding: '1.5rem', borderRadius: '25px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)', cursor: 'grab', border: '1px solid #f1f5f9', transition: 'all 0.3s' }}
-                                        className="lead-card-hover"
+                                        className="glass-panel lead-card-hover"
+                                        style={{ background: '#fff', padding: '1.25rem', cursor: 'grab', border: '1px solid rgba(229, 231, 235, 0.5)' }}
                                     >
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-                                            <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: '900', color: '#1e293b' }}>{lead.name}</h4>
-                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                <button onClick={(e) => { e.stopPropagation(); setEditingLead(lead); }} style={{ background: 'transparent', border: 'none', color: deepTeal, cursor: 'pointer', opacity: 0.5 }}><Edit2 size={16} /></button>
-                                                <button onClick={(e) => { e.stopPropagation(); handleArchive(lead.id, lead.status); }} style={{ background: 'transparent', border: 'none', color: lead.status === 'Archived' ? institutionOcre : '#64748b', cursor: 'pointer', opacity: 0.5 }} title={lead.status === 'Archived' ? 'Desarchivar' : 'Archivar'}><Archive size={16} /></button>
-                                                <button onClick={(e) => { e.stopPropagation(); handleDelete(lead.id); }} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', opacity: 0.3 }}><Trash2 size={16} /></button>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                                            <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: '800', color: '#1e293b' }}>{lead.name}</h4>
+                                            <div style={{ display: 'flex', gap: '0.35rem' }}>
+                                                <button onClick={(e) => { e.stopPropagation(); setEditingLead(lead); }} className="action-btn-circle" style={{ width: '24px', height: '24px' }}><Edit2 size={12} /></button>
+                                                <button onClick={(e) => { e.stopPropagation(); handleArchive(lead.id, lead.status); }} className="action-btn-circle" style={{ width: '24px', height: '24px', color: lead.status === 'Archived' ? institutionOcre : '#64748b' }} title={lead.status === 'Archived' ? 'Desarchivar' : 'Archivar'}><Archive size={12} /></button>
+                                                <button onClick={(e) => { e.stopPropagation(); handleDelete(lead.id); }} className="action-btn-circle delete" style={{ width: '24px', height: '24px' }}><Trash2 size={12} /></button>
                                             </div>
                                         </div>
 
-                                        <div style={{ color: '#64748b', fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}><Phone size={14} opacity={0.5} /> {lead.phone || 'N/A'}</div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}><Mail size={14} opacity={0.5} /> {lead.email || 'N/A'}</div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}><MapPin size={14} opacity={0.5} /> {lead.city || 'N/A'}</div>
-                                            {lead.address && <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontStyle: 'italic', paddingLeft: '1.5rem', marginTop: '-0.4rem' }}>{lead.address}</div>}
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}><ShoppingCart size={14} opacity={0.5} /> {lead.estimated_volume || 'N/A'}</div>
+                                        <div style={{ color: '#64748b', fontSize: '0.78rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Phone size={12} opacity={0.5} /> {lead.phone || 'N/A'}</div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Mail size={12} opacity={0.5} /> {lead.email || 'N/A'}</div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><MapPin size={12} opacity={0.5} /> {lead.city || 'N/A'}</div>
+                                            {lead.address && <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontStyle: 'italic', paddingLeft: '1.25rem', marginTop: '-0.25rem' }}>{lead.address}</div>}
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><ShoppingCart size={12} opacity={0.5} /> {lead.estimated_volume || 'N/A'}</div>
                                         </div>
 
                                         {lead.follow_up_date && !lead.task_completed && (
-                                            <div style={{ marginTop: '1rem', padding: '8px', background: `${institutionOcre}10`, borderRadius: '10px', fontSize: '0.75rem', color: institutionOcre, fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                            <div style={{ marginTop: '0.75rem', padding: '6px 10px', background: `${institutionOcre}10`, borderRadius: '8px', fontSize: '0.7rem', color: institutionOcre, fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}>
                                                 <Clock size={12} /> Tarea: {lead.follow_up_date}
                                             </div>
                                         )}
 
-                                        <div style={{ marginTop: '1.2rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                        <div style={{ marginTop: '1rem', display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
@@ -480,23 +475,26 @@ const CRM = () => {
                                                     setQuoteDiscount(0);
                                                     setIsQuotationModalOpen(lead);
                                                 }}
-                                                style={{ flex: '1 1 auto', background: deepTeal, color: '#fff', border: 'none', borderRadius: '10px', padding: '0.6rem', fontWeight: '900', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}
+                                                className="premium-btn primary"
+                                                style={{ flex: '1 1 auto', padding: '0.4rem 0.6rem', fontSize: '0.68rem', justifyContent: 'center' }}
                                             >
-                                                <FileText size={14} /> COTIZAR
+                                                <FileText size={12} /> <span>COTIZAR</span>
                                             </button>
                                             <button
                                                 title="Nueva Tarea"
                                                 onClick={(e) => { e.stopPropagation(); setIsFollowUpModalOpen(lead); }}
-                                                style={{ flex: '0 0 auto', background: '#f8fafc', color: deepTeal, border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.6rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                className="premium-btn"
+                                                style={{ flex: '0 0 auto', background: '#f8fafc', color: deepTeal, border: '1px solid #e2e8f0', padding: '0.4rem' }}
                                             >
-                                                <Calendar size={14} />
+                                                <Calendar size={12} />
                                             </button>
                                             {lead.stage === 'Cotización Enviada' && (
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); handleConvertToClient(lead); }}
-                                                    style={{ flex: '1 1 100%', background: '#10b981', color: '#fff', border: 'none', borderRadius: '10px', padding: '0.6rem', fontWeight: '900', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', marginTop: '4px' }}
+                                                    className="premium-btn secondary"
+                                                    style={{ flex: '1 1 100%', padding: '0.4rem 0.6rem', fontSize: '0.68rem', justifyContent: 'center', marginTop: '4px' }}
                                                 >
-                                                    <CheckCircle size={14} /> CONVERTIR
+                                                    <CheckCircle size={12} /> <span>CONVERTIR</span>
                                                 </button>
                                             )}
                                         </div>
@@ -516,8 +514,8 @@ const CRM = () => {
                     right: 0, 
                     bottom: 0, 
                     left: isMobile ? 0 : '280px', 
-                    background: 'rgba(0,0,0,0.6)', 
-                    backdropFilter: 'blur(15px)', 
+                    background: 'rgba(2, 54, 54, 0.4)', 
+                    backdropFilter: 'blur(8px)', 
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center', 
@@ -528,19 +526,19 @@ const CRM = () => {
                         background: '#fff', 
                         width: '100%', 
                         maxWidth: '460px', 
-                        borderRadius: '40px', 
-                        padding: '2.5rem', 
-                        boxShadow: '0 40px 100px rgba(0,0,0,0.4)', 
+                        borderRadius: '24px', 
+                        padding: '2rem', 
+                        boxShadow: '0 25px 50px -12px rgba(2, 83, 87, 0.2)', 
                         position: 'relative', 
                         maxHeight: '90vh', 
                         overflowY: 'auto',
                         animation: 'scaleUp 0.3s ease'
                     }}>
-                        <button onClick={() => setEditingLead(null)} style={{ position: 'absolute', top: '25px', right: '25px', background: '#f8fafc', border: 'none', borderRadius: '50%', padding: '0.6rem', cursor: 'pointer', color: '#64748b' }}><X size={18} /></button>
-                        <h3 style={{ margin: '0 0 0.5rem 0', fontWeight: '900', color: deepTeal, fontSize: '1.6rem' }}>Editar Prospecto</h3>
-                        <p style={{ color: '#64748b', fontSize: '0.85rem', marginBottom: '2rem' }}>Ajusta la información comercial del contacto.</p>
+                        <button onClick={() => setEditingLead(null)} style={{ position: 'absolute', top: '20px', right: '20px', background: '#f8fafc', border: 'none', borderRadius: '50%', padding: '0.6rem', cursor: 'pointer', color: '#64748b' }}><X size={18} /></button>
+                        <h3 style={{ margin: '0 0 0.25rem 0', fontWeight: '800', color: deepTeal, fontSize: '1.5rem', fontFamily: 'var(--font-serif)' }}>Editar Prospecto</h3>
+                        <p style={{ color: '#64748b', fontSize: '0.8rem', marginBottom: '1.5rem' }}>Ajusta la información comercial del contacto.</p>
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             {[
                                 { label: 'Nombre Completo', value: editingLead.name, key: 'name' },
                                 { label: 'NIT / Identificación', value: editingLead.nit, key: 'nit' },
@@ -550,24 +548,24 @@ const CRM = () => {
                                 { label: 'Dirección de Entrega', value: editingLead.address, key: 'address' },
                                 { label: 'Volumen Estimado', value: editingLead.estimated_volume, key: 'estimated_volume' }
                             ].map((field) => (
-                                <div key={field.key} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                                    <label style={{ fontSize: '0.7rem', fontWeight: '900', color: deepTeal, opacity: 0.6, letterSpacing: '0.5px' }}>{field.label.toUpperCase()}</label>
+                                <div key={field.key} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                    <label className="form-label-premium">{field.label}</label>
                                     <input 
                                         type="text" 
                                         list={field.list}
                                         value={field.value || ''} 
                                         onChange={(e) => setEditingLead({ ...editingLead, [field.key]: e.target.value })} 
-                                        style={{ ...modalInputStyle, padding: '0.9rem 1.2rem', borderRadius: '15px' }} 
+                                        className="form-input-premium" 
                                     />
                                 </div>
                             ))}
 
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                                <label style={{ fontSize: '0.7rem', fontWeight: '900', color: deepTeal, opacity: 0.6, letterSpacing: '0.5px' }}>TIPO DE PERFIL</label>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                <label className="form-label-premium">Tipo de Perfil</label>
                                 <select 
                                     value={editingLead.interest_type || 'General'} 
                                     onChange={e => setEditingLead({...editingLead, interest_type: e.target.value})} 
-                                    style={{ ...modalInputStyle, padding: '0.9rem 1.2rem', borderRadius: '15px' }}
+                                    className="form-select-premium"
                                 >
                                     <option value="General">Interés General</option>
                                     <option value="Distribuidor">Distribuidor</option>
@@ -576,11 +574,12 @@ const CRM = () => {
                                 </select>
                             </div>
 
-                            <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
-                                <button onClick={() => setEditingLead(null)} style={{ flex: 1, padding: '1.1rem', borderRadius: '16px', border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontWeight: '800', cursor: 'pointer' }}>CANCELAR</button>
+                            <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.25rem' }}>
+                                <button onClick={() => setEditingLead(null)} style={{ flex: 1, padding: '0.75rem', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontWeight: '700', cursor: 'pointer', fontSize: '0.85rem' }}>CANCELAR</button>
                                 <button 
                                     onClick={async () => { await updateLead(editingLead.id, editingLead); setEditingLead(null); }} 
-                                    style={{ flex: 1.5, padding: '1.1rem', borderRadius: '16px', border: 'none', background: deepTeal, color: '#fff', fontWeight: '900', cursor: 'pointer', boxShadow: `0 10px 20px ${deepTeal}25` }}
+                                    className="premium-btn primary"
+                                    style={{ flex: 1.5, padding: '0.75rem', borderRadius: '12px', justifyContent: 'center', fontSize: '0.85rem' }}
                                 >
                                     GUARDAR CAMBIOS
                                 </button>
@@ -795,44 +794,41 @@ const CRM = () => {
                             <button onClick={async () => { await updateLead(isFollowUpModalOpen.id, { follow_up_date: isFollowUpModalOpen.follow_up_date, follow_up_note: isFollowUpModalOpen.follow_up_note, task_completed: false }); setIsFollowUpModalOpen(false); }} style={{ padding: '1.2rem', borderRadius: '15px', border: 'none', background: institutionOcre, color: '#fff', fontWeight: '900', cursor: 'pointer', marginTop: '1rem', boxShadow: `0 10px 20px ${institutionOcre}30` }}>Sincronizar Tarea</button>
                         </div>
                     </div>
-                </div>
-            )}
-
-            {/* New Lead Modal */}
+                   {/* New Lead Modal */}
             {isAddModalOpen && (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
-                    <div style={{ background: '#fff', width: '100%', maxWidth: '540px', borderRadius: '40px', padding: '3.5rem', boxShadow: '0 30px 60px rgba(0,0,0,0.4)', position: 'relative', animation: 'scaleUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)', margin: '2rem' }}>
-                        <button onClick={() => setIsAddModalOpen(false)} style={{ position: 'absolute', top: '30px', right: '30px', background: '#f8fafc', border: 'none', borderRadius: '50%', padding: '0.6rem', cursor: 'pointer', color: '#64748b', display: 'flex' }}><X size={20} /></button>
-                        <h3 style={{ margin: '0 0 0.5rem 0', fontWeight: '900', color: deepTeal, fontSize: '2rem', letterSpacing: '-1px' }}>Nuevo Prospecto</h3>
-                        <p style={{ color: '#64748b', fontSize: '0.95rem', marginBottom: '2.5rem', fontWeight: '500' }}>Inicia el ciclo comercial registrando un nuevo contacto.</p>
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(2, 54, 54, 0.4)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+                    <div style={{ background: '#fff', width: '100%', maxWidth: '540px', borderRadius: '24px', padding: '2.5rem', boxShadow: '0 25px 50px -12px rgba(2, 83, 87, 0.2)', position: 'relative', animation: 'scaleUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)', margin: '2rem' }}>
+                        <button onClick={() => setIsAddModalOpen(false)} style={{ position: 'absolute', top: '20px', right: '20px', background: '#f8fafc', border: 'none', borderRadius: '50%', padding: '0.6rem', cursor: 'pointer', color: '#64748b', display: 'flex' }}><X size={20} /></button>
+                        <h3 style={{ margin: '0 0 0.25rem 0', fontWeight: '800', color: deepTeal, fontSize: '1.8rem', fontFamily: 'var(--font-serif)' }}>Nuevo Prospecto</h3>
+                        <p style={{ color: '#64748b', fontSize: '0.85rem', marginBottom: '2rem', fontWeight: '500' }}>Inicia el ciclo comercial registrando un nuevo contacto.</p>
                         
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.2rem' }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                    <label style={{ fontSize: '0.7rem', fontWeight: '900', color: deepTeal, paddingLeft: '0.5rem' }}>NOMBRE</label>
-                                    <input type="text" placeholder="Ej: Juan Pérez" value={newLead.name} onChange={e => setNewLead({...newLead, name: e.target.value})} style={modalInputStyle} />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                    <label className="form-label-premium">Nombre</label>
+                                    <input type="text" placeholder="Ej: Juan Pérez" value={newLead.name} onChange={e => setNewLead({...newLead, name: e.target.value})} className="form-input-premium" />
                                 </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                    <label style={{ fontSize: '0.7rem', fontWeight: '900', color: deepTeal, paddingLeft: '0.5rem' }}>WHATSAPP / TEL</label>
-                                    <input type="text" placeholder="300..." value={newLead.phone} onChange={e => setNewLead({...newLead, phone: e.target.value})} style={modalInputStyle} />
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                    <label className="form-label-premium">WhatsApp / Tel</label>
+                                    <input type="text" placeholder="300..." value={newLead.phone} onChange={e => setNewLead({...newLead, phone: e.target.value})} className="form-input-premium" />
                                 </div>
                             </div>
                             
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                <label style={{ fontSize: '0.7rem', fontWeight: '900', color: deepTeal, paddingLeft: '0.5rem' }}>EMAIL</label>
-                                <input type="email" placeholder="contacto@empresa.com" value={newLead.email} onChange={e => setNewLead({...newLead, email: e.target.value})} style={modalInputStyle} />
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                <label className="form-label-premium">Email</label>
+                                <input type="email" placeholder="contacto@empresa.com" value={newLead.email} onChange={e => setNewLead({...newLead, email: e.target.value})} className="form-input-premium" />
                             </div>
                             
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.2rem' }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                    <label style={{ fontSize: '0.7rem', fontWeight: '900', color: deepTeal, paddingLeft: '0.5rem' }}>CIUDAD</label>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                    <label className="form-label-premium">Ciudad</label>
                                     <input 
                                         type="text" 
                                         list="cities-list"
                                         placeholder="Bogotá, etc." 
                                         value={newLead.city} 
                                         onChange={e => setNewLead({...newLead, city: e.target.value})} 
-                                        style={modalInputStyle} 
+                                        className="form-input-premium" 
                                     />
                                     <datalist id="cities-list">
                                         {colombia_cities.map((c, i) => (
@@ -840,9 +836,9 @@ const CRM = () => {
                                         ))}
                                     </datalist>
                                 </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                    <label style={{ fontSize: '0.7rem', fontWeight: '900', color: deepTeal, paddingLeft: '0.5rem' }}>TIPO DE PERFIL</label>
-                                    <select value={newLead.interest_type} onChange={e => setNewLead({...newLead, interest_type: e.target.value})} style={modalInputStyle}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                    <label className="form-label-premium">Tipo de Perfil</label>
+                                    <select value={newLead.interest_type} onChange={e => setNewLead({...newLead, interest_type: e.target.value})} className="form-select-premium">
                                         <option value="General">Interés General</option>
                                         <option value="Distribuidor">Distribuidor</option>
                                         <option value="Maquila">Maquila / Privado</option>
@@ -851,37 +847,30 @@ const CRM = () => {
                                 </div>
                             </div>
                             
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                <label style={{ fontSize: '0.7rem', fontWeight: '900', color: deepTeal, paddingLeft: '0.5rem' }}>NOTAS / VOLUMEN</label>
-                                <textarea placeholder="Ej: Interés en 100 frascos de mermelada mensual." value={newLead.estimated_volume} onChange={e => setNewLead({...newLead, estimated_volume: e.target.value})} style={{ ...modalInputStyle, height: '90px', resize: 'none' }} />
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                <label className="form-label-premium">Notas / Volumen</label>
+                                <textarea placeholder="Ej: Interés en 100 frascos de mermelada..." value={newLead.estimated_volume} onChange={e => setNewLead({...newLead, estimated_volume: e.target.value})} className="form-input-premium" style={{ height: '80px', resize: 'none' }} />
                             </div>
                             
                             <button 
                                 onClick={handleCreateLead}
+                                className="premium-btn primary"
                                 style={{ 
-                                    padding: '1.4rem', 
-                                    borderRadius: '22px', 
-                                    border: 'none', 
-                                    background: `linear-gradient(135deg, ${deepTeal}, #037075)`, 
-                                    color: '#fff', 
-                                    fontWeight: '900', 
-                                    fontSize: '1rem',
-                                    cursor: 'pointer', 
-                                    marginTop: '1.5rem',
-                                    display: 'flex',
-                                    alignItems: 'center',
+                                    padding: '1rem', 
+                                    borderRadius: '16px', 
+                                    fontSize: '0.95rem',
+                                    marginTop: '1rem',
                                     justifyContent: 'center',
-                                    gap: '12px',
-                                    boxShadow: '0 15px 30px rgba(2, 54, 54, 0.3)',
-                                    transition: 'all 0.3s'
+                                    gap: '10px'
                                 }}
-                                onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-3px)'}
-                                onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
                             >
-                                <Zap size={22} fill="#fff" /> EMPRENDER SEGUIMIENTO
+                                <Zap size={18} fill="#fff" />
+                                <span>EMPRENDER SEGUIMIENTO</span>
                             </button>
                         </div>
                     </div>
+                </div>
+            )}
                 </div>
             )}
 
@@ -1073,16 +1062,16 @@ const CRM = () => {
 
 const modalInputStyle = {
     width: '100%',
-    padding: '1.1rem 1.5rem',
-    borderRadius: '18px',
-    border: '1px solid #f1f5f9',
-    background: '#f8fafc',
-    fontSize: '0.95rem',
+    padding: '0.75rem 1rem',
+    borderRadius: '12px',
+    border: '1px solid rgba(229, 231, 235, 0.8)',
+    background: '#fafaf9',
+    fontSize: '0.875rem',
     fontWeight: '600',
-    color: '#0f172a',
+    color: '#353535',
     outline: 'none',
     boxSizing: 'border-box',
-    transition: 'all 0.2s focus'
+    transition: 'all 0.2s'
 };
 
 export default CRM;
