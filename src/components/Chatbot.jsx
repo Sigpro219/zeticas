@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { X, Send, User, Bot, ExternalLink, MessageCircle, MapPin } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
 import { colombia_cities } from '../data/colombia_cities';
+import { supabase } from '../lib/supabase';
 
 const Chatbot = () => {
     const { addLead, ownCompany, siteContent } = useBusiness();
@@ -23,6 +24,7 @@ const Chatbot = () => {
     const [step, setStep] = useState('CHOICE'); // Choice / B2B_FLOW / FAST_HELP
     const [subStep, setSubStep] = useState(0);
     const [inputValue, setInputValue] = useState('');
+    const [isTyping, setIsTyping] = useState(false);
     const [messages, setMessages] = useState([
         { sender: 'bot', text: '¡Hola! 🌿 Soy el asistente de Zeticas. Es un gusto saludarte. ¿Cómo podemos ayudarte hoy?' }
     ]);
@@ -45,6 +47,7 @@ const Chatbot = () => {
         setStep('CHOICE');
         setSubStep(0);
         setInputValue('');
+        setIsTyping(false);
         setLeadData(initialLeadData);
         setMessages([{ sender: 'bot', text: '¡Hola! 🌿 Soy el asistente de Zeticas. Es un gusto saludarte. ¿Cómo podemos ayudarte hoy?' }]);
     };
@@ -53,7 +56,7 @@ const Chatbot = () => {
         if (chatEndRef.current && isOpen) {
             chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
         }
-    }, [messages, isOpen]);
+    }, [messages, isOpen, isTyping]);
 
     if (isGestion) return null;
 
@@ -99,15 +102,19 @@ const Chatbot = () => {
         
         if (choice === 'Duda Rápida / Atención') {
             setStep('FAST_HELP');
+            setIsTyping(true);
             setTimeout(() => {
+                setIsTyping(false);
                 addMessage("¡Perfecto! Te voy a comunicar de inmediato con el encargado. Solo pulsa el botón de abajo para iniciar el chat. 👇", 'bot');
-            }, 600);
+            }, 800);
         } else {
             setStep('B2B_FLOW');
             setLeadData(prev => ({ ...prev, interest_type: choice }));
+            setIsTyping(true);
             setTimeout(() => {
+                setIsTyping(false);
                 addMessage(`¡Excelente elección! Nos encanta trabajar con nuevos distribuidores y aliados. Para darte una atención personalizada, ¿cuál es tu nombre o el de tu negocio?`, 'bot');
-            }, 600);
+            }, 800);
         }
     };
 
@@ -123,60 +130,104 @@ const Chatbot = () => {
                 updatedData.name = text;
                 setLeadData(updatedData);
                 setSubStep(1);
-                setTimeout(() => addMessage(`¡Gusto en saludarte, ${text}! ¿En qué ciudad te encuentras o dónde sería el destino?`, 'bot'), 600);
+                setIsTyping(true);
+                setTimeout(() => {
+                    setIsTyping(false);
+                    addMessage(`¡Gusto en saludarte, ${text}! ¿En qué ciudad te encuentras o dónde sería el destino?`, 'bot');
+                }, 800);
                 break;
             case 1: { // City
                 updatedData.city = text;
                 setLeadData(updatedData);
                 const shipFee = getShippingCost(text);
                 setSubStep(2);
+                setIsTyping(true);
                 setTimeout(() => {
+                    setIsTyping(false);
                     const threshold = siteContent?.web_shipping?.threshold_free || 120000;
                     const feeMsg = shipFee === 0 ? "¡Excelente! Estamos en la misma zona." : `Anotado. Flete para ${text}: $${shipFee.toLocaleString()}. (Envío GRATIS sobre $${Number(threshold).toLocaleString()}).`;
                     addMessage(`${feeMsg} Para una entrega precisa, ¿cuál es tu dirección exacta?`, 'bot');
-                }, 600);
+                }, 1000);
                 break;
             }
             case 2: // Address
                 updatedData.address = text;
                 setLeadData(updatedData);
                 setSubStep(3);
-                setTimeout(() => addMessage(`Perfecto. ¿Qué volumen o cantidad de productos necesitas aproximadamente?`, 'bot'), 600);
+                setIsTyping(true);
+                setTimeout(() => {
+                    setIsTyping(false);
+                    addMessage(`Perfecto. ¿Qué volumen o cantidad de productos necesitas aproximadamente?`, 'bot');
+                }, 800);
                 break;
             case 3: // Volume
                 updatedData.estimated_volume = text;
                 setLeadData(updatedData);
                 setSubStep(4);
-                setTimeout(() => addMessage(`Entendido. ¿Cuál es tu número de teléfono o WhatsApp?`, 'bot'), 600);
+                setIsTyping(true);
+                setTimeout(() => {
+                    setIsTyping(false);
+                    addMessage(`Entendido. ¿Cuál es tu número de teléfono o WhatsApp?`, 'bot');
+                }, 800);
                 break;
             case 4: // Phone
-                updatedData.phone = text;
+                const cleanPhone = text.replace(/\D/g, '');
+                if (cleanPhone.length !== 10) {
+                    setIsTyping(true);
+                    setTimeout(() => {
+                        setIsTyping(false);
+                        addMessage(`⚠️ El número telefónico debe tener exactamente 10 dígitos (ej: 3144336525). Por favor inténtalo de nuevo:`, 'bot');
+                    }, 600);
+                    return;
+                }
+                updatedData.phone = cleanPhone;
                 setLeadData(updatedData);
                 setSubStep(5);
-                setTimeout(() => addMessage(`Por último, déjanos tu correo electrónico para enviarte la lista de precios.`, 'bot'), 600);
+                setIsTyping(true);
+                setTimeout(() => {
+                    setIsTyping(false);
+                    addMessage(`Por último, déjanos tu correo electrónico para enviarte la lista de precios.`, 'bot');
+                }, 800);
                 break;
             case 5: // Email
-                updatedData.email = text;
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!emailRegex.test(text.trim())) {
+                    setIsTyping(true);
+                    setTimeout(() => {
+                        setIsTyping(false);
+                        addMessage(`⚠️ El formato del correo no es válido (ej: cliente@correo.com). Por favor escríbelo de nuevo:`, 'bot');
+                    }, 600);
+                    return;
+                }
+                updatedData.email = text.trim();
                 setLeadData(updatedData);
                 setSubStep(6);
+                setIsTyping(true);
                 setTimeout(async () => {
+                    setIsTyping(false);
                     addMessage(`¡Excelente! He registrado tu interés. Un encargado se pondrá en contacto contigo muy pronto. ¡Gracias por elegir Zeticas! 🌿`, 'bot');
                     
-                    // CRM Save
-                    try {
-                        await addLead({
-                            name: updatedData.name,
-                            city: updatedData.city,
-                            address: updatedData.address,
-                            interest_type: updatedData.interest_type,
-                            estimated_volume: updatedData.estimated_volume,
-                            phone: updatedData.phone,
-                            email: updatedData.email,
-                            stage: 'Nuevo Lead'
-                        });
-                    } catch (e) { console.error("Error saving lead", e); }
+                    const leadPayload = {
+                        name: updatedData.name,
+                        city: updatedData.city,
+                        address: updatedData.address,
+                        interest_type: updatedData.interest_type,
+                        estimated_volume: Number(updatedData.estimated_volume) || updatedData.estimated_volume || 1,
+                        phone: updatedData.phone,
+                        email: updatedData.email,
+                        status: 'NUEVO',
+                        stage: 'Nuevo Lead'
+                    };
                     
-                }, 800);
+                    // CRM Save Dual (Firestore + Supabase)
+                    try {
+                        await addLead(leadPayload);
+                        await supabase.from('leads').insert([leadPayload]);
+                    } catch (e) { 
+                        console.error("Error saving lead dual", e); 
+                    }
+                    
+                }, 1200);
                 break;
             default:
                 break;
@@ -239,6 +290,27 @@ const Chatbot = () => {
                                 </div>
                             </div>
                         ))}
+
+                        {isTyping && (
+                            <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                                <div style={{
+                                    maxWidth: '85%', padding: '12px 16px', borderRadius: '18px', fontSize: '0.92rem',
+                                    backgroundColor: '#fff', color: 'var(--color-text)',
+                                    boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: '1px solid #eee',
+                                    display: 'flex', alignItems: 'center', gap: '4px'
+                                }}>
+                                    <style>{`
+                                        @keyframes chatbotBounce {
+                                            0%, 80%, 100% { transform: scale(0); }
+                                            40% { transform: scale(1.0); }
+                                        }
+                                    `}</style>
+                                    <span style={{ width: '6px', height: '6px', backgroundColor: '#94a3b8', borderRadius: '50%', display: 'inline-block', animation: 'chatbotBounce 1.4s infinite ease-in-out both' }}></span>
+                                    <span style={{ width: '6px', height: '6px', backgroundColor: '#94a3b8', borderRadius: '50%', display: 'inline-block', animation: 'chatbotBounce 1.4s infinite ease-in-out both', animationDelay: '0.2s' }}></span>
+                                    <span style={{ width: '6px', height: '6px', backgroundColor: '#94a3b8', borderRadius: '50%', display: 'inline-block', animation: 'chatbotBounce 1.4s infinite ease-in-out both', animationDelay: '0.4s' }}></span>
+                                </div>
+                            </div>
+                        )}
 
                         {/* INITIAL CHOICES */}
                         {step === 'CHOICE' && messages.length === 1 && (
@@ -308,7 +380,7 @@ const Chatbot = () => {
                     {step === 'B2B_FLOW' && subStep < 6 && (
                         <div style={{ padding: '15px', borderTop: '1px solid #eee', display: 'flex', gap: '10px', alignItems: 'center' }}>
                             <input 
-                                type="text"
+                                type="text" 
                                 list={subStep === 1 ? "bot-cities-list" : undefined}
                                 placeholder={subStep === 1 ? "Escribe tu ciudad..." : subStep === 2 ? "Dirección exacta..." : "Escribe aquí..."}
                                 value={inputValue}

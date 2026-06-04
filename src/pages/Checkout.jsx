@@ -263,6 +263,9 @@ const Checkout = () => {
             shipping_address: dataToUse.direccion || "",
             shipping_city: dataToUse.ciudad || "",
             shipping_phone: dataToUse.telefono || "",
+            shipping_email: cleanEmail,
+            email: cleanEmail,
+            client_email: cleanEmail,
             items: cartToUse.map(p => ({
                 id: p.id,
                 name: p.nombre || p.name,

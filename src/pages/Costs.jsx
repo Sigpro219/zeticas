@@ -21,7 +21,7 @@ const Costs = () => {
         if (!items || !recipes) return { rawMaterials: [], products: [], recipesMap: {} };
 
         const mps = items.filter(p => p.type === 'material' || p.type === 'MP' || p.category === 'Materia Prima');
-        const pts = items.filter(p => p.type === 'product' || p.type === 'PT' || p.category === 'Producto Terminado');
+        const pts = items.filter(p => p.type === 'product' || p.type === 'PT' || p.category?.toLowerCase() === 'producto terminado');
 
         const rMap = {};
         const recipeList = Array.isArray(recipes) ? recipes : Object.values(recipes).flat();

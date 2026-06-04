@@ -37,7 +37,7 @@ const ProductDetail = () => {
     const relatedProducts = useMemo(() => {
         if (!product || !items) return [];
         return items
-            .filter(item => item.product_type === product.categoria && item.id !== id && item.category === 'Producto Terminado' && item.published !== false)
+            .filter(item => item.product_type === product.categoria && item.id !== id && item.category?.toLowerCase() === 'producto terminado' && item.published !== false)
             .map(item => ({
                 id: item.id,
                 nombre: item.name,

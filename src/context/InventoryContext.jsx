@@ -136,7 +136,7 @@ export const InventoryProvider = ({ children }) => {
     const recalculatePTCosts = useCallback(async () => {
         if (!items || items.length === 0) return;
         console.log("Recalculating PT costs based on BOM...");
-        const ptItems = items.filter(i => i.type === 'product' || i.category === 'Producto Terminado');
+        const ptItems = items.filter(i => i.type === 'product' || i.category?.toLowerCase() === 'producto terminado');
 
         const updates = ptItems.map(async (pt) => {
             const ptRecipe = recipes[pt.id] || [];

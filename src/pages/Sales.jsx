@@ -177,11 +177,12 @@ const Orders = ({ orders }) => {
     };
 
     const handleAddProductToOrder = (product) => {
+        const price = isB2BClient ? (product.distributor_price || product.price || 0) : (product.price || 0);
         const existing = newOrder.items.find(i => i.id === product.id);
         if (existing) {
             setNewOrder({
                 ...newOrder,
-                items: newOrder.items.map(i => i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i)
+                items: newOrder.items.map(i => i.id === product.id ? { ...i, price, quantity: i.quantity + 1 } : i)
             });
         } else {
             setNewOrder({
@@ -189,7 +190,7 @@ const Orders = ({ orders }) => {
                 items: [...newOrder.items, {
                     id: product.id,
                     name: product.name,
-                    price: product.price || 0,
+                    price: price,
                     quantity: 1
                 }]
             });
@@ -238,6 +239,7 @@ const Orders = ({ orders }) => {
                 items: newOrder.items.map(item => ({...item})),
                 amount: total,
                 total_amount: total,
+                shipping_cost: 0,
                 status: 'Pendiente', 
                 payment_status: newOrder.payment_status || 'Pendiente',
                 payment_bank_id: selectedBankId || null,
@@ -276,7 +278,8 @@ const Orders = ({ orders }) => {
         return (items || []).filter(i => i.type === 'product' || i.type === 'PT').map(p => ({
             id: p.id,
             name: p.name,
-            price: p.price || 0
+            price: p.price || 0,
+            distributor_price: p.distributor_price || p.price || 0
         }));
     }, [items]);
 
@@ -285,6 +288,44 @@ const Orders = ({ orders }) => {
         const q = productSearchTerm.toLowerCase();
         return availableProducts.filter(p => p.name.toLowerCase().includes(q));
     }, [availableProducts, productSearchTerm]);
+
+    const isB2BClient = useMemo(() => {
+        if (!newOrder.clientId) return false;
+        const selectedClient = (clients || []).find(c => c.id === newOrder.clientId);
+        return selectedClient?.sub_type === 'B2B' || selectedClient?.subType === 'B2B';
+    }, [newOrder.clientId, clients]);
+
+    const isViewingOrderB2B = useMemo(() => {
+        if (!viewingOrder?.clientId) return false;
+        const selectedClient = (clients || []).find(c => c.id === viewingOrder.clientId);
+        return selectedClient?.sub_type === 'B2B' || selectedClient?.subType === 'B2B';
+    }, [viewingOrder?.clientId, clients]);
+
+    useEffect(() => {
+        if (newOrder.items.length === 0) return;
+        
+        const isB2B = isB2BClient;
+        setNewOrder(prev => {
+            const updatedItems = prev.items.map(item => {
+                const originalProduct = availableProducts.find(p => p.id === item.id);
+                if (!originalProduct) return item;
+                const correctPrice = isB2B 
+                    ? (originalProduct.distributor_price || originalProduct.price || 0) 
+                    : (originalProduct.price || 0);
+                
+                if (item.price !== correctPrice) {
+                    return { ...item, price: correctPrice };
+                }
+                return item;
+            });
+            
+            const hasChanges = updatedItems.some((item, idx) => item.price !== prev.items[idx].price);
+            if (hasChanges) {
+                return { ...prev, items: updatedItems };
+            }
+            return prev;
+        });
+    }, [isB2BClient, availableProducts]);
 
 
     // Tab Filtering Logic (Pendientes vs Procesados)
@@ -2183,7 +2224,9 @@ const Orders = ({ orders }) => {
                                                 className="product-card-hover"
                                             >
                                                 <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#1e293b', marginBottom: '0.5rem' }}>{product.name}</div>
-                                                <div style={{ fontSize: '0.75rem', fontWeight: '900', color: deepTeal }}>${formatPrice(product.price || 0)}</div>
+                                                <div style={{ fontSize: '0.75rem', fontWeight: '900', color: deepTeal }}>
+                                                    ${formatPrice(isB2BClient ? (product.distributor_price || product.price || 0) : (product.price || 0))}
+                                                </div>
                                                 <div style={{ marginTop: '0.8rem', fontSize: '0.65rem', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase' }}>Click para añadir</div>
                                             </div>
                                         ))}
@@ -2561,7 +2604,8 @@ const Orders = ({ orders }) => {
                                                         const pId = e.target.value;
                                                         const p = availableProducts.find(prod => prod.id.toString() === pId);
                                                         if (p) {
-                                                            setNewViewedItem({ ...newViewedItem, id: p.id, name: p.name, price: p.price });
+                                                            const price = isViewingOrderB2B ? (p.distributor_price || p.price || 0) : (p.price || 0);
+                                                            setNewViewedItem({ ...newViewedItem, id: p.id, name: p.name, price: price });
                                                         } else {
                                                             setNewViewedItem({ ...newViewedItem, id: '', name: '', price: 0 });
                                                         }
@@ -2569,9 +2613,12 @@ const Orders = ({ orders }) => {
                                                     style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
                                                 >
                                                     <option value="">Seleccionar producto para agregar...</option>
-                                                    {availableProducts.map(p => (
-                                                        <option key={p.id} value={p.id}>{p.name} - ${(p.price || 0).toLocaleString()}</option>
-                                                    ))}
+                                                    {availableProducts.map(p => {
+                                                        const price = isViewingOrderB2B ? (p.distributor_price || p.price || 0) : (p.price || 0);
+                                                        return (
+                                                            <option key={p.id} value={p.id}>{p.name} - ${price.toLocaleString()}</option>
+                                                        );
+                                                    })}
                                                 </select>
                                             </td>
                                             <td style={{ padding: '0.8rem 1rem', borderBottom: '1px solid #e2e8f0', borderTop: '2px solid #e2e8f0', textAlign: 'center' }}>

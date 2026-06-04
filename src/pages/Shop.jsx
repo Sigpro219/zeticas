@@ -47,7 +47,7 @@ const Shop = () => {
     // Transform library items to Shop format
     const shopProducts = useMemo(() => {
         return items
-            .filter(i => i.category === 'Producto Terminado' && (i.published !== false))
+            .filter(i => i.category?.toLowerCase() === 'producto terminado' && (i.published !== false))
             .map(i => ({
                 id: i.id,
                 nombre: i.name,

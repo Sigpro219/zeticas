@@ -91,7 +91,7 @@ const RecurringCustomers = () => {
         return clients.find(c => c.id === user.id || c.nit === user.nit) || user;
     }, [user, clients]);
 
-    const availableProducts = useMemo(() => items.filter(i => (i.category === 'Producto Terminado' || i.product_type === 'Kit') && (i.published !== false)), [items]);
+    const availableProducts = useMemo(() => items.filter(i => (i.category?.toLowerCase() === 'producto terminado' || i.product_type?.toLowerCase() === 'kit') && (i.published !== false)), [items]);
 
     const filteredProducts = useMemo(() => {
         const query = productSearch.toLowerCase().trim();

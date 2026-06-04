@@ -287,7 +287,7 @@ export const SalesProvider = ({ children }) => {
 
             const allItems = itemsToProcess.map(name => {
                 const item = items.find(i => i.name === name);
-                const isPT = item?.type === 'product' || item?.category === 'Producto Terminado';
+                const isPT = item?.type === 'product' || item?.category?.toLowerCase() === 'producto terminado';
                 
                 let qty = 1;
                 if (!isArray) {
@@ -353,11 +353,37 @@ export const SalesProvider = ({ children }) => {
         }
     }, [tDoc]);
 
+    const addLead = useCallback(async (data) => {
+        try {
+            const payload = {
+                ...data,
+                status: data.status || 'NUEVO',
+                stage: data.stage || 'Nuevo Lead',
+                created_at: data.created_at || new Date().toISOString()
+            };
+            const docRef = await addDoc(tCol('leads'), payload);
+            return { success: true, id: docRef.id };
+        } catch (err) {
+            console.error("Error adding lead:", err);
+            return { success: false, error: err.message };
+        }
+    }, [tCol]);
+
     const updateLead = useCallback(async (id, data) => {
         try {
             await updateDoc(tDoc('leads', id), { ...data, updated_at: new Date().toISOString() });
             return { success: true };
         } catch (err) { return { success: false, error: err.message }; }
+    }, [tDoc]);
+
+    const deleteLead = useCallback(async (id) => {
+        try {
+            await deleteDoc(tDoc('leads', id));
+            return { success: true };
+        } catch (err) {
+            console.error("Error deleting lead:", err);
+            return { success: false, error: err.message };
+        }
     }, [tDoc]);
 
     const upsertMember = useCallback(async (data) => {
@@ -565,7 +591,9 @@ export const SalesProvider = ({ children }) => {
         createInternalOrder,
         addQuotation,
         deleteQuotation,
+        addLead,
         updateLead,
+        deleteLead,
         upsertMember,
         saveWebCheckout,
         getWebCheckout,

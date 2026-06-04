@@ -368,7 +368,7 @@ const CMSContents = () => {
                                 campaign: [
                                     { key: 'active', label: 'Campaña Activa (Switch)', type: 'toggle' },
                                     { key: 'preset', label: 'Elegir Plantilla de Temporada', type: 'select', options: Object.values(CAMPAIGN_PRESETS).map(p => ({ value: p.id, label: p.name })).concat([{ value: 'custom', label: 'Personalizado' }]) },
-                                    { key: 'promo_sku_id', label: 'Producto Estrella (Ancheta/Kit)', type: 'select', options: items.filter(i => i.category === 'Producto Terminado').map(i => ({ value: i.id, label: i.name })) },
+                                    { key: 'promo_sku_id', label: 'Producto Estrella (Ancheta/Kit)', type: 'select', options: items.filter(i => i.category?.toLowerCase() === 'producto terminado').map(i => ({ value: i.id, label: i.name })) },
                                     { key: 'modal_title', label: 'Título del Modal de Bienvenida', type: 'text' },
                                     { key: 'modal_subtitle', label: 'Subtítulo del Modal', type: 'textarea' },
                                     { key: 'modal_cta', label: 'Texto Botón (CTA)', type: 'text' },

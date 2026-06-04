@@ -37,9 +37,9 @@ const Recipes = () => {
     const { items, recipes, recalculatePTCosts, addRecipe, deleteRecipeByProduct, units } = useBusiness();
 
     // Split items into PTs and Materials
-    const pts = useMemo(() => items.filter(i => i.category === 'Producto Terminado'), [items]);
+    const pts = useMemo(() => items.filter(i => i.category?.toLowerCase() === 'producto terminado'), [items]);
     // Ingredients can be anything EXCEPT Finished Goods (to avoid circular references)
-    const materials = useMemo(() => items.filter(i => i.category !== 'Producto Terminado'), [items]);
+    const materials = useMemo(() => items.filter(i => i.category?.toLowerCase() !== 'producto terminado'), [items]);
 
     const recipesList = useMemo(() => {
         return pts.map(pt => {

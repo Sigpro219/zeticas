@@ -122,7 +122,7 @@ const Inventory = () => {
         (items || []).forEach(item => {
             const stock = getFinalStock(item);
             const value = stock * (Number(item.avgCost || item.cost || 0));
-            const isPT = item.type === 'product' || item.type === 'PT' || item.category === 'Producto Terminado';
+            const isPT = item.type === 'product' || item.type === 'PT' || item.category?.toLowerCase() === 'producto terminado';
             if (isPT) totalValuePT += value;
             else totalValueMP += value;
         });
@@ -187,7 +187,7 @@ const Inventory = () => {
     };
 
     // ── REPLENISHMENT LOGIC (DRY) ───────────────────────────────────
-    const ptPulls = useMemo(() => pullSignals.filter(s => s.type === 'product' || s.type === 'PT' || s.category === 'Producto Terminado'), [pullSignals]);
+    const ptPulls = useMemo(() => pullSignals.filter(s => s.type === 'product' || s.type === 'PT' || s.category?.toLowerCase() === 'producto terminado'), [pullSignals]);
     const mpPulls = useMemo(() => pullSignals.filter(s => s.type === 'material' || s.type === 'MP' || s.category === 'Materia Prima'), [pullSignals]);
 
     const hasActiveInternalOrder = useCallback((itemName) => {
@@ -257,7 +257,7 @@ const Inventory = () => {
             const item = items.find(i => (i.name || '').toLowerCase().trim() === rawName.trim());
             if (!item) return;
 
-            const isPT = item.type === 'product' || item.type === 'PT' || item.category === 'Producto Terminado';
+            const isPT = item.type === 'product' || item.type === 'PT' || item.category?.toLowerCase() === 'producto terminado';
             
             // Filtro por modo
             if (mode === 'PT' && !isPT) return;

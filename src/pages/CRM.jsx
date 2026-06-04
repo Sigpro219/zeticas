@@ -634,7 +634,7 @@ const CRM = () => {
                                 </div>
                                 <div style={{ overflowY: 'auto', flex: 1, paddingRight: '10px' }}>
                                     {masterProducts
-                                        .filter(p => (p.type === 'product' || p.category === 'Producto Terminado' || p.category === 'PT') && !p.name.includes('(MP)'))
+                                        .filter(p => (p.type === 'product' || p.category?.toLowerCase() === 'producto terminado' || p.category === 'PT') && !p.name.includes('(MP)'))
                                         .filter(p => !quoteSearch || p.name.toLowerCase().includes(quoteSearch.toLowerCase()))
                                         .map(product => (
                                             <div key={product.id} style={{ padding: '1.2rem', background: '#fff', border: '1px solid #f1f5f9', borderRadius: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem' }}>

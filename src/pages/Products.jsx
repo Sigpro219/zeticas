@@ -220,7 +220,7 @@ const Products = () => {
             (p.product_type?.toLowerCase().includes(srch)) ||
             (p.category?.toLowerCase().includes(srch));
 
-        const matchesCategory = p.category === selectedCategoryFilter;
+        const matchesCategory = p.category?.toLowerCase() === selectedCategoryFilter?.toLowerCase();
         const matchesLine = selectedLineFilter === 'Todos' || p.product_type === selectedLineFilter;
 
         return matchesSearch && matchesCategory && matchesLine;
@@ -415,8 +415,8 @@ const Products = () => {
         }
     };
 
-    const mpCount = productsList.filter(p => p.category === 'Materia Prima').length;
-    const ptCount = productsList.filter(p => p.category === 'Producto Terminado').length;
+    const mpCount = productsList.filter(p => p.category?.toLowerCase() === 'materia prima').length;
+    const ptCount = productsList.filter(p => p.category?.toLowerCase() === 'producto terminado').length;
 
     // --- Component Management Logics ---
     const [compSearch, setCompSearch] = useState('');
@@ -627,18 +627,18 @@ const Products = () => {
                                             <td style={{ fontWeight: '700', fontSize: '0.85rem', color: 'var(--color-primary)' }}>{p.sku}</td>
                                             <td>
                                                 <div 
-                                                    onClick={() => p.category !== 'Materia Prima' && handleTableImageClick(p)}
-                                                    className={p.category !== 'Materia Prima' ? "table-image-cell" : ""}
+                                                    onClick={() => p.category?.toLowerCase() !== 'materia prima' && handleTableImageClick(p)}
+                                                    className={p.category?.toLowerCase() !== 'materia prima' ? "table-image-cell" : ""}
                                                     style={{ 
                                                         display: 'flex', 
                                                         gap: '0.75rem', 
                                                         alignItems: 'center', 
-                                                        cursor: p.category !== 'Materia Prima' ? 'pointer' : 'default',
+                                                        cursor: p.category?.toLowerCase() !== 'materia prima' ? 'pointer' : 'default',
                                                         position: 'relative'
                                                      }}
-                                                    title={p.category !== 'Materia Prima' ? "Haga clic para subir fotografía" : ""}
+                                                     title={p.category?.toLowerCase() !== 'materia prima' ? "Haga clic para subir fotografía" : ""}
                                                 >
-                                                    {p.category !== 'Materia Prima' && (
+                                                    {p.category?.toLowerCase() !== 'materia prima' && (
                                                         p.image_url ? (
                                                             <div style={{ 
                                                                 width: '38px', 
@@ -689,7 +689,7 @@ const Products = () => {
                                             <td style={{ fontSize: '0.8rem', color: 'var(--color-text-light)' }}>{p.category}</td>
                                             <td style={{ fontWeight: '500', color: 'var(--color-text-light)' }}>${formatPrice(p.cost || 0)}</td>
                                             <td>
-                                                {p.category === 'Producto Terminado' ? (
+                                                {p.category?.toLowerCase() === 'producto terminado' ? (
                                                     <InlinePriceInput 
                                                         value={p.price} 
                                                         onSave={async (newVal) => {
@@ -702,7 +702,7 @@ const Products = () => {
                                                 )}
                                             </td>
                                             <td>
-                                                {p.category === 'Producto Terminado' ? (
+                                                {p.category?.toLowerCase() === 'producto terminado' ? (
                                                     <InlinePriceInput 
                                                         value={p.distributor_price} 
                                                         onSave={async (newVal) => {
