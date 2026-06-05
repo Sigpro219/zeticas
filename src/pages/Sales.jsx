@@ -141,6 +141,7 @@ const Orders = ({ orders }) => {
             id_type: isNit ? 'NIT' : 'Cédula de ciudadanía',
             type: newClientData.sub_type === 'B2C' ? 'Natural' : 'Jurídica',
             sub_type: newClientData.sub_type || (isNit ? 'B2B' : 'B2C'),
+            subType: newClientData.sub_type || (isNit ? 'B2B' : 'B2C'),
             source: 'Manual',
             status: 'Active',
             balance: 0,

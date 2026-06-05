@@ -11,7 +11,7 @@ import { useBusiness } from '../context/BusinessContext';
 /* ── constants ────────────────────────────────────────────────────────── */
 const EMPTY = {
     name: '', idType: 'NIT', nit: '', address: '', city: '',
-    phone: '', email: '', contactName: '', subType: 'B2B',
+    phone: '', email: '', contactName: '', subType: 'B2B', sub_type: 'B2B',
     source: 'Web', type: 'Jurídica', status: 'Active'
 };
 const ID_TYPES = ['NIT', 'CC', 'CE', 'PASAPORTE'];
@@ -68,9 +68,18 @@ const Clients = () => {
 
     /* ── modal helpers ───────────────────────────────────────────────── */
     const openCreate = () => setModal({ mode: 'create', data: { ...EMPTY } });
-    const openEdit = (c) => setModal({ mode: 'edit', data: { ...c } });
+    const openEdit = (c) => {
+        const sub = c.sub_type || c.subType || 'B2B';
+        setModal({ mode: 'edit', data: { ...c, subType: sub, sub_type: sub } });
+    };
     const closeModal = () => setModal(null);
-    const onChange = (f, v) => setModal(m => ({ ...m, data: { ...m.data, [f]: v } }));
+    const onChange = (f, v) => setModal(m => {
+        const updatedData = { ...m.data, [f]: v };
+        if (f === 'subType') {
+            updatedData.sub_type = v;
+        }
+        return { ...m, data: updatedData };
+    });
 
     /* ── save ────────────────────────────────────────────────────────── */
     const handleSave = async (e) => {
@@ -78,13 +87,15 @@ const Clients = () => {
         if (!modal) return;
         setIsSaving(true);
         const d = modal.data;
+        const segment = d.subType || d.sub_type || 'B2B';
         const payload = {
             name: d.name, nit: d.nit || '', id_type: d.idType || 'NIT',
             email: d.email || '', phone: d.phone || '',
             address: d.address || '', city: d.city || '',
             contact_name: d.contactName || '',
-            type: d.subType === 'B2C' ? 'Natural' : 'Jurídica',
-            sub_type: d.subType || 'B2B',
+            type: segment === 'B2C' ? 'Natural' : 'Jurídica',
+            subType: segment,
+            sub_type: segment,
             source: d.source || 'Web',
             status: d.status || 'Active'
         };
@@ -177,6 +188,7 @@ const Clients = () => {
                     email: String(get(row, ['correo', 'email']) || ''),
                     contact_name: String(get(row, ['nombre contacto', 'contacto']) || ''),
                     sub_type: sub,
+                    subType: sub,
                     type: sub === 'B2C' ? 'Natural' : 'Jurídica',
                     source: String(get(row, ['fuente pedido', 'fuente']) || 'Web'),
                     status: 'Active'

@@ -140,7 +140,9 @@ const CRM = () => {
             city: lead.city,
             type: lead.interest_type || 'General',
             nit: lead.nit || 'PENDIENTE',
-            address: lead.address || 'PENDIENTE'
+            address: lead.address || 'PENDIENTE',
+            sub_type: 'B2B',
+            subType: 'B2B'
         });
 
         if (res.success) {

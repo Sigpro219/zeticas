@@ -231,6 +231,7 @@ const Checkout = () => {
             contactRole: 'Comprador Web',
             type: 'Natural',
             subType: 'B2C',
+            sub_type: 'B2C',
             balance: 0,
             status: 'Active'
         };
