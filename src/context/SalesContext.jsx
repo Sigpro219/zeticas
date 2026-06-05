@@ -541,6 +541,53 @@ export const SalesProvider = ({ children }) => {
             const rootMailCol = collection(db, 'mail');
             await addDoc(rootMailCol, mailPayload);
 
+            // Enviar alerta al administrador del sistema (zeticas@gmail.com)
+            const adminMailPayload = {
+                to: 'zeticas@gmail.com',
+                tenantId: tenantId || 'zeticas',
+                message: {
+                    subject: `🚨 Alerta: Nueva Suscripción Creada (${userData.name || userData.nombreCompleto || 'Cliente'})`,
+                    text: `Se ha registrado una nueva suscripción en el sistema.\n\nDetalles del suscriptor:\n- Nombre: ${userData.name || userData.nombreCompleto || 'N/A'}\n- NIT/Cédula: ${userData.nit || userData.idNumber || 'N/A'}\n- Email: ${userData.email || 'N/A'}\n- Teléfono: ${userData.phone || 'N/A'}\n- Plan: ${planName || 'N/A'}\n\nPor favor, ingresa al panel de administración para validar si este perfil aplica para precios de Distribuidor (B2B) o Consumo (B2C) y actualizar su ficha de cliente si es necesario.\n\nEnlace al maestro de clientes: https://zeticas.com/gestion/clientes`,
+                    html: `
+                        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #f1f5f9; border-radius: 8px;">
+                            <h2 style="color: #025357; border-bottom: 2px solid #025357; padding-bottom: 10px; margin-top: 0;">🚨 Nueva Suscripción Registrada</h2>
+                            <p>Se ha registrado una nueva suscripción en el sistema que requiere clasificación de segmento (B2B/B2C).</p>
+                            
+                            <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+                                <tr style="background-color: #fafafa;">
+                                    <td style="padding: 8px; font-weight: bold; width: 35%;">Nombre/Razón Social:</td>
+                                    <td style="padding: 8px;">${userData.name || userData.nombreCompleto || 'N/A'}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 8px; font-weight: bold;">NIT/Cédula:</td>
+                                    <td style="padding: 8px;">${userData.nit || userData.idNumber || 'N/A'}</td>
+                                </tr>
+                                <tr style="background-color: #fafafa;">
+                                    <td style="padding: 8px; font-weight: bold;">Email:</td>
+                                    <td style="padding: 8px;">${userData.email || 'N/A'}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 8px; font-weight: bold;">Teléfono:</td>
+                                    <td style="padding: 8px;">${userData.phone || 'N/A'}</td>
+                                </tr>
+                                <tr style="background-color: #fafafa;">
+                                    <td style="padding: 8px; font-weight: bold;">Plan:</td>
+                                    <td style="padding: 8px;">${planName || 'N/A'}</td>
+                                </tr>
+                            </table>
+                            
+                            <p>Por favor, ingresa al panel de administración para validar si este perfil califica para precios de Distribuidor (B2B) o si se mantiene en Consumo (B2C) y actualizar su ficha según corresponda.</p>
+                            
+                            <div style="text-align: center; margin-top: 30px; margin-bottom: 10px;">
+                                <a href="https://zeticas.com/gestion/clientes" style="display: inline-block; padding: 12px 24px; background-color: #025357; color: #fff; text-decoration: none; border-radius: 6px; font-weight: bold;">Ir al Maestro de Clientes</a>
+                            </div>
+                        </div>
+                    `
+                },
+                created_at: new Date().toISOString()
+            };
+            await addDoc(rootMailCol, adminMailPayload);
+
             return { success: true };
         } catch (err) {
             console.error("Error in sendWelcomeEmail (root only):", err);
