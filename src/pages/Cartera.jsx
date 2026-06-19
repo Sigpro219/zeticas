@@ -16,7 +16,7 @@ const Cartera = () => {
     });
 
     // Date Filter State
-    const [filterType, setFilterType] = useState('month');
+    const [filterType, setFilterType] = useState('all');
     const [customRange] = useState({ from: '', to: '' });
 
     const deepTeal = "#023636";
@@ -199,6 +199,7 @@ const Cartera = () => {
             }}>
                 <div style={{ display: 'flex', background: 'rgba(2, 83, 87, 0.05)', padding: '4px', borderRadius: '12px' }}>
                     {[
+                        { id: 'all', label: 'HISTÓRICO' },
                         { id: 'week', label: 'SEMANA' },
                         { id: 'month', label: 'MES' },
                         { id: 'custom', label: 'RANGO' }

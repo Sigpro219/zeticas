@@ -234,7 +234,7 @@ export const SalesProvider = ({ children }) => {
                     
                     if (clientEmail && clientEmail !== 'N/A') {
                         await addDoc(collection(db, 'mail'), {
-                            to: clientEmail,
+                            to: [clientEmail, 'zeticas@gmail.com'],
                             tenantId: 'zeticas',
                             template: {
                                 name: 'order_confirmation',
