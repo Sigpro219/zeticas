@@ -62,24 +62,25 @@ export default function AppContent() {
 
 function MaintenancePage() {
   return (
-    <div className="min-h-[70vh] flex flex-col items-center justify-center px-4 py-12 text-center bg-[#FDF8F6]">
-      <div className="max-w-md w-full glass-panel p-8 md:p-12 rounded-3xl flex flex-col items-center justify-center gap-6 shadow-2xl border border-white/40 backdrop-blur-md bg-white/60">
-        <div className="text-6xl animate-pulse">🌿</div>
-        <h1 className="font-serif text-3xl md:text-4xl text-[#025357] font-bold leading-tight">
+    <div style={{ minHeight: '65vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '3rem 1.5rem', textAlign: 'center', backgroundColor: 'var(--color-bg)' }}>
+      <div className="glass-panel" style={{ maxWidth: '480px', width: '100%', padding: '3.5rem 2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1.5rem', border: '1px solid rgba(2, 83, 87, 0.1)' }}>
+        <div style={{ fontSize: '3.5rem' }}>🌿</div>
+        <h1 style={{ fontFamily: 'var(--font-serif)', fontSize: '2.25rem', color: 'var(--color-primary)', fontWeight: 'bold', margin: '0' }}>
           Pausa Artesanal
         </h1>
-        <div className="w-12 h-0.5 bg-[#D6BD98]"></div>
-        <p className="font-sans text-sm md:text-base text-slate-600 leading-relaxed">
+        <div style={{ width: '50px', height: '2px', backgroundColor: 'var(--color-secondary)' }}></div>
+        <p style={{ fontFamily: 'var(--font-sans)', fontSize: '0.95rem', color: 'var(--color-text)', lineHeight: '1.6', margin: '0' }}>
           Estamos actualizando nuestros inventarios y cosechas para ofrecerte la mejor calidad de la Sabana de Bogotá.
         </p>
-        <p className="font-sans text-xs text-slate-500 italic">
+        <p style={{ fontFamily: 'var(--font-sans)', fontSize: '0.8rem', color: 'var(--color-text-light)', fontStyle: 'italic', margin: '0' }}>
           Volveremos muy pronto con productos frescos.
         </p>
         <a 
           href="https://wa.me/573144336525?text=Hola%20Zeticas!%20Quiero%20hacer%20un%20pedido%20asistido%20ya%20que%20la%20tienda%20está%20en%20mantenimiento"
           target="_blank"
           rel="noopener noreferrer"
-          className="premium-btn primary w-full flex items-center justify-center gap-2 mt-4 py-3 rounded-xl font-sans text-sm font-semibold tracking-wide shadow-md hover:shadow-lg transition-all duration-300"
+          className="premium-btn primary"
+          style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.75rem 1.5rem', fontSize: '0.85rem', borderRadius: '12px', textDecoration: 'none', marginTop: '0.5rem' }}
         >
           💬 Compra Asistida por WhatsApp
         </a>
