@@ -43,7 +43,7 @@ const CateringBanner = () => {
             }}>
                 <div style={{ position: 'relative', maxWidth: isMobile ? '320px' : 'none', margin: '0 auto' }}>
                     <img
-                        src="https://obsvdzlsbbqmhpsxksnd.supabase.co/storage/v1/object/public/products/WhatsApp-Image-2025-08-01-at-9.58.08-AM-2.jpeg"
+                        src={content.image_url || "/assets/product-jars.png"}
                         alt="ZETAmóvil Catering"
                         style={{
                             width: '100%',

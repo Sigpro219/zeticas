@@ -13,10 +13,10 @@ export const detectTenantId = () => {
         return normalized;
     }
 
-    // 2. Detect from Port (Testing override)
+    // 2. Detect from Port (Testing override: respeta localStorage si fue seleccionado explícitamente [DT-006])
     const port = window.location.port;
     if (port === '5174') {
-        return 'delta';
+        return normalize(localStorage.getItem('zeticas_current_tenant') || 'delta');
     }
 
     // 3. Detect from Hostname (Production mapping)

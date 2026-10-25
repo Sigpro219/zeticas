@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useBusiness } from '../context/BusinessContext';
-const savannaImg = 'https://obsvdzlsbbqmhpsxksnd.supabase.co/storage/v1/object/public/assets/savanna.png';
+const savannaImg = '/assets/savanna.png';
 
 const ConsultingSection = () => {
     const isMobile = useMediaQuery('(max-width: 768px)');
