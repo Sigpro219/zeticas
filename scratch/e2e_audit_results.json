@@ -1,0 +1,394 @@
+{
+  "executionTimestamp": "2026-10-25T23:28:35.487Z",
+  "environment": {
+    "baseUrl": "http://localhost:3011",
+    "tenant": "zeticas",
+    "browser": "Google Chrome Headless (Puppeteer Core)"
+  },
+  "phases": {
+    "FASE_1_B2C": [
+      {
+        "timestamp": "2026-10-25T23:28:37.688Z",
+        "stepName": "Navegación Home & Catálogo",
+        "status": "SUCCESS",
+        "details": {
+          "title": "Zeticas | Conservas de Autor & Despensa Artesanal",
+          "durationMs": 1076
+        }
+      },
+      {
+        "timestamp": "2026-10-25T23:28:39.482Z",
+        "stepName": "Agregar Producto a Canasta",
+        "status": "SUCCESS",
+        "details": {
+          "totalCardsFound": 8
+        }
+      },
+      {
+        "timestamp": "2026-10-25T23:28:40.761Z",
+        "stepName": "Verificación Vista /carrito",
+        "status": "SUCCESS",
+        "details": {
+          "cartHasItems": true
+        }
+      },
+      {
+        "timestamp": "2026-10-25T23:28:44.042Z",
+        "stepName": "Llenado Formulario Checkout Step 1",
+        "status": "SUCCESS",
+        "details": {
+          "name": "QA-TEST-E2E Juan Perez",
+          "email": "qa-test-juan@zeticas.com",
+          "address": "Calle 100 # 15-20",
+          "city": "Bogotá",
+          "phone": "3100000000"
+        }
+      },
+      {
+        "timestamp": "2026-10-25T23:28:44.824Z",
+        "stepName": "Registro Pedido 1 (Contra Entrega / Transferencia)",
+        "status": "SUCCESS",
+        "details": {
+          "orderId": "QA-TEST-E2E-ORD-1-1792970924042",
+          "clientId": "QA-TEST-E2E-CLI-1-1792970924042",
+          "amount": 43500,
+          "payment_status": "Pendiente"
+        }
+      },
+      {
+        "timestamp": "2026-10-25T23:28:53.103Z",
+        "stepName": "Verificación Cliente en /gestion/clientes (UI)",
+        "status": "WARNING",
+        "details": {
+          "clientVisible": false
+        }
+      },
+      {
+        "timestamp": "2026-10-25T23:29:03.096Z",
+        "stepName": "Simulación Retorno Bold Aprobado (Step 3)",
+        "status": "SUCCESS",
+        "details": {
+          "order2Success": true
+        }
+      },
+      {
+        "timestamp": "2026-10-25T23:29:04.221Z",
+        "stepName": "Registro Socio Club \"Amigos de Zeticas\"",
+        "status": "SUCCESS",
+        "details": {
+          "memberId": "QA-TEST-E2E-MEMBER-1792970944063",
+          "plan": "6 Meses"
+        }
+      },
+      {
+        "timestamp": "2026-10-25T23:29:13.423Z",
+        "stepName": "Verificación Socio en /gestion/suscripciones (UI)",
+        "status": "WARNING",
+        "details": {
+          "memberVisible": false
+        }
+      }
+    ],
+    "FASE_2_PLANTA": [
+      {
+        "timestamp": "2026-10-25T23:29:21.330Z",
+        "stepName": "Auditoría /gestion/inventario",
+        "status": "SUCCESS",
+        "details": {
+          "durationMs": 7906
+        }
+      },
+      {
+        "timestamp": "2026-10-25T23:29:22.580Z",
+        "stepName": "Auditoría /gestion/recetas",
+        "status": "SUCCESS",
+        "details": {}
+      },
+      {
+        "timestamp": "2026-10-25T23:29:23.865Z",
+        "stepName": "Auditoría /gestion/produccion",
+        "status": "SUCCESS",
+        "details": {}
+      },
+      {
+        "timestamp": "2026-10-25T23:29:25.124Z",
+        "stepName": "Auditoría /gestion/kanban",
+        "status": "SUCCESS",
+        "details": {}
+      },
+      {
+        "timestamp": "2026-10-25T23:29:26.417Z",
+        "stepName": "Carga /gestion/logistica",
+        "status": "SUCCESS",
+        "details": {}
+      },
+      {
+        "timestamp": "2026-10-25T23:29:27.206Z",
+        "stepName": "Despacho de Pedido (\"Despachado\")",
+        "status": "SUCCESS",
+        "details": {
+          "prevSales": 0,
+          "salesAfterDispatch": 1,
+          "trackingNumber": "GUIA-QA-TEST-E2E-001",
+          "stockDeducted": true
+        }
+      },
+      {
+        "timestamp": "2026-10-25T23:29:27.673Z",
+        "stepName": "Idempotencia de Inventario en Entrega (\"Entregado\")",
+        "status": "SUCCESS",
+        "details": {
+          "salesAfterDispatch": 1,
+          "salesAfterDelivery": 1,
+          "idempotentPassed": true
+        }
+      }
+    ],
+    "FASE_3_FINANCIERO": [
+      {
+        "timestamp": "2026-10-25T23:29:32.286Z",
+        "stepName": "Verificación Pedido en Cartera",
+        "status": "SUCCESS",
+        "details": {
+          "orderInCartera": true,
+          "durationMs": 4612
+        }
+      },
+      {
+        "timestamp": "2026-10-25T23:29:32.766Z",
+        "stepName": "Recaudo Aplicado e Impacto Bancario BBVA",
+        "status": "FAILED",
+        "details": {
+          "bank": "BBVA",
+          "initialBalance": 1082397,
+          "paymentAmount": 43500,
+          "newBalance": 1153278,
+          "txId": "QA-TEST-E2E-TX-1792970972286"
+        }
+      },
+      {
+        "timestamp": "2026-10-25T23:29:35.151Z",
+        "stepName": "Verificación Vista /gestion/bancos (UI)",
+        "status": "SUCCESS",
+        "details": {}
+      },
+      {
+        "timestamp": "2026-10-25T23:29:37.116Z",
+        "stepName": "Verificación Vista /gestion/gastos (UI)",
+        "status": "SUCCESS",
+        "details": {}
+      }
+    ],
+    "FASE_4_LIMPIEZA": [
+      {
+        "timestamp": "2026-10-25T23:29:38.420Z",
+        "stepName": "Purgado Total de Documentos de Prueba",
+        "status": "SUCCESS",
+        "details": {
+          "totalDeletedDocs": 5
+        }
+      },
+      {
+        "timestamp": "2026-10-25T23:29:39.152Z",
+        "stepName": "Certificación Forense de Residuo Cero en BD",
+        "status": "FAILED",
+        "details": {
+          "residualCount": 1,
+          "certifiedClean": false
+        }
+      }
+    ]
+  },
+  "createdIds": {
+    "orders": [
+      "QA-TEST-E2E-ORD-1-1792970924042"
+    ],
+    "clients": [
+      "QA-TEST-E2E-CLI-1-1792970924042",
+      "QA-TEST-E2E-MEMBER-1792970944063"
+    ],
+    "web_checkouts": [
+      "QA-TEST-E2E-CHK-1792970933103"
+    ],
+    "bank_transactions": [
+      "QA-TEST-E2E-TX-1792970972286"
+    ],
+    "expenses": []
+  },
+  "inventoryBaselines": {
+    "4NYWGSufM2BDawlon0SW": {
+      "name": "Zetas Griegas",
+      "sku": "PT-ZETAS-GRIEGAS",
+      "sales": 0,
+      "purchases": 0,
+      "adjustments": 0
+    },
+    "4df9d3d2-1e11-43d9-bce8-6c34d296bb1d": {
+      "name": "Vinagreta",
+      "sku": "PT-VINAGRETA",
+      "sales": 0,
+      "purchases": 0,
+      "adjustments": 0
+    },
+    "51ed0636-e0c0-4359-8057-98fdf1e9ad00": {
+      "name": "Antipasto Veggie",
+      "sku": "PT-ANTIPASTO-VEGGIE",
+      "sales": 0,
+      "purchases": 0,
+      "adjustments": 0
+    },
+    "5ED9mKFYtRx4VjOKilTk": {
+      "name": "Dulce Guayaba & Albahaca",
+      "sku": "PT-GUAYABA-ALBAHACA",
+      "sales": 0,
+      "purchases": 0,
+      "adjustments": 0
+    },
+    "5b10ba21-eb59-4658-8cc7-8188b8fbae81": {
+      "name": "Dulce Papayuela & limonaria",
+      "sku": "PT-PAPAYUELA-+-LIMONARIA",
+      "sales": 0,
+      "purchases": 0,
+      "adjustments": 0
+    },
+    "80c7528c-f85b-40c3-a46f-939cad3c282a": {
+      "name": "Antipasto tuna",
+      "sku": "PT-ANTIPASTO-TUNA",
+      "sales": 0,
+      "purchases": 0,
+      "adjustments": 0
+    },
+    "82fe7fcd-6378-499e-8708-147dfba82318": {
+      "name": "Hummus de Garbanzo",
+      "sku": "PT-HUMMUS-DE-GARBANZO",
+      "sales": 0,
+      "purchases": 0,
+      "adjustments": 0
+    },
+    "9207eba4-c51f-472e-902b-2b8ed578ace4": {
+      "name": "Mermelada Agraz ",
+      "sku": "PT-MERMELADA-AGRAZ",
+      "sales": 0,
+      "purchases": 0,
+      "adjustments": 0
+    },
+    "LxcuX7XPKeHJnKAAAI3T": {
+      "name": "Habas para untar",
+      "sku": "PT-HABAS-UNTAR",
+      "sales": 0,
+      "purchases": 0,
+      "adjustments": 0
+    },
+    "QS0rICHzNEFZvI0sesTr": {
+      "name": "Dip Alcachofas",
+      "sku": "PT-DIP-ALCACHOFAS",
+      "sales": 0,
+      "purchases": 0,
+      "adjustments": 0
+    },
+    "TJGdnPHBubFjFZdHRzI6": {
+      "name": "Sopa de Alcachofa",
+      "sku": "PT---SOPA-DE-ALCACHOFA",
+      "sales": 0,
+      "purchases": 0,
+      "adjustments": 0
+    },
+    "VuULrKnNZDJSx68pMNjm": {
+      "name": "Dulce de Pera & Jengibre",
+      "sku": "PT-PERA-JENGIBRE",
+      "sales": 0,
+      "purchases": 0,
+      "adjustments": 0
+    },
+    "a484663a-108a-4206-821e-2f8244718d8e": {
+      "name": "Dulce Silvia",
+      "sku": "PT-DULCE-SILVIA",
+      "sales": 0,
+      "purchases": 0,
+      "adjustments": 0
+    },
+    "a78OUUysLqbaQXgS4JJ0": {
+      "name": "Pesto Kale",
+      "sku": "PT--PESTO-KALE",
+      "sales": 0,
+      "purchases": 0,
+      "adjustments": 0
+    },
+    "cce7b269-2b12-439f-893d-e52d8d7a9d87": {
+      "name": "Berenjena Toscana",
+      "sku": "PT-BERENJENA-TOSCANA",
+      "sales": 0,
+      "purchases": 0,
+      "adjustments": 0
+    },
+    "def7d697-3ebe-42c9-bc1c-3e49eedea5c8": {
+      "name": "Mermelada Ruibarbo & Fresa",
+      "sku": "PT-MERMELADA-RUIBARBO-FRESA",
+      "sales": 0,
+      "purchases": 0,
+      "adjustments": 0
+    },
+    "e1e1e1e1-e1e1-e1e1-e1e1-e1e1e1e1e1e1": {
+      "name": "Berenjenas para untar",
+      "sku": "PT-BERENJENAS-UNTAR",
+      "sales": 0,
+      "purchases": 0,
+      "adjustments": 0
+    },
+    "mapApd2XYmeCpS1ha8oF": {
+      "name": "Sopa de Cosecha: Espinaca & Acelga",
+      "sku": "PT-SOPA-DE-COSECHA",
+      "sales": 0,
+      "purchases": 0,
+      "adjustments": 0
+    },
+    "sopa_zanahoria_puerro": {
+      "name": "Sopa de Cosecha: Zanahoria & Puerro",
+      "sku": "PT-SOPA-ZANAHORIA-PUERRO",
+      "sales": 0,
+      "purchases": 0,
+      "adjustments": 0
+    },
+    "uFtgZGjeswVpIqh6HBBv": {
+      "name": "Jalea de pimentón con ají amazónico",
+      "sku": "PT-JALEA-PIMENTON-AJI",
+      "sales": 0,
+      "purchases": 0,
+      "adjustments": 0
+    }
+  },
+  "bankBaselines": {
+    "04019c9c-1963-47cf-a466-e2f52ba649f4": {
+      "name": "Nequi",
+      "balance": 222517
+    },
+    "0TCQHPBSyywlGSFv41gv": {
+      "name": "Interrapidisimo Costo de Envío",
+      "balance": 14400
+    },
+    "1d16ed15-dd88-4fb9-ade6-de60c12c6faf": {
+      "name": "Daviplata",
+      "balance": 126949
+    },
+    "2a2a3f3d-b55c-4d4a-bf0e-c48fc018aa7b": {
+      "name": "BBVA",
+      "balance": 1082397
+    },
+    "ASkNh2JLvgJZzKPeptB0": {
+      "name": "Comisiones Bold",
+      "balance": 32229
+    },
+    "iRUdKHQF3FZik99tohY3": {
+      "name": "Efectivo",
+      "balance": 177200
+    }
+  },
+  "timings": {
+    "phase1DurationMs": 36812,
+    "phase2DurationMs": 14249,
+    "phase3DurationMs": 9442,
+    "phase4DurationMs": 1814
+  },
+  "errors": [],
+  "totalDurationMs": 63665
+}

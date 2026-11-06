@@ -1,0 +1,25 @@
+========================================================================
+GUÍA DE TIPOGRAFÍAS OFICIALES — ZETICAS (SABORES CON PROPÓSITO)
+========================================================================
+
+1. TIPOGRAFÍA EDITORIAL Y DE TÍTULOS: FRAUNCES (Serif)
+   - Uso oficial: Títulos principales (H1, H2, H3), frases filosóficas (en cursiva / italic) y precios de productos.
+   - Pesos incluidos en la carpeta /Fraunces/:
+     * Fraunces-400Regular.ttf (Texto editorial)
+     * Fraunces-400Italic.ttf (Citas, manifiesto "SER para HACER" y palabras destacadas en salmón)
+     * Fraunces-600Regular.ttf (Subtítulos H2 / H3)
+     * Fraunces-700Regular.ttf (Títulos principales y precios)
+   - Enlace directo Google Fonts: https://fonts.google.com/specimen/Fraunces
+
+2. TIPOGRAFÍA FUNCIONAL Y DE LECTURA: PLUS JAKARTA SANS (Sans-Serif)
+   - Uso oficial: Párrafos descriptivos, etiquetas superiores en mayúscula (Eyebrows con espaciado amplio), botones de acción, tablas y textos de redes sociales.
+   - Pesos incluidos en la carpeta /Plus_Jakarta_Sans/:
+     * PlusJakartaSans-400Regular.ttf (Párrafos y descripciones)
+     * PlusJakartaSans-600Regular.ttf (Subtítulos cortos y destacados)
+     * PlusJakartaSans-700Regular.ttf (Botones, etiquetas en mayúsculas y navegación)
+   - Enlace directo Google Fonts: https://fonts.google.com/specimen/Plus+Jakarta+Sans
+
+¿CÓMO USARLAS EN CANVA O EN TU COMPUTADOR?
+------------------------------------------------------------------------
+- En Canva: Tanto "Fraunces" como "Plus Jakarta Sans" ya vienen incluidas gratis en el buscador de fuentes de Canva. Si usas "Kit de Marca" en Canva Pro, también puedes subir directamente los archivos .ttf incluidos en estas carpetas.
+- En Windows / Mac: Haz doble clic sobre cada archivo .ttf y presiona "Instalar" para usarlas en Word, PowerPoint, Illustrator o Photoshop.
